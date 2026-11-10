@@ -2,6 +2,12 @@
 
 A charting desk for Sailwind. Mark islands, plot and save routes, narrow down islands from mission directions, and load coords from Coordinate Viewer.
 
+## Screenshots
+
+![Sailwind Chartroom using the Sailwind theme](assets/screenshots/sailwind-theme.webp)
+
+![Sailwind Chartroom using the dark theme](assets/screenshots/dark-theme.png)
+
 ## Install
 
 1. Download the [Sailwind Chartroom ZIP](https://github.com/Skeptic043/sailwind-chartroom/releases/latest) and extract it anywhere.
