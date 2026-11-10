@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>SailwindChartroom.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <!-- The host's file, message and update handling has no WinForms dependency, so it is tested directly. -->
+  <ItemGroup>
+    <Compile Include="..\..\desktop\WorkspaceStore.cs" Link="Host\WorkspaceStore.cs" />
+    <Compile Include="..\..\desktop\HostMessage.cs" Link="Host\HostMessage.cs" />
+    <Compile Include="..\..\desktop\SettingsRules.cs" Link="Host\SettingsRules.cs" />
+    <Compile Include="..\..\desktop\Updates\*.cs" Link="Host\Updates\%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

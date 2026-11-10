@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>SailwindChartroom</RootNamespace>
+    <AssemblyName>Sailwind Chartroom</AssemblyName>
+    <!-- The only version number. The page shows what the host reports from this value. -->
+    <Version>0.5.5</Version>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <Product>Sailwind Chartroom</Product>
+    <Copyright>Copyright (c) 2026 skeptic043</Copyright>
+    <ApplicationIcon>chartroom.ico</ApplicationIcon>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <!-- One self-contained exe, so players need nothing beyond the WebView2 runtime Windows provides. -->
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <DebugType>none</DebugType>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <!-- The WebView2 package also references its WPF control; this WinForms app never loads it. -->
+    <NoWarn>$(NoWarn);MSB3277</NoWarn>
+    <PublishReferencesDocumentationFiles>false</PublishReferencesDocumentationFiles>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4314.35" />
+  </ItemGroup>
+
+  <!-- The chart page and its notices ship inside the exe and are served to WebView2 from memory. -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\index.html" LogicalName="web/index.html" />
+    <EmbeddedResource Include="..\styles.css" LogicalName="web/styles.css" />
+    <EmbeddedResource Include="..\src\*.mjs" LogicalName="web/src/%(Filename)%(Extension)" />
+    <EmbeddedResource Include="..\assets\sailwind\*" LogicalName="web/assets/sailwind/%(Filename)%(Extension)" />
+    <EmbeddedResource Include="..\LICENSE" LogicalName="web/LICENSE.txt" />
+    <EmbeddedResource Include="..\THIRD-PARTY-NOTICES.md" LogicalName="web/THIRD-PARTY-NOTICES.txt" />
+    <EmbeddedResource Include="chartroom.ico" LogicalName="chartroom.ico" />
+  </ItemGroup>
+
+</Project>

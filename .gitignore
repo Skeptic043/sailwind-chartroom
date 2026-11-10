@@ -1,0 +1,40 @@
+# Build output and local deployment
+desktop/bin/
+desktop/obj/
+tests/**/bin/
+tests/**/obj/
+dist/
+artifacts/
+coverage/
+node_modules/
+test-results/
+playwright-report/
+*.zip
+*.lnk
+
+# Local development and private workflow
+.local/
+AGENTS.md
+AGENTS.override.md
+.agents/
+.codex/
+.claude/
+PLAN.md
+PLANNING.md
+BACKLOG.md
+HANDOFF.md
+SESSION.md
+WORKLOG.md
+
+# Local configuration and generated state
+.env
+.env.*
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.log
+*.tmp
+Thumbs.db
+.DS_Store

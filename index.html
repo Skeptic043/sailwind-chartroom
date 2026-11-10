@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101b21">
+  <meta name="description" content="A charting desk for Sailwind.">
+  <title>Sailwind Chartroom</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <nav class="menu-bar" role="menubar" aria-label="Application menus">
+      <details class="app-menu" data-menu="file">
+        <summary role="menuitem" aria-haspopup="true" aria-expanded="false">File</summary>
+        <div class="menu-popover" role="menu">
+          <label class="menu-field">Active chart<select id="chart-select" aria-label="Active chart"></select></label>
+          <button id="new-chart" type="button">New chart</button>
+          <button id="save-chart" type="button">Save chart</button>
+          <button id="chart-settings" type="button">Chart details</button>
+          <hr>
+          <button id="import-track" type="button">Import Coordinate Viewer file</button>
+          <button id="paste-track" type="button">Paste Coordinate Viewer positions</button>
+          <button id="import-json" type="button">Import chart or legacy map</button>
+          <button id="export-json" type="button">Export this chart</button>
+          <button id="export-csv" type="button">Export locations as CSV</button>
+          <button id="export-all" type="button">Back up all charts</button>
+          <hr>
+          <button id="clear-track" type="button">Clear imported track</button>
+          <button id="clear-bearings" type="button">Clear bearing lines</button>
+          <button id="open-folder" type="button" hidden>Open save folder</button>
+          <hr>
+          <button id="open-settings" type="button" hidden>Settings</button>
+          <p id="storage-note" class="menu-note">Everything stays in this browser unless you export it.</p>
+        </div>
+      </details>
+      <details class="app-menu" data-menu="edit">
+        <summary role="menuitem" aria-haspopup="true" aria-expanded="false">Edit</summary>
+        <div class="menu-popover menu-compact" role="menu">
+          <button id="undo" type="button">Undo <kbd>Ctrl Z</kbd></button>
+          <button id="redo" type="button">Redo <kbd>Ctrl Y</kbd></button>
+        </div>
+      </details>
+      <details class="app-menu" data-menu="view">
+        <summary role="menuitem" aria-haspopup="true" aria-expanded="false">View</summary>
+        <div class="menu-popover" role="menu">
+          <label class="menu-check"><input id="layer-grid" type="checkbox" checked><span>Coordinate grid</span></label>
+          <label class="menu-check"><input id="layer-labels" type="checkbox" checked><span>Chart labels</span></label>
+          <label class="menu-check"><input id="layer-track" type="checkbox" checked><span>Imported track</span></label>
+          <label class="menu-check"><input id="layer-distances" type="checkbox" checked><span>Route distances</span></label>
+          <label class="menu-check"><input id="layer-bearings" type="checkbox" checked><span>Bearing lines and fixes</span></label>
+          <label class="menu-check"><input id="layer-winds" type="checkbox" checked><span>Wind indicators</span></label>
+          <label class="menu-check"><input id="layer-boats" type="checkbox" checked><span>Boat markers</span></label>
+          <hr>
+          <button id="zoom-in" type="button" hidden>Bigger text <kbd>Ctrl +</kbd></button>
+          <button id="zoom-out" type="button" hidden>Smaller text <kbd>Ctrl −</kbd></button>
+          <button id="zoom-reset" type="button" hidden>Match Windows text size <kbd>Ctrl 0</kbd></button>
+          <hr>
+          <button id="fit-chart" type="button">Fit chart data</button>
+          <button id="toggle-left-panel" type="button" aria-pressed="false">Hide chart tools</button>
+          <button id="toggle-right-panel" type="button" aria-pressed="false">Hide chart items</button>
+          <button id="pin-window" type="button" hidden>Keep Chartroom on top</button>
+        </div>
+      </details>
+      <details class="app-menu" data-menu="help">
+        <summary role="menuitem" aria-haspopup="true" aria-expanded="false">Help</summary>
+        <div class="menu-popover menu-compact" role="menu">
+          <button id="help" type="button">Help and shortcuts</button>
+          <button id="check-updates" type="button" hidden>Check for updates</button>
+          <button id="release-notes" type="button" hidden>Release notes</button>
+          <button id="about" type="button">About Chartroom</button>
+        </div>
+      </details>
+    </nav>
+    <div class="top-actions">
+      <span id="app-version" class="app-version"></span>
+      <span id="save-status" class="save-status"><i></i> Saved</span>
+    </div>
+  </header>
+  <div id="update-bar" class="update-bar" role="alert" hidden>
+    <span id="update-bar-text"></span>
+    <button id="update-bar-open" type="button">Open on GitHub</button>
+    <button id="update-bar-install" class="primary" type="button">Update now</button>
+    <button id="update-bar-dismiss" type="button">Dismiss</button>
+  </div>
+
+  <main class="app-shell">
+    <aside class="left-panel panel-scroll" aria-label="Chart controls">
+      <div id="left-panel-resizer" class="panel-resizer" role="separator" aria-orientation="vertical" aria-label="Resize chart controls" tabindex="0"></div>
+      <section class="panel-section">
+        <h2>Chart tools</h2>
+        <div class="tool-grid" role="toolbar" aria-label="Chart tools">
+          <button class="tool active" type="button" data-mode="select"><b>V</b><span>Select & pan</span></button>
+          <button class="tool" type="button" data-mode="location"><b>L</b><span>Add location</span></button>
+          <button class="tool" type="button" data-mode="route"><b>R</b><span>Plot route</span></button>
+          <button class="tool" type="button" data-mode="measure"><b>M</b><span>Measure</span></button>
+          <button class="tool" type="button" data-mode="area"><b>A</b><span>Rough area</span></button>
+          <button class="tool" type="button" data-mode="search"><b>S</b><span>Search area</span></button>
+          <button class="tool" type="button" data-mode="wind"><b>W</b><span>Add wind</span></button>
+        </div>
+        <p id="mode-hint" class="hint">Drag the chart to pan. Select a mark, waypoint or bearing line to edit it.</p>
+      </section>
+
+      <div id="inspector-host"></div>
+    </aside>
+
+    <section class="chart-stage" aria-label="Interactive chart">
+      <canvas id="chart-canvas" tabindex="0" aria-label="Sailwind chart. Use the selected tool to pan, add locations, plot a route, or measure. Every chart item is also listed under Chart items."></canvas>
+      <div class="chart-overlay bottom-left">
+        <span id="cursor-coordinates">—</span>
+        <span id="zoom-label">World view</span>
+        <span id="hover-info" hidden></span>
+      </div>
+      <div id="route-summary" class="route-summary" aria-live="polite" hidden>
+        <div><span id="route-summary-title">Route</span><strong id="route-distance">0 nm</strong></div>
+        <div><span>Next bearing</span><strong id="route-bearing">—</strong></div>
+        <div><label for="route-speed">Speed kn</label><input id="route-speed" type="number" min="0.1" max="30" step="0.5"></div>
+        <div><span>Passage</span><strong id="route-eta">—</strong></div>
+        <div id="route-actions" class="route-actions">
+          <button id="save-route" type="button">Save route</button>
+          <button id="clear-route" type="button">Clear route</button>
+        </div>
+      </div>
+      <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    </section>
+
+    <aside class="right-panel panel-scroll" aria-label="Chart details">
+      <div id="right-panel-resizer" class="panel-resizer" role="separator" aria-orientation="vertical" aria-label="Resize chart details" tabindex="0"></div>
+      <section id="empty-inspector" class="panel-section empty-state">
+        <div class="empty-icon">⌖</div>
+        <h2>Nothing selected</h2>
+        <p>Select a location, waypoint or bearing line to inspect it. Double-click the chart to add a location anywhere.</p>
+      </section>
+
+      <section id="feature-inspector" class="panel-section inspector" hidden>
+        <div class="section-heading">
+          <div><div id="feature-kind" class="eyebrow">Selected location</div><h2 id="feature-title">Edit location</h2></div>
+          <button id="delete-feature" class="danger icon-button" type="button" title="Delete location" aria-label="Delete location">×</button>
+        </div>
+        <p id="feature-selection-note" class="selection-note" hidden></p>
+        <form id="feature-form" class="stack-form">
+          <label>Location type
+            <select id="feature-type">
+              <option value="location">Location</option>
+              <option value="area">Rough area</option>
+            </select>
+          </label>
+          <label>Name <input id="feature-name" maxlength="100"></label>
+          <div class="two-columns">
+            <label>Latitude <input id="feature-lat" inputmode="decimal"></label>
+            <label>Longitude <input id="feature-lon" inputmode="decimal"></label>
+          </div>
+          <div class="two-columns">
+            <label>Day <input id="feature-day" maxlength="30" placeholder="Optional"></label>
+            <label>Time <input id="feature-time" maxlength="30" placeholder="Optional"></label>
+          </div>
+          <label id="feature-range-row">Area radius nm <input id="feature-range" type="number" min="0.1" max="500" step="0.5"></label>
+          <div class="island-controls">
+            <div><span>Island outline</span><strong id="feature-island-status">None</strong></div>
+            <button id="choose-feature-island" type="button">Choose island</button>
+          </div>
+          <div class="island-controls boat-controls">
+            <div><span>Boat at this location</span><strong id="feature-boat-status">None</strong></div>
+            <button id="choose-feature-boat" type="button">Choose boat</button>
+          </div>
+          <label>Notes <textarea id="feature-notes" rows="4" maxlength="1000" placeholder="Approach, landmarks, shoals, dock side…"></textarea></label>
+        </form>
+        <div id="feature-navigation" class="leg-detail" hidden></div>
+        <button id="resolve-feature" class="resolve-button" type="button" hidden>Resolve to location</button>
+      </section>
+
+      <section id="route-inspector" class="panel-section inspector" hidden>
+        <div class="section-heading">
+          <div><div id="route-point-kind" class="eyebrow">Selected waypoint</div><h2>Edit route point</h2></div>
+          <button id="delete-route-point" class="danger icon-button" type="button" title="Delete route point" aria-label="Delete route point">×</button>
+        </div>
+        <form id="route-form" class="stack-form">
+          <label>Label <input id="route-name" maxlength="100" placeholder="Optional"></label>
+          <div class="two-columns">
+            <label>Latitude <input id="route-lat" inputmode="decimal"></label>
+            <label>Longitude <input id="route-lon" inputmode="decimal"></label>
+          </div>
+          <label>Notes <textarea id="route-notes" rows="3" maxlength="1000" placeholder="Landmarks, timing, hazards…"></textarea></label>
+          <div id="route-leg-detail" class="leg-detail"></div>
+          <button id="select-saved-route" type="button" hidden>Select the whole route</button>
+        </form>
+      </section>
+
+      <section id="saved-route-inspector" class="panel-section inspector" hidden>
+        <div class="section-heading">
+          <div><div class="eyebrow">Saved route</div><h2>Edit saved route</h2></div>
+          <button id="delete-saved-route" class="danger icon-button" type="button" title="Delete saved route" aria-label="Delete saved route">×</button>
+        </div>
+        <form id="saved-route-form" class="stack-form">
+          <label>Name <input id="saved-route-name" maxlength="100"></label>
+          <label class="switch-row"><span>Show on chart</span><input id="saved-route-visible" type="checkbox"></label>
+          <div id="saved-route-detail" class="leg-detail"></div>
+          <p class="fineprint">Drag the route to move it, or click one of its waypoints to edit that point.</p>
+        </form>
+      </section>
+
+      <section id="bearing-inspector" class="panel-section inspector" hidden>
+        <div class="section-heading">
+          <div><div class="eyebrow">Selected bearing</div><h2>Edit bearing line</h2></div>
+          <button id="delete-bearing" class="danger icon-button" type="button" title="Delete bearing line" aria-label="Delete bearing line">×</button>
+        </div>
+        <form id="bearing-form" class="stack-form">
+          <label>Sighted <input id="bearing-label" maxlength="100" placeholder="What you took the bearing to"></label>
+          <div class="two-columns">
+            <label>From latitude <input id="bearing-lat" inputmode="decimal"></label>
+            <label>From longitude <input id="bearing-lon" inputmode="decimal"></label>
+          </div>
+          <label>Bearing <input id="bearing-value" inputmode="decimal"></label>
+        </form>
+        <div id="bearing-fixes" class="fix-list"></div>
+      </section>
+
+      <section id="search-inspector" class="panel-section inspector" hidden>
+        <div class="section-heading">
+          <div><div class="eyebrow">Selected search area</div><h2>Edit search area</h2></div>
+          <button id="delete-search" class="danger icon-button" type="button" title="Delete search area" aria-label="Delete search area">×</button>
+        </div>
+        <form id="search-form" class="stack-form">
+          <label>Looking for <input id="search-label" maxlength="100" placeholder="Mission destination"></label>
+          <div class="two-columns">
+            <label>From latitude <input id="search-lat" inputmode="decimal"></label>
+            <label>From longitude <input id="search-lon" inputmode="decimal"></label>
+          </div>
+          <div class="two-columns">
+            <label>Direction <input id="search-direction" inputmode="decimal" placeholder="SSE or 160"></label>
+            <label>Distance nm <input id="search-distance" type="number" min="0.1" step="any"></label>
+          </div>
+          <div class="two-columns">
+            <label>Direction ± ° <input id="search-spread" type="number" min="0" max="90" step="0.25"></label>
+            <label>Distance ± % <input id="search-tolerance" type="number" min="0" max="90" step="1"></label>
+          </div>
+          <div class="island-controls boat-controls">
+            <div><span>Boat at the search centre</span><strong id="search-boat-status">None</strong></div>
+            <button id="choose-search-boat" type="button">Choose boat</button>
+          </div>
+        </form>
+        <div id="search-summary" class="leg-detail"></div>
+        <button id="search-mark" type="button">Resolve to location</button>
+      </section>
+
+      <section id="wind-inspector" class="panel-section inspector" hidden>
+        <div class="section-heading">
+          <div><div class="eyebrow">Selected wind</div><h2>Edit wind indicator</h2></div>
+          <button id="delete-wind" class="danger icon-button" type="button" title="Delete wind indicator" aria-label="Delete wind indicator">×</button>
+        </div>
+        <form id="wind-form" class="stack-form">
+          <label>Label <input id="wind-label" maxlength="100"></label>
+          <div class="two-columns">
+            <label>Latitude <input id="wind-lat" inputmode="decimal"></label>
+            <label>Longitude <input id="wind-lon" inputmode="decimal"></label>
+          </div>
+          <label>Wind flows toward <input id="wind-direction" inputmode="decimal" placeholder="E or 090"></label>
+        </form>
+        <p class="fineprint">The arrow points in the direction the wind is blowing toward.</p>
+      </section>
+
+      <section class="panel-section locations-section">
+        <div class="section-heading"><h2>Chart items</h2><span id="feature-count" class="count">0</span></div>
+        <div class="list-actions"><select id="item-filter" aria-label="Filter chart items"><option value="all">All chart items</option><option value="feature">Locations</option><option value="route">Waypoints</option><option value="saved-route">Saved routes</option><option value="search">Search areas</option><option value="bearing">Bearings</option><option value="wind">Wind</option></select></div>
+        <input id="feature-search" class="search" type="search" placeholder="Search chart items" aria-label="Search chart items">
+        <div id="feature-list" class="feature-list"></div>
+      </section>
+    </aside>
+  </main>
+
+  <input id="track-file" type="file" accept=".txt,text/plain" hidden>
+  <input id="json-file" type="file" accept=".json,application/json" hidden>
+
+  <dialog id="chart-dialog">
+    <form id="chart-form" method="dialog" class="dialog-card">
+      <div class="eyebrow">Chart profile</div>
+      <h2 id="chart-dialog-title">New scrambled sea</h2>
+      <p>Keep each seed or playthrough separate so imported tracks and locations never mix.</p>
+      <label>Chart name <input id="dialog-chart-name" maxlength="80" required></label>
+      <label>Scrambled Seas seed <input id="dialog-chart-seed" maxlength="80" placeholder="Optional"></label>
+      <div class="dialog-actions">
+        <button value="cancel" type="button" data-close>Cancel</button>
+        <button id="delete-chart" class="danger-text" type="button" hidden>Delete chart</button>
+        <button class="primary" value="save" type="submit">Save chart</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="paste-dialog">
+    <form id="paste-form" method="dialog" class="dialog-card">
+      <div class="eyebrow">Coordinate Viewer</div>
+      <h2>Paste positions</h2>
+      <p>Paste lines from a Coordinate Viewer file (<code>latitude longitude [hour wind]</code>, with optional <code>Day: N</code> lines). They are added to this chart's track.</p>
+      <label>Positions <textarea id="paste-text" rows="8" placeholder="Day: 3&#10;35.512 -3.208 9.5 270"></textarea></label>
+      <div class="dialog-actions">
+        <button type="button" data-close>Cancel</button>
+        <button class="primary" type="submit">Add to track</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="help-dialog">
+    <article class="dialog-card help-card">
+      <div class="eyebrow">Field guide</div>
+      <h2>Chartroom shortcuts</h2>
+      <div class="shortcut-list">
+        <div><kbd data-shortcut="select">V</kbd><span>Select marks and pan the chart</span></div>
+        <div><kbd data-shortcut="location">L</kbd><span>Add a location</span></div>
+        <div><kbd data-shortcut="route">R</kbd><span>Plot route waypoints</span></div>
+        <div><kbd data-shortcut="measure">M</kbd><span>Measure a temporary bearing and distance</span></div>
+        <div><kbd data-shortcut="area">A</kbd><span>Rough area: press where it is centred and drag out the radius. Drag the edge of a selected area to resize it.</span></div>
+        <div><kbd data-shortcut="search">S</kbd><span>Search area: press on the port or position that gave the direction, drag toward it and let go at the distance. The direction snaps to compass points.</span></div>
+        <div><kbd>Space</kbd><span>Hold while dragging to pan from any tool</span></div>
+        <div><kbd>Ctrl</kbd><span>Hold to place freely. Otherwise drawing tools pull gently onto nearby marks, lines and crossings, shown by a ring.</span></div>
+        <div><kbd>Shift</kbd><span>Add or remove items from the selection. Shift-drag empty water to select an area.</span></div>
+        <div><kbd>I</kbd><span>Open the island library. A location named for an island displays its outline automatically.</span></div>
+        <div><kbd>Boat</kbd><span>Select a location or search area, then choose a boat for its cyan lower-right icon. Search-area boats carry into the resolved location.</span></div>
+        <div><kbd data-shortcut="wind">W</kbd><span>Add a regional wind indicator: drag in the direction the wind is blowing toward.</span></div>
+        <div><kbd>Delete</kbd><span>Remove the selected chart items</span></div>
+        <div><kbd>Ctrl Z</kbd><span>Undo the last chart edit</span></div>
+        <div><kbd>F</kbd><span>Fit locations, route and track in view</span></div>
+      </div>
+      <p class="help-note"><strong>Finding an island:</strong> when someone gives you a direction and distance, draw a search area from where you heard it. Areas with the same name brighten only where they all overlap. Once you find the island, choose Resolve to location and click where it is.</p>
+      <p class="help-note"><strong>Routes:</strong> Save route keeps a finished route on the chart and starts a new one. Saved routes are listed under Chart items. Click a saved route's line to select or drag the whole route, or click one of its waypoints to edit that point.</p>
+      <p class="help-note"><strong>Distance model:</strong> the original Sailwind map uses a flat chart and approximately 140 nautical miles per degree. Chartroom preserves that convention; it does not treat the game world as a globe.</p>
+      <p class="help-note"><strong>Long plots:</strong> while a measurement, search or area is active, hold the pointer against the chart edge briefly to pan in that direction.</p>
+      <p class="help-note"><strong>Your charts:</strong> Chartroom saves automatically and keeps a copy from your previous launch. Use File, Back up all charts to keep your own copy, or to move your charts to another computer.</p>
+      <p class="help-note"><strong>Layout:</strong> use the two panel buttons at the top to hide either sidebar. Drag a sidebar's inner edge to resize it.</p>
+      <div class="dialog-actions"><button class="primary" type="button" data-close>Back to chart</button></div>
+    </article>
+  </dialog>
+
+  <dialog id="update-dialog">
+    <article class="dialog-card notes-card">
+      <h2 id="update-dialog-title">Update available</h2>
+      <p id="update-dialog-summary"></p>
+      <div id="update-notes" class="release-notes"></div>
+      <div class="dialog-actions">
+        <button id="update-dialog-close" type="button" data-close>Cancel</button>
+        <button id="update-install" class="primary" type="button">Install</button>
+      </div>
+    </article>
+  </dialog>
+
+  <dialog id="update-progress-dialog">
+    <article class="dialog-card settings-card">
+      <h2 id="update-progress-title">Updating Chartroom</h2>
+      <p id="update-progress-status"></p>
+      <progress id="update-progress-bar" max="1" value="0"></progress>
+      <div class="dialog-actions"><button id="update-progress-cancel" type="button">Cancel</button></div>
+    </article>
+  </dialog>
+
+  <dialog id="about-dialog">
+    <article class="dialog-card about-card">
+      <div class="eyebrow">About</div>
+      <h2>Sailwind Chartroom <span id="about-version"></span></h2>
+      <p>A fan-made charting desk for Sailwind. It is not made by or affiliated with the developers of Sailwind.</p>
+      <p>Your charts stay on this computer unless you export them. Chartroom only goes online to check GitHub for updates, which you can turn off in File, Settings.</p>
+      <h3>License</h3>
+      <pre id="about-license" class="notice-text"></pre>
+      <h3>Third-party notices</h3>
+      <pre id="about-notices" class="notice-text"></pre>
+      <div class="dialog-actions"><button class="primary" type="button" data-close>Close</button></div>
+    </article>
+  </dialog>
+
+  <dialog id="island-dialog">
+    <article class="dialog-card island-dialog-card">
+      <div class="eyebrow">Island library</div>
+      <h2>Choose an island outline</h2>
+      <p id="island-dialog-hint">Select a location first to apply an outline, or choose an island and place it on the chart.</p>
+      <div class="island-filters">
+        <input id="island-search" type="search" placeholder="Search islands" aria-label="Search islands">
+        <select id="island-region" aria-label="Filter islands by region"><option value="all">All regions</option></select>
+      </div>
+      <label class="switch-row island-secret-toggle"><span>Show secret islands</span><input id="island-secrets" type="checkbox"></label>
+      <div id="island-list" class="island-list"></div>
+      <div class="dialog-actions">
+        <button id="remove-island" class="danger-text" type="button">Use no outline</button>
+        <button type="button" data-close>Close</button>
+      </div>
+    </article>
+  </dialog>
+
+  <dialog id="boat-dialog">
+    <article class="dialog-card boat-dialog-card">
+      <div class="eyebrow">Boat library</div>
+      <h2>Mark a boat at this location</h2>
+      <p id="boat-dialog-hint">Select a location first, then choose the boat that is there.</p>
+      <div class="boat-filters">
+        <input id="boat-search" type="search" placeholder="Search boats" aria-label="Search boats">
+        <select id="boat-provider" aria-label="Filter boats by source"><option value="all">All sources</option></select>
+      </div>
+      <div id="boat-list" class="boat-list"></div>
+      <div class="dialog-actions">
+        <button id="remove-boat" class="danger-text" type="button">Remove boat marker</button>
+        <button type="button" data-close>Close</button>
+      </div>
+    </article>
+  </dialog>
+
+  <script type="module" src="src/app.mjs"></script>
+</body>
+</html>

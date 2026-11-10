@@ -1,0 +1,115 @@
+{
+  "id": "chart-215a640f-5c02-49c7-a438-2adb68de67df",
+  "name": "Fixture Sea",
+  "seed": "4815",
+  "createdAt": "2026-11-01T12:00:00.000Z",
+  "updatedAt": "2026-11-10T03:43:17.302Z",
+  "view": {
+    "lat": 10,
+    "lon": 0,
+    "zoom": 5
+  },
+  "layers": {
+    "grid": true,
+    "labels": true,
+    "track": true,
+    "routeDistances": true,
+    "bearings": true,
+    "winds": true,
+    "boats": true
+  },
+  "speedKn": 6,
+  "features": [
+    {
+      "id": "feature-83a04a29-b1dd-4346-9cb7-9d57769c182e",
+      "lat": 12.5,
+      "lon": -20.25,
+      "name": "Dead Cove",
+      "notes": "Water here",
+      "day": "3",
+      "time": "14:20",
+      "rangeNm": 0,
+      "showIsland": true
+    },
+    {
+      "id": "feature-49087a27-f2fc-4413-bf0a-9d2a81134610",
+      "lat": 8,
+      "lon": -15,
+      "name": "",
+      "notes": "",
+      "day": "",
+      "time": "",
+      "rangeNm": 25,
+      "showIsland": true,
+      "boatId": "vanilla/dhow",
+      "boatCorner": "se",
+      "showBoat": true
+    }
+  ],
+  "route": [
+    {
+      "id": "route-f79225c0-09b0-4fa3-841f-4709d0b1f796",
+      "lat": 5,
+      "lon": -10,
+      "name": "Next leg",
+      "notes": ""
+    }
+  ],
+  "savedRoutes": [
+    {
+      "id": "saved-route-d7f44797-3a08-4463-a493-3508bcf28c76",
+      "name": "Route 1",
+      "createdAt": "2026-11-02T09:30:00.000Z",
+      "points": [
+        {
+          "id": "route-a324a594-5ea0-4463-991b-cb3f6d9c825d",
+          "lat": 12.5,
+          "lon": -20.25,
+          "name": "Departure",
+          "notes": ""
+        },
+        {
+          "id": "route-a6e5af5c-fcad-435a-9de4-49783f0d3404",
+          "lat": 10,
+          "lon": -18,
+          "name": "Turn",
+          "notes": "Avoid shoal"
+        }
+      ]
+    }
+  ],
+  "track": [
+    {
+      "id": "track-e02b843c-a4be-4ed0-a438-047dcf0e2ee8",
+      "lat": 12.4,
+      "lon": -20.2,
+      "name": "",
+      "day": "3",
+      "time": "06:10",
+      "wind": "NE 4"
+    }
+  ],
+  "bearings": [],
+  "winds": [
+    {
+      "id": "wind-d9747681-936f-472a-ba0b-eec52ed30dec",
+      "lat": 0,
+      "lon": 0,
+      "bearing": 270,
+      "label": "Trades"
+    }
+  ],
+  "searches": [
+    {
+      "id": "search-11a5121f-1c32-46b8-acf6-d25b211aeae9",
+      "lat": 10,
+      "lon": -18,
+      "bearing": 157.5,
+      "label": "Gold Rock",
+      "distanceNm": 120,
+      "spreadDeg": 11.25,
+      "tolerancePct": 10
+    }
+  ],
+  "segments": []
+}
