@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import { test, expect } from "./harness.mjs";
 
 test("starts from the host's workspace and reports the host's version", async ({ chartroom, page }) => {
@@ -122,11 +121,10 @@ test("exports the active chart as JSON", async ({ chartroom, page }) => {
   await chartroom.open();
   await chartroom.press("l");
   await chartroom.clickChart(500, 400);
-  const download = page.waitForEvent("download");
   await page.locator("#export-json").evaluate((button) => button.click());
-  const file = await download;
-  expect(file.suggestedFilename()).toMatch(/\.json$/);
-  const exported = JSON.parse(await readFile(await file.path(), "utf8"));
+  const [file] = await page.evaluate(() => window.__host.exports);
+  expect(file.name).toMatch(/\.json$/);
+  const exported = JSON.parse(file.contents);
   expect(exported).toMatchObject({ format: "sailwind-chartroom", version: 1 });
   expect(exported.charts[0].features).toHaveLength(1);
 });
@@ -295,7 +293,7 @@ test("Help shows up to date and release notes; the startup check can be turned o
   await page.evaluate(() => { window.__host.settingsReply = { shortcuts: { select: "v", location: "l", route: "r", measure: "m", area: "a", search: "s", wind: "w" }, checkForUpdates: false, interfaceSize: 0 }; });
   await page.locator('.app-menu[data-menu="file"] summary').click();
   await page.locator("#open-settings").click();
-  expect((await chartroom.saved()).settings.checkForUpdates).toBe(false);
+  await expect.poll(async () => (await chartroom.saved())?.settings.checkForUpdates).toBe(false);
   await page.evaluate(() => { window.__host.messages.length = 0; });
   await page.reload();
   await expect(page.locator("#app-version")).toHaveText("9.9.9");
@@ -326,4 +324,18 @@ test("Match Windows follows the system light or dark setting", async ({ chartroo
   await expect(page.locator("html")).toHaveAttribute("data-mode", "light");
   await page.emulateMedia({ colorScheme: "dark" });
   await expect(page.locator("html")).toHaveAttribute("data-mode", "dark");
+});
+
+test("in the macOS app, Option places freely and shortcuts are named for the Mac", async ({ chartroom, page }) => {
+  await chartroom.open(null, { platform: "mac" });
+  await expect(page.locator("#redo kbd")).toHaveText("⇧⌘Z");
+  await expect(page.locator("#undo kbd")).toHaveText("⌘Z");
+  for (const modifier of ["Control", "Alt"]) {
+    await chartroom.press("w");
+    await chartroom.dragChart({ x: 500, y: 400 }, { x: 590, y: 371 }, { modifiers: [modifier] });
+  }
+  const [snapped, free] = (await chartroom.chart()).winds.map((wind) => wind.bearing);
+  expect(snapped % 22.5).toBe(0);
+  expect(free % 22.5).not.toBe(0);
+  expect(await chartroom.messages()).toContain("check-updates");
 });

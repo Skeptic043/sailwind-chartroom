@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches: [main, macos-host]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: Windows host and chart page
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      # Runs the model, browser (Edge) and host tests, then builds and verifies the Windows ZIP.
+      - run: pwsh -File ./scripts/package.ps1
+
+  webkit:
+    name: Chart page in WebKit
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npx playwright install webkit
+      - run: npx playwright test --config playwright.webkit.config.mjs
+
+  macos-tests:
+    name: macOS host tests
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift test --package-path macos
+
+  macos-package:
+    name: macOS package (${{ matrix.runner }})
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # Builds three versions with a throwaway key, runs the first through create, then updates it
+      # rc.1 -> rc.2 -> 0.6.0 and checks the updated app still opens the same charts.
+      - name: Package and update test
+        run: bash macos/scripts/update-test.sh "$RUNNER_TEMP/update"
+      - name: Launch, relaunch and recovery test
+        run: |
+          mkdir -p "$RUNNER_TEMP/fresh"
+          ditto -x -k "$RUNNER_TEMP/update/packages/SailwindChartroom-macos-universal-0.6.0-rc.1.zip" "$RUNNER_TEMP/fresh"
+          node macos/scripts/smoke.mjs "$RUNNER_TEMP/fresh/Sailwind Chartroom.app" "$RUNNER_TEMP/fresh/smoke"
+      - name: Keep reports, window pictures and the app log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-smoke-${{ matrix.runner }}
+          if-no-files-found: ignore
+          path: |
+            ${{ runner.temp }}/update/smoke/*.json
+            ${{ runner.temp }}/update/smoke/*.png
+            ${{ runner.temp }}/update/server.log
+            ${{ runner.temp }}/fresh/smoke/*.json
+            ${{ runner.temp }}/fresh/smoke/*.png
+            ~/Library/Logs/Sailwind Chartroom/chartroom.log

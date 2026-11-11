@@ -10,13 +10,13 @@ const csp = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 's
 // Stands in for the WebView2 host: answers "ready" with the latest saved workspace and records saves.
 // The workspace survives reloads in sessionStorage, as the real host keeps it in memory. Update checks
 // answer with the given releases; an install reports progress and then the given failure.
-function fakeHost({ seed, updates }) {
+function fakeHost({ seed, updates, platform }) {
   const key = "fake-host-workspace";
   if (sessionStorage.getItem(key) === null) sessionStorage.setItem(key, JSON.stringify(seed ?? null));
   const listeners = new Set();
   const dispatch = (data) => setTimeout(() => listeners.forEach((listener) => listener({ data })));
   // settingsReply, when a test sets it, is what the native Settings window sends back on OK.
-  const host = { messages: [], saves: 0, zooms: [], settingsOpened: null, settingsReply: null };
+  const host = { messages: [], saves: 0, zooms: [], exports: [], settingsOpened: null, settingsReply: null };
   Object.defineProperty(host, "workspace", { get: () => JSON.parse(sessionStorage.getItem(key)) });
   window.__host = host;
   window.chrome = {
@@ -24,12 +24,13 @@ function fakeHost({ seed, updates }) {
       postMessage(message) {
         const data = JSON.parse(JSON.stringify(message));
         host.messages.push(data.type);
-        if (data.type === "ready") dispatch({ type: "init", workspace: host.workspace, dataFolder: "D:/Charts", version: "9.9.9" });
+        if (data.type === "ready") dispatch({ type: "init", workspace: host.workspace, dataFolder: "D:/Charts", version: "9.9.9", platform });
         if (data.type === "save") {
           sessionStorage.setItem(key, JSON.stringify(data.workspace));
           host.saves += 1;
           dispatch({ type: "saved", ok: true });
         }
+        if (data.type === "export-file") host.exports.push(data);
         if (data.type === "pin") dispatch({ type: "pinned", value: true });
         if (data.type === "set-zoom") host.zooms.push(data.factor);
         if (data.type === "set-appearance") host.appearance = data.dark ? "dark" : "light";
@@ -79,8 +80,9 @@ export class Chartroom {
     this.canvas = page.locator("#chart-canvas");
   }
 
-  async open(workspace = null, { updates } = {}) {
-    await this.page.addInitScript(fakeHost, { seed: workspace, updates });
+  // platform "mac" makes the stand-in answer as the macOS host does.
+  async open(workspace = null, { updates, platform } = {}) {
+    await this.page.addInitScript(fakeHost, { seed: workspace, updates, platform });
     await this.page.goto("https://chartroom.app/index.html");
     await expect(this.page.locator("#app-version")).toHaveText("9.9.9");
   }

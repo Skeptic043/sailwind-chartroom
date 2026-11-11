@@ -13,6 +13,13 @@ export function initUpdates() {
   if (!host.desktop) return;
   elements["check-updates"].hidden = false;
   elements["release-notes"].hidden = false;
+  if (host.platform === "mac") {
+    // The macOS app shows its own update windows, so the page only asks for a check.
+    elements["check-updates"].addEventListener("click", () => host.checkUpdates());
+    elements["release-notes"].addEventListener("click", host.openReleases);
+    if (workspace.settings.checkForUpdates) host.checkUpdates(true);
+    return;
+  }
   elements["check-updates"].addEventListener("click", () => check("manual"));
   elements["release-notes"].addEventListener("click", () => check("notes"));
   elements["update-bar-open"].addEventListener("click", host.openReleases);

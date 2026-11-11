@@ -30,6 +30,14 @@ initState(host, {
 setOverlay(drawToolPreview);
 initTheme();
 
+// The macOS app names its own keys: Command for shortcuts, and Option to place freely.
+if (host.platform === "mac") {
+  for (const kbd of document.querySelectorAll("kbd:not([data-shortcut])")) {
+    kbd.textContent = kbd.textContent.replace(/^Ctrl$/, "Option").replace("Ctrl Y", "⇧⌘Z").replace("Ctrl ", "⌘");
+  }
+  elements["zoom-reset"].firstChild.textContent = "Default text size ";
+}
+
 // Header, panels and dialogs
 document.querySelectorAll(".tool").forEach((button) => button.addEventListener("click", () => setMode(button.dataset.mode)));
 document.querySelectorAll("[data-close]").forEach((button) => button.addEventListener("click", () => button.closest("dialog").close()));
@@ -231,6 +239,12 @@ host.on("saved", ({ ok, error }) => {
   if (!ok) showToast(`Could not save: ${error}`, true);
 });
 elements["app-version"].textContent = host.version;
+// The macOS Edit menu sends Undo and Redo here: to the text field being edited, or else to the chart.
+host.on("edit-command", ({ command }) => {
+  if (/INPUT|TEXTAREA/.test(document.activeElement?.tagName)) document.execCommand(command);
+  else if (command === "undo") undo();
+  else if (command === "redo") redo();
+});
 if (host.desktop) {
   elements["pin-window"].hidden = false;
   elements["open-folder"].hidden = false;

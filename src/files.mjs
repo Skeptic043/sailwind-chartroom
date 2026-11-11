@@ -1,7 +1,7 @@
-// Imports from files the player chooses, and exports downloaded through the host's save dialog.
+// Imports from files the player chooses, and exports written through the host's save dialog.
 import { exportFile, featuresToCsv, importChartData, parseCoordinateViewer } from "./model.mjs";
 import { showToast } from "./dom.mjs";
-import { activeChart, commit, persist, resetHistory, workspace } from "./state.mjs";
+import { activeChart, commit, host, persist, resetHistory, workspace } from "./state.mjs";
 import { fitData } from "./render.mjs";
 import { renderEverything } from "./panels.mjs";
 
@@ -29,31 +29,22 @@ export async function importChartFile(file) {
 
 export function exportActiveChart() {
   const chart = activeChart();
-  download(`${safeFilename(chart.name)}.json`, JSON.stringify(exportFile([chart]), null, 2), "application/json");
+  host.exportFile(`${safeFilename(chart.name)}.json`, JSON.stringify(exportFile([chart]), null, 2), "application/json");
   showToast("Chart exported.");
 }
 
 export function exportLocationsCsv() {
-  download(`${safeFilename(activeChart().name)}-locations.csv`, featuresToCsv(activeChart().features), "text/csv;charset=utf-8");
+  host.exportFile(`${safeFilename(activeChart().name)}-locations.csv`, featuresToCsv(activeChart().features), "text/csv;charset=utf-8");
   showToast("Location list exported.");
 }
 
 export function exportWorkspace() {
-  download(`sailwind-chartroom-backup-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(exportFile(workspace.charts), null, 2), "application/json");
+  host.exportFile(`sailwind-chartroom-backup-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(exportFile(workspace.charts), null, 2), "application/json");
   showToast(`Backed up ${workspace.charts.length} chart${workspace.charts.length === 1 ? "" : "s"}.`);
 }
 
 async function readFile(file) {
   return file ? file.text() : "";
-}
-
-function download(name, contents, type) {
-  const url = URL.createObjectURL(new Blob([contents], { type }));
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = name;
-  anchor.click();
-  setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 function safeFilename(name) {

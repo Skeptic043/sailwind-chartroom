@@ -20,7 +20,7 @@ export function initTheme() {
 }
 
 function applyAppearance() {
-  host.setAppearance(applyTheme(workspace.settings));
+  host.setAppearance(applyTheme(workspace.settings), workspace.settings.appearance === "system");
   if (elements["island-dialog"].open) renderIslandLibrary();
   if (elements["boat-dialog"].open) renderBoatLibrary();
 }
@@ -34,13 +34,20 @@ export function initSettings() {
   elements["zoom-out"].addEventListener("click", () => stepInterfaceSize(-1));
   elements["zoom-reset"].addEventListener("click", () => stepInterfaceSize(0));
   host.on("settings-changed", ({ settings }) => applySettings(settings));
+  // The macOS app menu has its own Settings item.
+  host.on("show-settings", openSettings);
 }
 
 function openSettings() {
   const { shortcuts, checkForUpdates, interfaceSize, theme, appearance } = workspace.settings;
   const tools = CHART_TOOLS.map(({ mode, label }) => ({ mode, label, key: shortcuts[mode] }));
-  host.openSettings({ tools, checkForUpdates, interfaceSize, theme, appearance, themes: THEMES, appearances: APPEARANCES, dark: isDark() },
+  host.openSettings({ tools, checkForUpdates, interfaceSize, theme, appearance, themes: THEMES, appearances: appearanceChoices(), dark: isDark() },
     CHART_TOOLS.map(({ mode, label, key }) => ({ mode, label, key })));
+}
+
+// The system choice is named for the system the app runs on.
+function appearanceChoices() {
+  return host.platform === "mac" ? APPEARANCES.map((choice) => choice.id === "system" ? { ...choice, label: "Match macOS" } : choice) : APPEARANCES;
 }
 
 function applySettings({ shortcuts, checkForUpdates, interfaceSize, theme, appearance }) {
@@ -73,7 +80,7 @@ export function stepInterfaceSize(direction) {
   workspace.settings.interfaceSize = next;
   persist();
   applyInterfaceSize();
-  showToast(next ? `Interface size ${next}%` : `Interface size matches Windows (${host.textScale}%)`);
+  showToast(next ? `Interface size ${next}%` : host.platform === "mac" ? "Interface size 100%" : `Interface size matches Windows (${host.textScale}%)`);
 }
 
 function effectiveSize() {

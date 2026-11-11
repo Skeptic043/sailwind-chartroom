@@ -16,7 +16,16 @@ public sealed class HostMessageTests
         Assert.Equal("""{"charts":[]}""", save.Workspace);
     }
 
+    [Fact]
+    public void ExportCarriesTheFileNameAndContents()
+    {
+        var export = Assert.IsType<HostMessage.ExportFile>(HostMessage.Parse("""{"type":"export-file","name":"chart.json","contents":"{}"}"""));
+        Assert.Equal(("chart.json", "{}"), (export.Name, export.Contents));
+    }
+
     [Theory]
+    [InlineData("""{"type":"export-file","name":"chart.json"}""")]
+    [InlineData("""{"type":"export-file","name":"","contents":"{}"}""")]
     [InlineData("""{"type":"save"}""")]
     [InlineData("""{"type":"save","workspace":"text"}""")]
     [InlineData("""{"type":"save","workspace":{"charts":{}}}""")]

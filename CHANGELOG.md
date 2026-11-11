@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.0
+
+### Added
+- Sailwind Chartroom for macOS
+
 ## 0.5.5
 
 ### Initial Release
