@@ -27,12 +27,13 @@ for version in 0.6.0-rc.1 0.6.0-rc.2 0.6.0; do
 done
 bin="$root/macos/.build/artifacts/sparkle/Sparkle/bin"
 
-# Sparkle's command-line updater ships in its release archive.
+# Sparkle's command-line updater is not in its release archive, so it is built from the same version's source.
 if [[ ! -d "$work/sparkle" ]]; then
-  mkdir -p "$work/sparkle"
-  curl -fsSL "https://github.com/sparkle-project/Sparkle/releases/download/$sparkle_version/Sparkle-$sparkle_version.tar.xz" | tar -xJ -C "$work/sparkle"
+  git clone --quiet --depth 1 --branch "$sparkle_version" https://github.com/sparkle-project/Sparkle "$work/sparkle"
+  xcodebuild -quiet -project "$work/sparkle/Sparkle.xcodeproj" -scheme sparkle-cli -configuration Release \
+    -derivedDataPath "$work/sparkle/build" CODE_SIGN_IDENTITY=- build
 fi
-cli=$(find "$work/sparkle" -type f -name sparkle -perm -u+x | head -n 1)
+cli=$(find "$work/sparkle/build" -type f -path "*sparkle.app/Contents/MacOS/sparkle" | head -n 1)
 [[ -n $cli ]] || { echo "Sparkle's command-line updater was not found." >&2; exit 1; }
 
 installed_version() {
