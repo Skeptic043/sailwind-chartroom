@@ -16,6 +16,7 @@ internal abstract record HostMessage
     public sealed record OpenSettings(AppSettings Settings, IReadOnlyList<ToolShortcut> Defaults) : HostMessage;
     public sealed record SetZoom(double Factor) : HostMessage;
     public sealed record SetAppearance(bool Dark) : HostMessage;
+    public sealed record ExportFile(string Name, string Contents) : HostMessage;
 
     public static HostMessage? Parse(string json)
     {
@@ -40,6 +41,7 @@ internal abstract record HostMessage
                     => new OpenSettings(parsed, fallback.Tools),
                 "set-appearance" when root.TryGetProperty("dark", out var dark) && dark.ValueKind is JsonValueKind.True or JsonValueKind.False => new SetAppearance(dark.GetBoolean()),
                 "set-zoom" when root.TryGetProperty("factor", out var factor) && factor.TryGetDouble(out double value) && value is >= 0.5 and <= 3 => new SetZoom(value),
+                "export-file" when Text(root, "name") is { Length: > 0 } name && Text(root, "contents") is { } contents => new ExportFile(name, contents),
                 "save" when root.TryGetProperty("workspace", out var workspace) && IsWorkspace(workspace) => new Save(workspace.GetRawText()),
                 _ => null
             };
@@ -49,6 +51,9 @@ internal abstract record HostMessage
             return null;
         }
     }
+
+    private static string? Text(JsonElement root, string name) =>
+        root.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
 
     private static bool IsWorkspace(JsonElement value) =>
         value.ValueKind == JsonValueKind.Object

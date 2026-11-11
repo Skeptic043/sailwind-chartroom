@@ -10,10 +10,21 @@ A charting desk for Sailwind. Mark islands, plot and save routes, narrow down is
 
 ## Install
 
-1. Download the [Sailwind Chartroom ZIP](https://github.com/Skeptic043/sailwind-chartroom/releases/latest) and extract it anywhere.
+### Windows
+
+1. Download `SailwindChartroom-<version>.zip` from the [latest release](https://github.com/Skeptic043/sailwind-chartroom/releases/latest) and extract it anywhere.
 2. Run `Sailwind Chartroom.exe`.
 
-Chartroom is a Windows app and needs 64-bit Windows 10 or 11. It isn't code-signed, so Windows may warn the first time you run it. Choose More info, then Run anyway.
+Needs 64-bit Windows 10 or 11. Chartroom isn't code-signed, so Windows may warn the first time you run it. Choose More info, then Run anyway.
+
+### macOS
+
+1. Download `SailwindChartroom-macos-universal-<version>.zip` from the [latest release](https://github.com/Skeptic043/sailwind-chartroom/releases/latest) and double-click it to unpack.
+2. Drag **Sailwind Chartroom** into your Applications folder and open it.
+3. macOS will say it can't check the app, because Chartroom isn't signed with an Apple developer account. Click **Done**.
+4. Open **System Settings → Privacy & Security**, scroll down to the message about Sailwind Chartroom, click **Open Anyway** and confirm.
+
+Steps 3 and 4 are only needed the first time. Needs macOS 13 or later, on Apple silicon or Intel.
 
 ## Updating
 
@@ -21,7 +32,7 @@ Chartroom checks for new versions when it starts and can update itself. You can 
 
 ## Saved charts
 
-Charts save automatically to `%APPDATA%\Sailwind Chartroom`, with a copy from your previous launch. Use File > Back up all charts to save a copy.
+Charts save automatically to `%APPDATA%\Sailwind Chartroom` on Windows and `~/Library/Application Support/Sailwind Chartroom` on macOS, with a copy from your previous launch. Use File > Back up all charts to save a copy.
 
 ## Credits
 

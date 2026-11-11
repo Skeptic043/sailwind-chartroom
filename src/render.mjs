@@ -1,7 +1,7 @@
 // Draws the chart canvas and moves its view. Tool previews are drawn by interaction.mjs through setOverlay().
 import { mapPalette, paperTile } from "./theme.mjs";
-import { MAX_ZOOM, MIN_ZOOM, NM_PER_DEGREE, bearingDegrees, bearingFixes, clusteredLabelIds, destinationPoint, labelSpacingForZoom, searchChartLabel, searchEvidenceOpacity, searchExtent, searchNameLabelIds, searchOverlapGroups, summarizeRoute, visibleSavedRoutes } from "./model.mjs";
-import { assignedIsland, islandWorldBounds, visibleIsland } from "./islands.mjs";
+import { MAX_ZOOM, MIN_ZOOM, NM_PER_DEGREE, bearingDegrees, bearingFixes, clusteredLabelIds, destinationPoint, searchChartLabel, searchEvidenceOpacity, searchExtent, searchIconAnchors, searchNameLabelIds, searchOverlapGroups, summarizeRoute, tradeWindAt, visibleSavedRoutes } from "./model.mjs";
+import { VANILLA_ISLANDS, islandWorldBounds, searchIsland, visibleIsland } from "./islands.mjs";
 import { boatMarkerSize, drawBoatSilhouette, visibleBoat } from "./boats.mjs";
 import { clamp, formatDirection, formatNm, isNightTime, nearlyMultiple, shortCoordinate } from "./format.mjs";
 import { canvas, context, elements } from "./dom.mjs";
@@ -31,15 +31,21 @@ function chartLabelCandidates() {
   const chart = activeChart();
   const candidates = [];
   const namedSearchLabels = searchNameLabelIds(chart.searches);
-  const add = (kind, id, name, point, selected = false, priority = 10) => {
+  const searchAnchors = searchIconAnchors(chart.searches);
+  context.font = LABEL_FONT;
+  // below is how far under its point a label's top edge is drawn; a search's name sits above its centre.
+  const add = (kind, id, name, point, selected = false, priority = 10, below = 12) => {
     if (!name || !point) return;
-    candidates.push({ id: labelKey(kind, id), name, ...worldToScreen(point), selected, priority });
+    const screen = worldToScreen(point);
+    candidates.push({ id: labelKey(kind, id), name, x: screen.x, y: screen.y + below, width: context.measureText(name).width, selected, priority });
   };
-  for (const feature of chart.features) add("feature", feature.id, feature.name, feature, isSelected("feature", feature.id), 0);
+  // The player's own names come first; a vanilla name shows only where it has room.
+  for (const island of vanillaIslands()) if (!island.partOf) add("vanilla", island.id, island.name, island.sourceCenter, false, 60);
+  for (const feature of chart.features) if (feature.showName !== false) add("feature", feature.id, feature.name, feature, isSelected("feature", feature.id), 0);
   for (const search of chart.searches) {
     const selected = isSelected("search", search.id);
     if (search.label && !namedSearchLabels.has(search.id) && !selected) continue;
-    add("search", search.id, search.label || "Search area", searchExtent(search).centre, selected, 0);
+    add("search", search.id, search.label || "Search area", searchAnchors.get(search.id) ?? searchExtent(search).centre, selected, 0, -24);
   }
   for (const point of chart.route) add("route", point.id, point.name, point, isSelected("route", point.id), 30);
   for (const route of visibleSavedRoutes(chart)) {
@@ -93,8 +99,7 @@ export function drawChart() {
   const height = rectangle.height;
   if (!width || !height) return;
   const palette = mapPalette();
-  const labelDistance = labelSpacingForZoom(activeChart().view.zoom);
-  visibleChartLabels = clusteredLabelIds(chartLabelCandidates(), labelDistance);
+  visibleChartLabels = clusteredLabelIds(chartLabelCandidates());
 
   const gradient = context.createRadialGradient(width * .45, height * .4, 0, width * .45, height * .4, Math.max(width, height));
   gradient.addColorStop(0, palette.paperA);
@@ -117,6 +122,7 @@ export function drawChart() {
   }
   if (activeChart().layers.grid) drawGrid(width, height, palette);
   drawWorldBorder(palette);
+  if (activeChart().layers.vanillaMap) drawVanillaMap(width, height, palette);
   drawSegments(palette);
   drawAreas(palette);
   drawSearches(palette);
@@ -255,10 +261,16 @@ function drawSearches(palette) {
   const namedLabels = searchNameLabelIds(searches);
   const groups = searchOverlapGroups(searches);
   const overlapping = new Set(groups.flatMap((group) => group.map((search) => search.id)));
+  const anchors = searchIconAnchors(searches);
+  // The shared island is whichever one the group's searches show, whoever carries the name.
+  const sharedIslands = new Map(groups.flatMap((group) => {
+    const island = group.map(searchIsland).find(Boolean) ?? null;
+    return group.map((search) => [search.id, island]);
+  }));
   for (const group of groups) drawSearchOverlap(group);
   for (const search of searches) {
     const selected = isSelected("search", search.id);
-    drawSearchWedge(search, selected, palette, searchEvidenceOpacity(overlapping.has(search.id)), namedLabels.has(search.id) || selected, labelVisible("search", search.id));
+    drawSearchWedge(search, selected, palette, searchEvidenceOpacity(overlapping.has(search.id)), namedLabels.has(search.id) || selected, labelVisible("search", search.id), anchors.get(search.id), sharedIslands.get(search.id));
   }
 }
 
@@ -286,12 +298,15 @@ function drawSearchOverlap(group) {
   context.restore();
 }
 
-export function drawSearchWedge(search, selected, palette, evidenceOpacity = .12, showName = true, showLabel = true) {
+// iconAt moves the island and name off the search's own centre, to where overlapping searches for the
+// same place meet; null leaves them to the search that carries them.
+export function drawSearchWedge(search, selected, palette, evidenceOpacity = .12, showName = true, showLabel = true, iconAt = undefined, sharedIsland = null) {
   const { nearNm, farNm, fromDeg, toDeg, centre } = searchExtent(search);
-  const previewIsland = assignedIsland({ name: search.label });
+  const shared = iconAt !== undefined;
+  const previewIsland = iconAt === null ? null : shared ? sharedIsland : searchIsland(search);
   const far = worldToScreen(destinationPoint(search, search.bearing, farNm));
   const origin = worldToScreen(search);
-  const middle = worldToScreen(centre);
+  const middle = worldToScreen(iconAt ?? centre);
   context.save();
   traceSearchPath(search);
   context.fillStyle = `rgba(${palette.searchRgb},${evidenceOpacity})`;
@@ -316,19 +331,20 @@ export function drawSearchWedge(search, selected, palette, evidenceOpacity = .12
     previewHeight = (previewIsland.bounds.maxLat - previewIsland.bounds.minLat) * activeChart().view.zoom * previewScale;
     context.save();
     context.globalAlpha = .62;
-    drawIslandSilhouette(centre, previewIsland, false, palette, previewScale);
+    drawIslandSilhouette(iconAt ?? centre, previewIsland, false, palette, previewScale);
     context.restore();
   }
   let labelOffset = Math.max(14, previewHeight / 2 + 11);
   const boat = activeChart().layers.boats ? visibleBoat(search) : null;
   if (boat) {
-    const bounds = boatIconBoundsAt(centre, previewIsland, previewScale, boat);
+    // The boat stays at its own search's centre, beside the island only when the island is there too.
+    const bounds = boatIconBoundsAt(centre, shared ? null : previewIsland, previewScale, boat);
     drawBoatSilhouette(context, boat, bounds, {
       ...boatColours(palette, selected),
       lineWidth: selected ? 1.7 : 1.25,
       detail: "marker"
     });
-    labelOffset = Math.max(labelOffset, middle.y - (bounds.y - bounds.height / 2) + 8);
+    if (!iconAt) labelOffset = Math.max(labelOffset, worldToScreen(centre).y - (bounds.y - bounds.height / 2) + 8);
   }
   if (activeChart().layers.labels && showLabel) {
     const label = searchChartLabel(search, showName) || `${formatDirection(search.bearing)} · ${formatNm(search.distanceNm)} nm`;
@@ -495,6 +511,73 @@ function drawRoute(palette) {
   context.restore();
 }
 
+function vanillaIslands() {
+  const layers = activeChart().layers;
+  if (!layers.vanillaMap) return [];
+  return layers.secretIslands ? VANILLA_ISLANDS : VANILLA_ISLANDS.filter((island) => !island.secret);
+}
+
+// The game's own map, drawn faintly beneath the player's chart. It cannot be selected or edited.
+function drawVanillaMap(width, height, palette) {
+  context.save();
+  context.globalAlpha = 0.55;
+  if (activeChart().layers.tradeWinds) drawTradeWinds(width, height, palette);
+  for (const island of vanillaIslands()) {
+    const screen = worldToScreen(island.sourceCenter);
+    drawIslandSilhouette(island.sourceCenter, island, false, palette);
+    if (islandPixelSpan(island) < MIN_VISIBLE_ISLAND_PX) {
+      context.fillStyle = palette.islandDot;
+      context.beginPath();
+      context.arc(screen.x, screen.y, symbolSize("mark"), 0, Math.PI * 2);
+      context.fill();
+    }
+    if (activeChart().layers.labels && labelVisible("vanilla", island.id)) labelText(island.name, screen.x, screen.y + 13, palette);
+  }
+  context.restore();
+}
+
+const TRADE_WIND_SPACING_PX = 56;
+const TRADE_WIND_ARROW_PX = 22;
+
+function drawTradeWinds(width, height, palette) {
+  // One arrow per degree close in; further out the arrows thin to keep their spacing on screen.
+  const step = [1, 2, 5, 10, 20].find((degrees) => degrees * activeChart().view.zoom >= TRADE_WIND_SPACING_PX) ?? 30;
+  const northwest = screenToWorld(0, 0);
+  const southeast = screenToWorld(width, height);
+  const first = (value) => Math.floor(value / step) * step + step / 2;
+  const latitudes = [];
+  for (let lat = first(southeast.lat); lat <= northwest.lat && lat < 90; lat += step) latitudes.push(lat);
+  // The Al'Ankh and Emerald winds blow in bands only two and three degrees tall. Once the rows are
+  // further apart than that, the bands get a row of their own so they never drop off the chart.
+  const rows = step > 2 ? [...latitudes.filter((lat) => lat < 30 || lat > 33), 31] : latitudes;
+  const colours = { aestrin: palette.bearing, alankh: palette.accent, emerald: palette.track };
+  context.lineWidth = 1.5;
+  for (let lon = first(northwest.lon); lon <= southeast.lon; lon += step) {
+    for (const lat of rows) {
+      const wind = tradeWindAt(lat, lon);
+      if (!wind) continue;
+      context.strokeStyle = colours[wind.zone];
+      context.fillStyle = colours[wind.zone];
+      const centre = worldToScreen({ lat, lon });
+      const half = TRADE_WIND_ARROW_PX / 2;
+      context.save();
+      context.translate(centre.x, centre.y);
+      context.rotate(Math.atan2(-wind.north, wind.east));
+      context.beginPath();
+      context.moveTo(-half, 0);
+      context.lineTo(half, 0);
+      context.stroke();
+      context.beginPath();
+      context.moveTo(half, 0);
+      context.lineTo(half - 7, -4);
+      context.lineTo(half - 7, 4);
+      context.closePath();
+      context.fill();
+      context.restore();
+    }
+  }
+}
+
 function drawFeatures(palette) {
   for (const feature of activeChart().features) {
     const screen = worldToScreen(feature);
@@ -612,9 +695,11 @@ function selectionHalo(screen, palette) {
   context.restore();
 }
 
+const LABEL_FONT = "600 11.5px ui-sans-serif, system-ui";
+
 function labelText(text, x, y, palette) {
   context.save();
-  context.font = "600 11.5px ui-sans-serif, system-ui";
+  context.font = LABEL_FONT;
   context.textAlign = "center";
   context.textBaseline = "top";
   context.lineWidth = 3;

@@ -127,12 +127,10 @@ internal sealed class MainForm : Form
         core.Settings.IsZoomControlEnabled = false;
         core.AddWebResourceRequestedFilter($"{AppOrigin}/*", CoreWebView2WebResourceContext.All);
         core.WebResourceRequested += ServeEmbeddedFile;
-        // Exports are blob downloads created by the page itself.
-        core.NavigationStarting += (_, e) => e.Cancel = !IsAppUri(e.Uri) && !e.Uri.StartsWith($"blob:{AppOrigin}/", StringComparison.Ordinal);
+        core.NavigationStarting += (_, e) => e.Cancel = !IsAppUri(e.Uri);
         core.FrameNavigationStarting += (_, e) => e.Cancel = true;
         core.NewWindowRequested += (_, e) => e.Handled = true;
         core.WebMessageReceived += OnWebMessage;
-        core.DownloadStarting += OnDownloadStarting;
         core.Navigate($"{AppOrigin}/index.html");
     }
 
@@ -199,6 +197,10 @@ internal sealed class MainForm : Form
                 break;
             case HostMessage.SetZoom zoom:
                 web.ZoomFactor = zoom.Factor;
+                break;
+            case HostMessage.ExportFile export:
+                // Shown after this handler returns, so the dialog never runs inside a WebView2 event.
+                BeginInvoke(() => SaveExport(export));
                 break;
             case HostMessage.SetAppearance appearance:
                 SettingsForm.UseDarkTitleBar(Handle, appearance.Dark);
@@ -331,26 +333,21 @@ internal sealed class MainForm : Form
         }
     }
 
-    private void OnDownloadStarting(object? sender, CoreWebView2DownloadStartingEventArgs e)
+    // The page supplies the file; the player chooses where it goes.
+    private void SaveExport(HostMessage.ExportFile export)
     {
-        var deferral = e.GetDeferral();
-        BeginInvoke(() =>
+        string fileName = Path.GetFileName(export.Name);
+        string extension = Path.GetExtension(fileName);
+        using var dialog = new SaveFileDialog { FileName = fileName, Filter = $"{extension.TrimStart('.').ToUpperInvariant()} file|*{extension}|All files|*.*" };
+        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        try
         {
-            using (deferral)
-            {
-                string fileName = Path.GetFileName(e.ResultFilePath);
-                using var dialog = new SaveFileDialog { FileName = fileName, Filter = $"{Path.GetExtension(fileName).TrimStart('.').ToUpperInvariant()} file|*{Path.GetExtension(fileName)}|All files|*.*" };
-                if (dialog.ShowDialog(this) == DialogResult.OK)
-                {
-                    e.ResultFilePath = dialog.FileName;
-                    e.Handled = true;
-                }
-                else
-                {
-                    e.Cancel = true;
-                }
-            }
-        });
+            File.WriteAllText(dialog.FileName, export.Contents);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            MessageBox.Show(this, $"The file could not be saved:\n{error.Message}", "Sailwind Chartroom", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
     }
 
     private void RestoreWindow()

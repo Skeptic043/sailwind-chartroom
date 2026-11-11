@@ -1,5 +1,6 @@
 # Build output and local deployment
 desktop/bin/
+macos/.build/
 desktop/obj/
 tests/**/bin/
 tests/**/obj/

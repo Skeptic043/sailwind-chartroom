@@ -1,15 +1,18 @@
 // Tool modes and pointer handling on the chart canvas, including the previews tools draw while active.
-import { ITEM_KINDS, MAX_RANGE_NM, MAX_ZOOM, MIN_ZOOM, WORLD_BOUNDS, bearingDegrees, chartItemFocusPoint, chartItems, compassPoint, createFeature, createRoutePoint, createSearch, createWind, distanceNm, formatCoordinate, itemForRef, searchExtent, searchesAnsweredBy, translateChartItems, visibleSavedRoutes } from "./model.mjs";
-import { assignedIsland, islandById } from "./islands.mjs";
+import { COMPASS_STEP_DEG, ITEM_KINDS, MAX_RANGE_NM, MAX_ZOOM, MIN_ZOOM, WORLD_BOUNDS, bearingDegrees, chartItemFocusPoint, chartItems, compassPoint, createFeature, createRoutePoint, createSearch, createWind, distanceNm, formatCoordinate, itemForRef, searchExtent, searchesAnsweredBy, translateChartItems, visibleSavedRoutes } from "./model.mjs";
+import { assignedIsland, islandById, searchIsland } from "./islands.mjs";
 import { drawBoatSilhouette, visibleBoat } from "./boats.mjs";
 import { clamp, formatDirection, formatNm } from "./format.mjs";
 import { canvas, context, elements } from "./dom.mjs";
-import { activeChart, commit, isSelected, persist, pushUndo, refreshSelection, replaceSelectionState, selectItem, selectedItem, selectedKeys, selectedRefs, selection, selectionKey, setPrimarySelection } from "./state.mjs";
+import { activeChart, commit, host, isSelected, persist, pushUndo, refreshSelection, replaceSelectionState, selectItem, selectedItem, selectedKeys, selectedRefs, selection, selectionKey, setPrimarySelection } from "./state.mjs";
 import { boatIconBoundsAt, coordinatePrecision, eventPoint, screenToWorld, worldToScreen } from "./viewport.mjs";
 import { boatColours, drawAreaCircle, drawChart, drawIslandSilhouette, drawLine, drawSearchWedge, drawWindIndicator, labelPill, magnetRing } from "./render.mjs";
 import { findHit, resetHitCycle, nearestTrackPoint, onSelectedAreaEdge, snapAlongRay, snapPoint } from "./hits.mjs";
 import { addLocation, addSearch, addWind, setAnchor } from "./edits.mjs";
 import { renderEverything, renderInspector, renderRouteSummary } from "./panels.mjs";
+
+// Holding Ctrl places freely. On macOS that is Option, because Ctrl-click is a right-click there.
+const placesFreely = (event) => host.platform === "mac" ? event.altKey : event.ctrlKey;
 
 const MODE_HINTS = {
   select: "Drag the chart to pan. Shift-click or Shift-drag to select several chart items.",
@@ -79,11 +82,11 @@ export function setMode(nextMode) {
   drawChart();
 }
 
-// Dragging out a search snaps to the 16 compass points the game names and to whole miles,
+// Dragging out a search snaps to the 32 points of the compass and to whole miles,
 // unless the centre comes near a charted line or mark along that heading, which it then sits on.
 function searchFromDrag(origin, screen, free) {
   const cursor = screenToWorld(screen.x, screen.y);
-  const bearing = Math.round(bearingDegrees(origin, cursor) / 22.5) * 22.5 % 360;
+  const bearing = Math.round(bearingDegrees(origin, cursor) / COMPASS_STEP_DEG) * COMPASS_STEP_DEG % 360;
   const magnetNm = free ? null : snapAlongRay(origin, bearing, screen);
   return {
     ...origin,
@@ -103,7 +106,7 @@ function searchMargins() {
 function windFromDrag(origin, screen, free) {
   const target = screenToWorld(screen.x, screen.y);
   const raw = bearingDegrees(origin, target);
-  return { ...origin, bearing: free ? Math.round(raw * 10) / 10 : Math.round(raw / 22.5) * 22.5 % 360 };
+  return { ...origin, bearing: free ? Math.round(raw * 10) / 10 : Math.round(raw / COMPASS_STEP_DEG) * COMPASS_STEP_DEG % 360 };
 }
 
 export function drawAreaDraft(palette) {
@@ -165,8 +168,7 @@ export function drawPlacementDraft(palette) {
 function resolutionIsland() {
   if (!resolutionDraft) return null;
   const item = itemForRef(activeChart(), resolutionDraft);
-  const name = resolutionDraft.kind === "search" ? item?.label : item?.name;
-  return assignedIsland({ name });
+  return resolutionDraft.kind === "search" ? searchIsland(item) : assignedIsland({ name: item?.name });
 }
 
 export function drawMarquee(palette) {
@@ -270,7 +272,7 @@ export function startPointer(event) {
   const forcePan = event.button === 1 || spacePressed;
   if (forcePan) return startPan(event, screen);
 
-  const target = snapPoint(screen, event.ctrlKey);
+  const target = snapPoint(screen, placesFreely(event));
   if (mode === "resolve") {
     resolveToLocation(target);
     return;
@@ -352,8 +354,8 @@ function startPan(event, screen) {
 export function movePointer(event) {
   const screen = eventPoint(event);
   hoverWorld = screenToWorld(screen.x, screen.y);
-  hoverTarget = mode === "select" ? hoverWorld : snapPoint(screen, event.ctrlKey);
-  updateEdgePan(screen, event.ctrlKey);
+  hoverTarget = mode === "select" ? hoverWorld : snapPoint(screen, placesFreely(event));
+  updateEdgePan(screen, placesFreely(event));
   const precision = coordinatePrecision();
   elements["cursor-coordinates"].textContent = `${formatCoordinate(hoverWorld.lat, "lat", precision)} · ${formatCoordinate(hoverWorld.lon, "lon", precision)}`;
   const trackPoint = pointerState ? null : nearestTrackPoint(screen);
@@ -376,7 +378,7 @@ export function movePointer(event) {
     drawChart();
   } else if (pointerState.type === "search" || pointerState.type === "wind") {
     pointerState.cursor = screen;
-    pointerState.free = event.ctrlKey;
+    pointerState.free = placesFreely(event);
     pointerState.moved ||= Math.hypot(screen.x - pointerState.start.x, screen.y - pointerState.start.y) >= 4;
     drawChart();
   } else if (pointerState.type === "marquee") {
@@ -400,7 +402,7 @@ export function movePointer(event) {
     const item = selectedItem();
     if (!item) return;
     if (selectedKeys.size === 1 && selection.kind === "search") {
-      const target = snapPoint(screen, event.ctrlKey);
+      const target = snapPoint(screen, placesFreely(event));
       translateChartItems(activeChart(), selectedRefs(), { lat: target.lat - item.lat, lon: target.lon - item.lon });
       setAnchor(item, target.anchor);
     } else {
@@ -425,7 +427,7 @@ export function endPointer(event) {
     const screen = eventPoint(event);
     // A click without a drag is ignored, so a stray click never leaves a zero-size area.
     if (Math.hypot(screen.x - start.x, screen.y - start.y) >= 4) {
-      const rangeNm = Math.round(distanceNm(center, snapPoint(screen, event.ctrlKey)) * 10) / 10;
+      const rangeNm = Math.round(distanceNm(center, snapPoint(screen, placesFreely(event))) * 10) / 10;
       addLocation(center, "Rough area", { rangeNm });
     } else {
       drawChart();
@@ -438,7 +440,7 @@ export function endPointer(event) {
     pointerState = null;
     const screen = eventPoint(event);
     // As with rough areas, a click without a drag leaves nothing behind.
-    if (moved) addSearch(searchFromDrag(origin, screen, event.ctrlKey));
+    if (moved) addSearch(searchFromDrag(origin, screen, placesFreely(event)));
     else drawChart();
     return;
   }
@@ -447,7 +449,7 @@ export function endPointer(event) {
     pointerState = null;
     const screen = eventPoint(event);
     if (moved) {
-      addWind(windFromDrag(origin, screen, event.ctrlKey));
+      addWind(windFromDrag(origin, screen, placesFreely(event)));
       setMode("select");
     }
     else drawChart();
@@ -513,6 +515,8 @@ function resolveToLocation(point) {
         lon: point.lon,
         name: source.label || "Resolved location",
         boatId: source.boatId,
+        islandId: source.islandId,
+        showIsland: source.showIsland !== false,
         notes: `Resolved from a ${formatDirection(source.bearing)} search, ${formatNm(extent.nearNm)}–${formatNm(extent.farNm)} nm from ${formatCoordinate(source.lat, "lat", 3)}, ${formatCoordinate(source.lon, "lon", 3)}.`
       });
       const answered = new Set(searchesAnsweredBy(chart.searches, source));

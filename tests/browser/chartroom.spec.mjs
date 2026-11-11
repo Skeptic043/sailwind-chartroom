@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import { test, expect } from "./harness.mjs";
 
 test("starts from the host's workspace and reports the host's version", async ({ chartroom, page }) => {
@@ -63,6 +62,38 @@ test("drags out a search area that snaps to a compass point", async ({ chartroom
   expect(search.distanceNm).toBeGreaterThan(0);
 });
 
+test("a location can hide its name on the chart", async ({ chartroom, page }) => {
+  await chartroom.open();
+  await chartroom.press("l");
+  await chartroom.clickChart(500, 400);
+  await page.locator("#feature-name").fill("Quiet cove");
+  await page.locator("#feature-name").blur();
+  const picture = () => page.locator("#chart-canvas").evaluate((canvas) => canvas.toDataURL());
+  const named = await picture();
+  await expect(page.locator("#feature-show-name")).toBeChecked();
+  await page.locator("#feature-show-name").uncheck();
+  expect((await chartroom.chart()).features[0].showName).toBe(false);
+  expect(await picture()).not.toBe(named);
+  await page.locator("#feature-show-name").check();
+  expect((await chartroom.chart()).features[0].showName).toBeUndefined();
+  expect(await picture()).toBe(named);
+});
+
+test("a search area takes an island from the library and can drop it again", async ({ chartroom, page }) => {
+  await chartroom.open();
+  await chartroom.press("s");
+  await chartroom.dragChart({ x: 500, y: 450 }, { x: 500, y: 250 });
+  await page.locator("#choose-search-island").click();
+  await page.locator("#island-search").fill("Dead Cove");
+  await page.locator("#island-list .island-row").first().click();
+  await expect(page.locator("#search-island-status")).toHaveText("Dead Cove");
+  expect((await chartroom.chart()).searches[0].islandId).toBe("emerald/dead_cove");
+  await page.locator("#choose-search-island").click();
+  await page.locator("#remove-island").click();
+  await expect(page.locator("#search-island-status")).toHaveText("None");
+  expect((await chartroom.chart()).searches[0].islandId).toBeUndefined();
+});
+
 test("shift-drag selects several items and dragging moves them together", async ({ chartroom }) => {
   await chartroom.open();
   for (const x of [500, 560]) {
@@ -118,15 +149,35 @@ test("the island library applies an outline to the selected location", async ({ 
   expect((await chartroom.chart()).features[0].islandId).toBeTruthy();
 });
 
+test("the vanilla map draws under the chart, and its secrets and trade winds wait for it", async ({ chartroom, page }) => {
+  await chartroom.open();
+  const picture = () => page.locator("canvas").first().evaluate((canvas) => canvas.toDataURL());
+  const toggle = (id) => page.locator(id).evaluate((input) => input.click());
+  await expect(page.locator("#layer-secrets")).toBeDisabled();
+  await expect(page.locator("#layer-trade-winds")).toBeDisabled();
+  const empty = await picture();
+  await toggle("#layer-vanilla");
+  await expect(page.locator("#layer-secrets")).toBeEnabled();
+  const islands = await picture();
+  expect(islands).not.toBe(empty);
+  await toggle("#layer-trade-winds");
+  const winds = await picture();
+  expect(winds).not.toBe(islands);
+  await toggle("#layer-secrets");
+  expect((await chartroom.chart()).layers).toMatchObject({ vanillaMap: true, secretIslands: true, tradeWinds: true });
+  await toggle("#layer-vanilla");
+  expect(await picture()).toBe(empty);
+  expect((await chartroom.chart()).features).toHaveLength(0);
+});
+
 test("exports the active chart as JSON", async ({ chartroom, page }) => {
   await chartroom.open();
   await chartroom.press("l");
   await chartroom.clickChart(500, 400);
-  const download = page.waitForEvent("download");
   await page.locator("#export-json").evaluate((button) => button.click());
-  const file = await download;
-  expect(file.suggestedFilename()).toMatch(/\.json$/);
-  const exported = JSON.parse(await readFile(await file.path(), "utf8"));
+  const [file] = await page.evaluate(() => window.__host.exports);
+  expect(file.name).toMatch(/\.json$/);
+  const exported = JSON.parse(file.contents);
   expect(exported).toMatchObject({ format: "sailwind-chartroom", version: 1 });
   expect(exported.charts[0].features).toHaveLength(1);
 });
@@ -295,7 +346,7 @@ test("Help shows up to date and release notes; the startup check can be turned o
   await page.evaluate(() => { window.__host.settingsReply = { shortcuts: { select: "v", location: "l", route: "r", measure: "m", area: "a", search: "s", wind: "w" }, checkForUpdates: false, interfaceSize: 0 }; });
   await page.locator('.app-menu[data-menu="file"] summary').click();
   await page.locator("#open-settings").click();
-  expect((await chartroom.saved()).settings.checkForUpdates).toBe(false);
+  await expect.poll(async () => (await chartroom.saved())?.settings.checkForUpdates).toBe(false);
   await page.evaluate(() => { window.__host.messages.length = 0; });
   await page.reload();
   await expect(page.locator("#app-version")).toHaveText("9.9.9");
@@ -326,4 +377,18 @@ test("Match Windows follows the system light or dark setting", async ({ chartroo
   await expect(page.locator("html")).toHaveAttribute("data-mode", "light");
   await page.emulateMedia({ colorScheme: "dark" });
   await expect(page.locator("html")).toHaveAttribute("data-mode", "dark");
+});
+
+test("in the macOS app, Option places freely and shortcuts are named for the Mac", async ({ chartroom, page }) => {
+  await chartroom.open(null, { platform: "mac" });
+  await expect(page.locator("#redo kbd")).toHaveText("⇧⌘Z");
+  await expect(page.locator("#undo kbd")).toHaveText("⌘Z");
+  for (const modifier of ["Control", "Alt"]) {
+    await chartroom.press("w");
+    await chartroom.dragChart({ x: 500, y: 400 }, { x: 590, y: 371 }, { modifiers: [modifier] });
+  }
+  const [snapped, free] = (await chartroom.chart()).winds.map((wind) => wind.bearing);
+  expect(snapped % 11.25).toBe(0);
+  expect(free % 11.25).not.toBe(0);
+  expect(await chartroom.messages()).toContain("check-updates");
 });

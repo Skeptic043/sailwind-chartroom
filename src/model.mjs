@@ -24,7 +24,7 @@ export function createChart({ name = "Uncharted Sea", seed = "" } = {}) {
     createdAt: now,
     updatedAt: now,
     view: { lat: 10, lon: 0, zoom: 5 },
-    layers: { grid: true, labels: true, track: true, routeDistances: true, bearings: true, winds: true, boats: true },
+    layers: { grid: true, labels: true, track: true, routeDistances: true, bearings: true, winds: true, boats: true, vanillaMap: false, secretIslands: false, tradeWinds: false },
     speedKn: 6,
     features: [],
     route: [],
@@ -144,7 +144,10 @@ export function sanitizeChart(value) {
     routeDistances: value.layers?.routeDistances !== false,
     bearings: value.layers?.bearings !== false,
     winds: value.layers?.winds !== false,
-    boats: value.layers?.boats !== false
+    boats: value.layers?.boats !== false,
+    vanillaMap: value.layers?.vanillaMap === true,
+    secretIslands: value.layers?.secretIslands === true,
+    tradeWinds: value.layers?.tradeWinds === true
   };
   base.speedKn = clampNumber(value.speedKn, 0.1, 30, base.speedKn);
   base.features = arrayOf(value.features, sanitizeFeature);
@@ -334,8 +337,11 @@ function sanitizeSearch(value) {
   if (!distance) return null;
   const anchor = sanitizeAnchor(value.anchor);
   const boatId = cleanText(value.boatId, 120);
+  const islandId = cleanText(value.islandId, 120);
   return {
     ...bearing,
+    ...(islandId && { islandId }),
+    ...(value.showIsland === false && { showIsland: false }),
     distanceNm: distance,
     spreadDeg: clampNumber(value.spreadDeg, 0, 90, DEFAULT_SPREAD_DEG),
     tolerancePct: clampNumber(value.tolerancePct, 0, 90, DEFAULT_TOLERANCE_PCT),
@@ -417,8 +423,9 @@ export function searchAreasOverlap(first, second) {
   return false;
 }
 
+// The middle of the stretch every one of these searches covers, or null when they share none.
 export function commonSearchOverlap(searches) {
-  if (!Array.isArray(searches) || searches.length < 2) return false;
+  if (!Array.isArray(searches) || searches.length < 2) return null;
   const polygons = searches.map(searchPolygon);
   const candidates = [
     ...polygons.flat(),
@@ -436,7 +443,29 @@ export function commonSearchOverlap(searches) {
       }
     }
   }
-  return candidates.some((point) => searches.every((search) => insideSearch(search, point)));
+  // The shared stretch's corners: outline points and crossings that lie inside every search.
+  const shared = candidates.filter((point) => searches.every((search) => insideSearch(search, point)));
+  if (!shared.length) return null;
+  const middle = {
+    lat: shared.reduce((sum, point) => sum + point.lat, 0) / shared.length,
+    lon: shared.reduce((sum, point) => sum + point.lon, 0) / shared.length
+  };
+  if (searches.every((search) => insideSearch(search, middle))) return middle;
+  // A curved stretch can leave its middle outside it; the nearest corner is always inside.
+  const distance = (point) => Math.hypot(point.lat - middle.lat, point.lon - middle.lon);
+  return shared.reduce((nearest, point) => distance(point) < distance(nearest) ? point : nearest);
+}
+
+// Searches for the same place that overlap share one island and name, drawn where they all meet.
+// Maps each such search to that point for the one that carries the name, and to null for the rest.
+export function searchIconAnchors(searches) {
+  const named = searchNameLabelIds(searches);
+  const anchors = new Map();
+  for (const group of searchOverlapGroups(searches)) {
+    const centre = commonSearchOverlap(group);
+    for (const search of group) anchors.set(search.id, named.has(search.id) ? centre : null);
+  }
+  return anchors;
 }
 
 // Resolving a named search answers every search with that name. An unnamed search stands alone.
@@ -490,14 +519,25 @@ const LANDMARK_LABEL_PRIORITY = new Map([
   ["fort aestrin", 3]
 ]);
 
-export function labelSpacingForZoom(zoom) {
-  return clampNumber(130 - Math.log2(Math.max(1.5, Number(zoom))) * 8, 78, 112, 112);
+// The game's permanent trade wind at a position: which of its three wind zones this is, and the east
+// and north parts of the direction the wind blows toward. Null where there is none.
+export function tradeWindAt(lat, lon) {
+  if (lat < 30) return null;
+  if (lat > 33) return { zone: "aestrin", east: 1, north: 0.5 };
+  if (lon < -2) return { zone: "alankh", east: 0.75, north: 0.75 };
+  if (lat < 32) return { zone: "emerald", east: -1, north: -0.5 };
+  return null;
 }
 
-export function clusteredLabelIds(items, distancePx) {
+const LABEL_GAP_PX = 6;
+const LABEL_HEIGHT_PX = 14;
+
+// The labels that fit without covering one another. Each item is the centre of its label's top edge
+// and the label's width; where two would overlap, the selected, landmark or higher-priority one stays.
+export function clusteredLabelIds(items) {
   const candidates = (items ?? []).filter((item) => item?.id && String(item.name ?? "").trim()
     && Number.isFinite(Number(item.x)) && Number.isFinite(Number(item.y)));
-  if (!(distancePx > 0)) return new Set(candidates.map((item) => item.id));
+  const width = (item) => Number(item.width) > 0 ? Number(item.width) : String(item.name).trim().length * 6.5;
   const ranked = candidates.map((item, index) => ({ item, index }))
     .sort((a, b) => Number(Boolean(b.item.selected)) - Number(Boolean(a.item.selected))
     || (LANDMARK_LABEL_PRIORITY.get(String(a.item.name).trim().toLowerCase()) ?? 99)
@@ -508,7 +548,8 @@ export function clusteredLabelIds(items, distancePx) {
   const accepted = [];
   const visible = new Set();
   for (const { item } of ranked) {
-    if (accepted.some((other) => Math.hypot(Number(item.x) - Number(other.x), Number(item.y) - Number(other.y)) <= distancePx)) continue;
+    if (accepted.some((other) => Math.abs(Number(item.x) - Number(other.x)) < (width(item) + width(other)) / 2 + LABEL_GAP_PX
+      && Math.abs(Number(item.y) - Number(other.y)) < LABEL_HEIGHT_PX + LABEL_GAP_PX)) continue;
     accepted.push(item);
     visible.add(item.id);
   }
@@ -567,6 +608,7 @@ function sanitizeFeature(value) {
     rangeNm: clampNumber(value.rangeNm, 0, MAX_RANGE_NM, 0),
     ...(islandId && { islandId }),
     showIsland: value.showIsland !== false,
+    ...(value.showName === false && { showName: false }),
     ...(boatId && { boatId, boatCorner: "se", showBoat: true })
   };
 }
@@ -729,10 +771,10 @@ function direction(bearing) {
 export function parseBearing(input) {
   const text = String(input ?? "").trim().toUpperCase().replaceAll(",", ".");
   if (!text) throw new Error("Bearing is required.");
-  const compassIndex = COMPASS_POINTS.indexOf(text);
-  if (compassIndex >= 0) return compassIndex * 22.5;
+  const compassIndex = COMPASS_POINTS.findIndex((point) => point.toUpperCase() === text);
+  if (compassIndex >= 0) return compassIndex * COMPASS_STEP_DEG;
   const numeric = Number(text.replace(/[°\sT]+$/u, ""));
-  if (!Number.isFinite(numeric) || numeric < 0 || numeric > 360) throw new Error("Bearing must be 0–360° or a compass point such as NE.");
+  if (!Number.isFinite(numeric) || numeric < 0 || numeric > 360) throw new Error("Bearing must be 0–360° or a compass point such as NE or NbE.");
   return numeric % 360;
 }
 
@@ -746,10 +788,12 @@ export function formatDuration(hours) {
   return h ? `${h}h ${String(m).padStart(2, "0")}m` : `${m}m`;
 }
 
-const COMPASS_POINTS = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
+// The 32 points of the compass, 11.25° apart: "NbE" is north by east.
+const COMPASS_POINTS = ["N", "NbE", "NNE", "NEbN", "NE", "NEbE", "ENE", "EbN", "E", "EbS", "ESE", "SEbE", "SE", "SEbS", "SSE", "SbE", "S", "SbW", "SSW", "SWbS", "SW", "SWbW", "WSW", "WbS", "W", "WbN", "WNW", "NWbW", "NW", "NWbN", "NNW", "NbW"];
+export const COMPASS_STEP_DEG = 360 / COMPASS_POINTS.length;
 
 export function compassPoint(degrees) {
-  return COMPASS_POINTS[Math.round(((degrees % 360) + 360) % 360 / 22.5) % 16];
+  return COMPASS_POINTS[Math.round(((degrees % 360) + 360) % 360 / COMPASS_STEP_DEG) % COMPASS_POINTS.length];
 }
 
 export function summarizeRoute(route) {
@@ -856,8 +900,8 @@ export function importLegacyMap(value, name = "Imported legacy map") {
     const island = islandById(id);
     if (!island || !isFiniteCoordinate(position?.y, position?.x)) continue;
     chart.features.push(createFeature({
-      lat: Number(position.y),
-      lon: Number(position.x),
+      lat: Number(position.y) + (island.sourceMapOffset?.lat ?? 0),
+      lon: Number(position.x) + (island.sourceMapOffset?.lon ?? 0),
       name: island.name,
       islandId: island.id
     }));

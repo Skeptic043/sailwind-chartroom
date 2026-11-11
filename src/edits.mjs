@@ -80,6 +80,10 @@ export function updateSelectedFromForm(kind) {
     commit((chart) => {
       translateChartItems(chart, selectedRefs(), { lat: target.lat - item.lat, lon: target.lon - item.lon }, { strict: true });
       Object.assign(item, updates);
+      if (kind === "feature") {
+        if (elements["feature-show-name"].checked) delete item.showName;
+        else item.showName = false;
+      }
     });
   } catch (error) {
     showToast(error.message, true);

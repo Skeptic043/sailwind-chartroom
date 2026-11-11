@@ -1,6 +1,6 @@
 // Finds what is under the pointer and where drawing clicks snap to.
-import { NM_PER_DEGREE, bearingFixes, destinationPoint, insideSearch, searchExtent, summarizeRoute, visibleSavedRoutes } from "./model.mjs";
-import { assignedIsland, islandContains, visibleIsland } from "./islands.mjs";
+import { NM_PER_DEGREE, bearingFixes, destinationPoint, insideSearch, searchExtent, searchIconAnchors, summarizeRoute, visibleSavedRoutes } from "./model.mjs";
+import { islandContains, searchIsland, visibleIsland } from "./islands.mjs";
 import { visibleBoat } from "./boats.mjs";
 import { clamp } from "./format.mjs";
 import { activeChart, selectedItem, selection } from "./state.mjs";
@@ -45,10 +45,11 @@ function findHits(x, y) {
       if (distance <= SAVED_ROUTE_LINE_PX) consider("saved-route", route.id, leg.from, false, distance + 3);
     }
   }
+  const iconAnchors = searchIconAnchors(chart.searches);
   for (const search of chart.searches) {
     let insideBoat = false;
     if (chart.layers.boats && visibleBoat(search)) {
-      const island = assignedIsland({ name: search.label });
+      const island = iconAnchors.has(search.id) ? null : searchIsland(search);
       const scale = island ? clamp(28 / Math.max(1, islandPixelSpan(island)), 1, 8) : 1;
       const boat = visibleBoat(search);
       const bounds = boatIconBoundsAt(searchExtent(search).centre, island, scale, boat);

@@ -11,7 +11,7 @@ import { addLocation, deleteSelected, updateSavedRouteFromForm, updateSelectedFr
 import { beginResolution, drawToolPreview, endPointer, mode, movePointer, pointerState, setMode, setSpacePressed, startPointer, stopEdgePan, zoomAt } from "./interaction.mjs";
 import { renderEverything, renderFeatureList, renderInspector, renderRouteSummary } from "./panels.mjs";
 import { applyLayout, endPanelResize, movePanelResize, resizePanelFromKeyboard, startPanelResize, togglePanel } from "./layout.mjs";
-import { deleteChart, openAbout, openBoatLibrary, openChartDialog, openIslandLibrary, renderBoatLibrary, renderIslandLibrary, saveChartDialog, selectedBoatOwner } from "./dialogs.mjs";
+import { deleteChart, openAbout, openBoatLibrary, openChartDialog, openIslandLibrary, renderBoatLibrary, renderIslandLibrary, saveChartDialog, selectedBoatOwner, selectedIslandOwner } from "./dialogs.mjs";
 import { exportActiveChart, exportLocationsCsv, exportWorkspace, importChartFile, importTrackFile, importTrackText } from "./files.mjs";
 import { initUpdates } from "./updates.mjs";
 import { initSettings, initTheme, stepInterfaceSize } from "./settings.mjs";
@@ -29,6 +29,14 @@ initState(host, {
 });
 setOverlay(drawToolPreview);
 initTheme();
+
+// The macOS app names its own keys: Command for shortcuts, and Option to place freely.
+if (host.platform === "mac") {
+  for (const kbd of document.querySelectorAll("kbd:not([data-shortcut])")) {
+    kbd.textContent = kbd.textContent.replace(/^Ctrl$/, "Option").replace("Ctrl Y", "⇧⌘Z").replace("Ctrl ", "⌘");
+  }
+  elements["zoom-reset"].firstChild.textContent = "Default text size ";
+}
 
 // Header, panels and dialogs
 document.querySelectorAll(".tool").forEach((button) => button.addEventListener("click", () => setMode(button.dataset.mode)));
@@ -80,7 +88,7 @@ elements["route-speed"].addEventListener("change", (event) => {
 });
 
 // Layers
-for (const [elementId, key] of [["layer-grid", "grid"], ["layer-labels", "labels"], ["layer-track", "track"], ["layer-distances", "routeDistances"], ["layer-bearings", "bearings"], ["layer-winds", "winds"], ["layer-boats", "boats"]]) {
+for (const [elementId, key] of [["layer-grid", "grid"], ["layer-labels", "labels"], ["layer-track", "track"], ["layer-distances", "routeDistances"], ["layer-bearings", "bearings"], ["layer-winds", "winds"], ["layer-boats", "boats"], ["layer-vanilla", "vanillaMap"], ["layer-secrets", "secretIslands"], ["layer-trade-winds", "tradeWinds"]]) {
   elements[elementId].addEventListener("change", (event) => commit((chart) => { chart.layers[key] = event.target.checked; }, { history: false }));
 }
 
@@ -103,15 +111,16 @@ elements["resolve-feature"].addEventListener("click", () => beginResolution(sele
 
 // Island and boat libraries
 elements["choose-feature-island"].addEventListener("click", openIslandLibrary);
+elements["choose-search-island"].addEventListener("click", openIslandLibrary);
 elements["island-search"].addEventListener("input", renderIslandLibrary);
 elements["island-region"].addEventListener("change", renderIslandLibrary);
 elements["island-secrets"].addEventListener("change", renderIslandLibrary);
 elements["remove-island"].addEventListener("click", () => {
-  const feature = selection?.kind === "feature" ? selectedItem() : null;
-  if (!feature) return;
+  const owner = selectedIslandOwner();
+  if (!owner) return;
   commit(() => {
-    delete feature.islandId;
-    feature.showIsland = false;
+    delete owner.islandId;
+    owner.showIsland = false;
   });
   elements["island-dialog"].close();
 });
@@ -231,6 +240,12 @@ host.on("saved", ({ ok, error }) => {
   if (!ok) showToast(`Could not save: ${error}`, true);
 });
 elements["app-version"].textContent = host.version;
+// The macOS Edit menu sends Undo and Redo here: to the text field being edited, or else to the chart.
+host.on("edit-command", ({ command }) => {
+  if (/INPUT|TEXTAREA/.test(document.activeElement?.tagName)) document.execCommand(command);
+  else if (command === "undo") undo();
+  else if (command === "redo") redo();
+});
 if (host.desktop) {
   elements["pin-window"].hidden = false;
   elements["open-folder"].hidden = false;
