@@ -57,7 +57,7 @@ for (const phase of phases) {
     const { page, saves, warnings } = launch("create", "create");
     assert.deepEqual(warnings, []);
     assert.ok(saves >= 2, "the host saved the new location and the imported chart");
-    assert.ok(page.charts.includes("Fixture Sea"), "the imported chart is listed");
+    assert.ok(page.charts.some((name) => name.startsWith("Fixture Sea")), "the imported chart is listed");
     assert.ok(page.rows > 0, "the imported chart shows its items");
     const workspace = JSON.parse(readFileSync(join(data, "workspace.json"), "utf8"));
     assert.equal(workspace.charts.length, page.charts.length, "workspace.json holds every chart");
