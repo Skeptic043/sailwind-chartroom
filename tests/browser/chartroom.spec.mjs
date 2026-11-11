@@ -62,6 +62,21 @@ test("drags out a search area that snaps to a compass point", async ({ chartroom
   expect(search.distanceNm).toBeGreaterThan(0);
 });
 
+test("a search area takes an island from the library and can drop it again", async ({ chartroom, page }) => {
+  await chartroom.open();
+  await chartroom.press("s");
+  await chartroom.dragChart({ x: 500, y: 450 }, { x: 500, y: 250 });
+  await page.locator("#choose-search-island").click();
+  await page.locator("#island-search").fill("Dead Cove");
+  await page.locator("#island-list .island-row").first().click();
+  await expect(page.locator("#search-island-status")).toHaveText("Dead Cove");
+  expect((await chartroom.chart()).searches[0].islandId).toBe("emerald/dead_cove");
+  await page.locator("#choose-search-island").click();
+  await page.locator("#remove-island").click();
+  await expect(page.locator("#search-island-status")).toHaveText("None");
+  expect((await chartroom.chart()).searches[0].islandId).toBeUndefined();
+});
+
 test("shift-drag selects several items and dragging moves them together", async ({ chartroom }) => {
   await chartroom.open();
   for (const x of [500, 560]) {
@@ -115,6 +130,27 @@ test("the island library applies an outline to the selected location", async ({ 
   await page.locator("#island-list .island-row").first().click();
   await expect(page.locator("#feature-island-status")).toContainText("Dead Cove");
   expect((await chartroom.chart()).features[0].islandId).toBeTruthy();
+});
+
+test("the vanilla map draws under the chart, and its secrets and trade winds wait for it", async ({ chartroom, page }) => {
+  await chartroom.open();
+  const picture = () => page.locator("canvas").first().evaluate((canvas) => canvas.toDataURL());
+  const toggle = (id) => page.locator(id).evaluate((input) => input.click());
+  await expect(page.locator("#layer-secrets")).toBeDisabled();
+  await expect(page.locator("#layer-trade-winds")).toBeDisabled();
+  const empty = await picture();
+  await toggle("#layer-vanilla");
+  await expect(page.locator("#layer-secrets")).toBeEnabled();
+  const islands = await picture();
+  expect(islands).not.toBe(empty);
+  await toggle("#layer-trade-winds");
+  const winds = await picture();
+  expect(winds).not.toBe(islands);
+  await toggle("#layer-secrets");
+  expect((await chartroom.chart()).layers).toMatchObject({ vanillaMap: true, secretIslands: true, tradeWinds: true });
+  await toggle("#layer-vanilla");
+  expect(await picture()).toBe(empty);
+  expect((await chartroom.chart()).features).toHaveLength(0);
 });
 
 test("exports the active chart as JSON", async ({ chartroom, page }) => {
@@ -335,7 +371,7 @@ test("in the macOS app, Option places freely and shortcuts are named for the Mac
     await chartroom.dragChart({ x: 500, y: 400 }, { x: 590, y: 371 }, { modifiers: [modifier] });
   }
   const [snapped, free] = (await chartroom.chart()).winds.map((wind) => wind.bearing);
-  expect(snapped % 22.5).toBe(0);
-  expect(free % 22.5).not.toBe(0);
+  expect(snapped % 11.25).toBe(0);
+  expect(free % 11.25).not.toBe(0);
   expect(await chartroom.messages()).toContain("check-updates");
 });

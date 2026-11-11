@@ -3,6 +3,10 @@ import { ISLAND_CATALOG } from "./island-catalog.generated.mjs";
 const ISLANDS_BY_ID = new Map(ISLAND_CATALOG.map((island) => [island.id, island]));
 const ISLANDS_BY_NAME = new Map(ISLAND_CATALOG.map((island) => [normalizeIslandName(island.name), island]));
 
+// The islands as the game places them. An island offered both whole and as pieces is drawn from its pieces.
+const SPLIT_ISLANDS = new Set(ISLAND_CATALOG.map((island) => island.partOf).filter(Boolean));
+export const VANILLA_ISLANDS = Object.freeze(ISLAND_CATALOG.filter((island) => !SPLIT_ISLANDS.has(island.id)));
+
 export { ISLAND_CATALOG };
 
 export function normalizeIslandName(value) {
@@ -29,6 +33,11 @@ export function assignedIsland(feature) {
 
 export function visibleIsland(feature) {
   return feature?.showIsland === false ? null : assignedIsland(feature);
+}
+
+// A search area shows the island it is looking for: the one chosen for it, or the one it is named after.
+export function searchIsland(search) {
+  return search ? visibleIsland({ islandId: search.islandId, showIsland: search.showIsland, name: search.label }) : null;
 }
 
 export function islandWorldBounds(island, feature) {

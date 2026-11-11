@@ -1,6 +1,6 @@
 // Renders the side panels: chart header, layers, route summary, inspectors and the chart item list.
 import { anchorTarget, bearingFixes, chartItemFocusPoint, formatCoordinate, formatDuration, savedRouteForPoint, searchExtent, summarizeRoute } from "./model.mjs";
-import { assignedIsland, visibleIsland } from "./islands.mjs";
+import { assignedIsland, searchIsland, visibleIsland } from "./islands.mjs";
 import { assignedBoat } from "./boats.mjs";
 import { formatBearing, formatDirection, formatLeg, formatNm, plainDegrees } from "./format.mjs";
 import { elements } from "./dom.mjs";
@@ -49,6 +49,12 @@ function renderLayerControls() {
   elements["layer-bearings"].checked = layers.bearings;
   elements["layer-winds"].checked = layers.winds;
   elements["layer-boats"].checked = layers.boats;
+  elements["layer-vanilla"].checked = layers.vanillaMap;
+  // Secret islands and trade winds are parts of the vanilla map, so they keep their setting but wait for it.
+  for (const [elementId, key] of [["layer-secrets", "secretIslands"], ["layer-trade-winds", "tradeWinds"]]) {
+    elements[elementId].checked = layers[key];
+    elements[elementId].disabled = !layers.vanillaMap;
+  }
   elements["clear-track"].disabled = activeChart().track.length === 0;
   elements["clear-bearings"].disabled = activeChart().bearings.length === 0;
 }
@@ -184,6 +190,8 @@ function renderSearchInspector(search) {
   elements["search-distance"].value = search.distanceNm;
   elements["search-spread"].value = search.spreadDeg;
   elements["search-tolerance"].value = search.tolerancePct;
+  const island = searchIsland(search);
+  elements["search-island-status"].textContent = island ? `${island.name}${search.islandId ? "" : " · matched by name"}` : "None";
   renderBoatControls(search, "search");
   const extent = searchExtent(search);
   elements["search-summary"].textContent = [

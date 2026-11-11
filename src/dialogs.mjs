@@ -2,7 +2,7 @@
 import { boatColours } from "./render.mjs";
 import { mapPalette } from "./theme.mjs";
 import { createChart } from "./model.mjs";
-import { ISLAND_CATALOG, visibleIsland } from "./islands.mjs";
+import { ISLAND_CATALOG, searchIsland, visibleIsland } from "./islands.mjs";
 import { BOAT_CATALOG, assignedBoat, boatMarkerSize, drawBoatSilhouette } from "./boats.mjs";
 import { elements, showToast } from "./dom.mjs";
 import { activeChart, commit, host, persist, pushUndo, resetHistory, selectedItem, selection, workspace } from "./state.mjs";
@@ -56,11 +56,18 @@ export function deleteChart() {
   persist(); renderEverything();
 }
 
+// A location or a search area can carry an island outline.
+export function selectedIslandOwner() {
+  return selection && (selection.kind === "feature" || selection.kind === "search") ? selectedItem() : null;
+}
+
 export function openIslandLibrary() {
-  const feature = selection?.kind === "feature" ? selectedItem() : null;
-  elements["island-dialog-hint"].textContent = feature
-    ? `Apply an outline to “${feature.name || "this location"}”. Its coordinates and notes will stay unchanged.`
-    : "Choose an island, then click its position on the chart.";
+  const owner = selectedIslandOwner();
+  elements["island-dialog-hint"].textContent = !owner
+    ? "Choose an island, then click its position on the chart."
+    : selection.kind === "search"
+      ? `Show the island “${owner.label || "this search area"}” is looking for. It appears at the search centre and carries into the resolved location.`
+      : `Apply an outline to “${owner.name || "this location"}”. Its coordinates and notes will stay unchanged.`;
   if (elements["island-region"].options.length === 1) {
     const regions = [...new Set(ISLAND_CATALOG.map((island) => island.region))].sort();
     elements["island-region"].append(...regions.map((region) => {
@@ -81,9 +88,9 @@ export function renderIslandLibrary() {
   const query = elements["island-search"].value.trim().toLowerCase();
   const region = elements["island-region"].value;
   const showSecrets = elements["island-secrets"].checked;
-  const feature = selection?.kind === "feature" ? selectedItem() : null;
-  const current = visibleIsland(feature);
-  elements["remove-island"].hidden = !feature;
+  const owner = selectedIslandOwner();
+  const current = selection?.kind === "search" ? searchIsland(owner) : visibleIsland(owner);
+  elements["remove-island"].hidden = !owner;
   elements["remove-island"].disabled = !current;
   const islands = ISLAND_CATALOG.filter((island) => (showSecrets || !island.secret)
     && (region === "all" || island.region === region)
@@ -105,11 +112,11 @@ export function renderIslandLibrary() {
     button.append(preview, text);
     drawIslandPreview(preview, island);
     button.addEventListener("click", () => {
-      const selectedFeature = selection?.kind === "feature" ? selectedItem() : null;
-      if (selectedFeature) {
+      const selectedOwner = selectedIslandOwner();
+      if (selectedOwner) {
         commit(() => {
-          selectedFeature.islandId = island.id;
-          selectedFeature.showIsland = true;
+          selectedOwner.islandId = island.id;
+          selectedOwner.showIsland = true;
         });
       } else {
         placeIsland(island);

@@ -1,5 +1,5 @@
 // Display formatting and small numeric helpers shared by the chart and its panels.
-import { bearingDegrees, compassPoint, distanceNm } from "./model.mjs";
+import { COMPASS_STEP_DEG, bearingDegrees, compassPoint, distanceNm } from "./model.mjs";
 
 export function formatNm(value) {
   return value >= 100 ? Math.round(value).toLocaleString() : value.toFixed(1);
@@ -22,7 +22,7 @@ export function releaseNoteLines(notes) {
 
 // Compass points read back as written in game ("SSE"); anything in between stays in degrees.
 export function formatDirection(degrees) {
-  return nearlyMultiple(degrees, 22.5) ? compassPoint(degrees) : String(Math.round(degrees * 10) / 10);
+  return nearlyMultiple(degrees, COMPASS_STEP_DEG) ? compassPoint(degrees) : String(Math.round(degrees * 10) / 10);
 }
 
 export function plainDegrees(degrees) {

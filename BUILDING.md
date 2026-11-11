@@ -80,4 +80,6 @@ pwsh -File ./scripts/prepare-sailwind-art.ps1 -Source <download folder> -Out ass
 node scripts/generate-island-catalog.mjs sailwind_empty_sea_map.html src/island-catalog.generated.mjs
 ```
 
+The script also regroups Fire Fish Lagoon, where the page attaches the lagoon's shared towns and rocks to single islands: each town and rock goes to the land it stands nearest, and the unnamed islands are added as separate pieces beside the whole "Fire Fish Islands" outline.
+
 Record the Sailwind Map commit the polygons come from in `THIRD-PARTY-NOTICES.md`.

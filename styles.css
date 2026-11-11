@@ -97,6 +97,8 @@ button { cursor: pointer; }
 .menu-check { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; color: var(--muted); font-size: 12.5px; cursor: pointer; }
 .menu-check:hover { background: var(--panel-3); color: var(--ink); }
 .menu-check input { width: auto; margin: 0; accent-color: var(--accent); }
+.menu-check-sub { padding-left: 26px; }
+.menu-check:has(input:disabled) { opacity: .5; cursor: default; }
 .menu-note { margin: 5px 8px; color: var(--faint); font-size: 11px; line-height: 1.4; }
 
 button, select, input, textarea {

@@ -10,6 +10,7 @@ import {
   compassPoint,
   createChart,
   createRoutePoint,
+  commonSearchOverlap,
   createSearch,
   createWind,
   exportFile,
@@ -28,7 +29,6 @@ import {
   validateShortcuts,
   defaultShortcuts,
   savedRouteForPoint,
-  labelSpacingForZoom,
   locationRangeForType,
   parseBearing,
   parseCoordinate,
@@ -37,12 +37,14 @@ import {
   searchAreasOverlap,
   searchEvidenceOpacity,
   searchChartLabel,
+  searchIconAnchors,
   searchNameLabelIds,
   searchOverlapGroups,
   summarizeRoute,
+  tradeWindAt,
   translateChartItems
 } from "../src/model.mjs";
-import { ISLAND_CATALOG, assignedIsland, islandById, islandByName, normalizeIslandName, visibleIsland } from "../src/islands.mjs";
+import { ISLAND_CATALOG, VANILLA_ISLANDS, assignedIsland, islandById, islandByName, normalizeIslandName, searchIsland, visibleIsland } from "../src/islands.mjs";
 import { BOAT_CATALOG, assignedBoat, boatById, boatMarkerSize, visibleBoat } from "../src/boats.mjs";
 
 test("parses decimal and degree-minute-second coordinates", () => {
@@ -59,6 +61,9 @@ test("uses Sailwind flat-chart distance and north-clockwise bearing", () => {
   assert.equal(bearingDegrees(a, { lat: 1, lon: 0 }), 0);
   assert.equal(bearingDegrees(a, { lat: 0, lon: 1 }), 90);
   assert.equal(compassPoint(225), "SW");
+  assert.equal(compassPoint(11.25), "NbE", "the compass names all 32 points");
+  assert.equal(compassPoint(354), "NbW");
+  assert.equal(parseBearing("swbs"), 213.75);
 });
 
 test("summarizes route legs and total distance", () => {
@@ -183,34 +188,58 @@ test("focuses search-area list entries on the searched destination rather than t
   assert.equal(chartItemFocusPoint("feature", location), location);
 });
 
-test("collapses nearby labels around a central representative and prefers key landmarks", () => {
-  assert.ok(labelSpacingForZoom(46) >= 80, "the screenshot-scale zoom still declutters collisions");
-  assert.ok(labelSpacingForZoom(600) > 0, "decluttering never switches off completely");
+test("hides a label only where it would cover another and prefers key landmarks", () => {
   const visible = clusteredLabelIds([
-    { id: "west", name: "West", x: 0, y: 0 },
-    { id: "gold", name: "Gold Rock", x: 30, y: 0 },
-    { id: "east", name: "East", x: 60, y: 0 },
-    { id: "far", name: "Far", x: 250, y: 0 }
-  ], 70);
+    { id: "west", name: "West", x: 0, y: 0, width: 40 },
+    { id: "gold", name: "Gold Rock", x: 30, y: 0, width: 60 },
+    { id: "east", name: "East", x: 60, y: 0, width: 40 },
+    { id: "far", name: "Far", x: 250, y: 0, width: 30 }
+  ]);
   assert.deepEqual([...visible].sort(), ["far", "gold"]);
   const selected = clusteredLabelIds([
-    { id: "gold", name: "Gold Rock", x: 0, y: 0 },
-    { id: "selected", name: "Selected", x: 10, y: 0, selected: true }
-  ], 70);
+    { id: "gold", name: "Gold Rock", x: 0, y: 0, width: 60 },
+    { id: "selected", name: "Selected", x: 10, y: 0, width: 55, selected: true }
+  ]);
   assert.deepEqual([...selected], ["selected"]);
-  const chain = clusteredLabelIds([
-    { id: "a", name: "A", x: 0, y: 0 },
-    { id: "b", name: "B", x: 60, y: 0 },
-    { id: "c", name: "C", x: 120, y: 0 },
-    { id: "d", name: "D", x: 180, y: 0 }
-  ], 70);
-  assert.equal(chain.size, 2, "a long chain keeps spaced labels instead of collapsing into one giant cluster");
+  const stacked = clusteredLabelIds([
+    { id: "senna", name: "Sen’na", x: 0, y: 0, width: 40 },
+    { id: "onna", name: "On’na", x: 5, y: 36, width: 36 }
+  ]);
+  assert.equal(stacked.size, 2, "neighbouring settlements both keep their names when the text has room");
   const semanticPriority = [
-    { id: "route", name: "Route day 2", x: 0, y: 0, priority: 30 },
-    { id: "location", name: "Old Ank Town", x: 10, y: 0, priority: 0 }
+    { id: "route", name: "Route day 2", x: 0, y: 0, width: 70, priority: 30 },
+    { id: "location", name: "Old Ank Town", x: 10, y: 0, width: 80, priority: 0 }
   ];
-  assert.deepEqual([...clusteredLabelIds(semanticPriority, 50)], ["location"]);
-  assert.deepEqual([...clusteredLabelIds(semanticPriority, 100)], ["location"], "zoom changes do not flip the winner");
+  assert.deepEqual([...clusteredLabelIds(semanticPriority)], ["location"]);
+});
+
+test("Fire Fish Lagoon islands carry only their own town and rocks", () => {
+  const lagoon = ISLAND_CATALOG.filter((island) => island.region === "Fire Fish Lagoon");
+  for (const island of lagoon.filter((item) => item.id !== "firefish/fire_fish_islands")) {
+    const span = Math.max(island.bounds.maxLon - island.bounds.minLon, island.bounds.maxLat - island.bounds.minLat);
+    assert.ok(span < 0.25, `${island.name} stays near its own land`);
+    assert.ok(Math.abs(island.bounds.minLon + island.bounds.maxLon) < 1e-4, `${island.name} is drawn around its centre`);
+  }
+  assert.equal(lagoon.filter((island) => island.partOf === "firefish/fire_fish_islands").length, 9);
+  assert.ok(islandById("firefish/fire_fish_islands"), "charts that placed the whole lagoon keep their outline");
+  assert.equal(VANILLA_ISLANDS.length, ISLAND_CATALOG.length - 1, "the vanilla map draws the lagoon from its pieces, once");
+  // The source map saved Sen'na by the centre of every lagoon rock; the import moves it onto the island.
+  const senna = importLegacyMap({ islands: { "firefish/senna": { x: 2.9504, y: 28.1807 } } }).features[0];
+  assert.ok(Math.abs(senna.lon - 2.78) < 0.01 && Math.abs(senna.lat - 28.19) < 0.01);
+});
+
+test("vanilla map layers start off and trade winds follow the game's zones", () => {
+  const layers = createChart().layers;
+  assert.deepEqual([layers.vanillaMap, layers.secretIslands, layers.tradeWinds], [false, false, false]);
+  const chart = createChart();
+  chart.layers = { grid: true, vanillaMap: true, tradeWinds: true };
+  const restored = sanitizeWorkspace({ activeChartId: chart.id, charts: [chart] }).charts[0].layers;
+  assert.deepEqual([restored.vanillaMap, restored.secretIslands, restored.tradeWinds], [true, false, true]);
+  assert.deepEqual(tradeWindAt(40, 0), { east: 1, north: 0.5 });
+  assert.deepEqual(tradeWindAt(31, -10), { east: 0.75, north: 0.75 });
+  assert.deepEqual(tradeWindAt(31, 5), { east: -1, north: -0.5 });
+  assert.equal(tradeWindAt(32.5, 5), null);
+  assert.equal(tradeWindAt(28, 3), null);
 });
 
 test("shows a repeated search name once per connected overlap", () => {
@@ -236,6 +265,28 @@ test("reinforces only the common overlap of same-named search areas", () => {
   const groups = searchOverlapGroups([...same, touchingDifferentName]);
   assert.equal(groups.length, 1);
   assert.deepEqual(groups[0].map((search) => search.id), same.map((search) => search.id));
+  // The island and name are drawn once, where all three meet, by the search that carries the name.
+  const anchors = searchIconAnchors([...same, touchingDifferentName]);
+  const carried = same.filter((search) => anchors.get(search.id));
+  assert.equal(carried.length, 1);
+  assert.ok(same.every((search) => insideSearch(search, anchors.get(carried[0].id))), "the shared icon sits inside every search");
+  assert.equal(same.filter((search) => anchors.get(search.id) === null).length, 2);
+  assert.equal(anchors.has(touchingDifferentName.id), false, "a search on its own keeps its island at its centre");
+  // Two wide arcs meet in a curved band whose plain middle would fall in the hole between them.
+  const arcs = [0, 0.01].map((lat) => createSearch({ lat, lon: 0, bearing: 0, distanceNm: 100, spreadDeg: 90, tolerancePct: 10, label: "Arc" }));
+  assert.ok(arcs.every((search) => insideSearch(search, commonSearchOverlap(arcs))));
+});
+
+test("a search area shows a chosen island, or the one it is named after, and keeps the choice", () => {
+  const chart = createChart();
+  chart.searches.push({ ...createSearch({ lat: 0, lon: 0, bearing: 90, distanceNm: 50, label: "Dead Cove" }), islandId: "aestrin/aestra_abbey" });
+  chart.searches.push({ ...createSearch({ lat: 0, lon: 0, bearing: 90, distanceNm: 50, label: "Dead Cove" }), showIsland: false });
+  chart.searches.push(createSearch({ lat: 0, lon: 0, bearing: 90, distanceNm: 50, label: "Dead Cove" }));
+  const [chosen, none, named] = sanitizeWorkspace({ activeChartId: chart.id, charts: [chart] }).charts[0].searches;
+  assert.equal(searchIsland(chosen).name, "Aestra Abbey");
+  assert.equal(searchIsland(none), null);
+  assert.equal(searchIsland(named).id, "emerald/dead_cove");
+  assert.equal("showIsland" in named, false, "a search without a choice is saved as before");
 });
 
 test("a search snapped to a mark follows it and keeps its place when the mark is gone", () => {
@@ -277,8 +328,8 @@ test("formats passage times", () => {
 });
 
 test("bundles the licensed island catalog and matches location names exactly", () => {
-  assert.equal(ISLAND_CATALOG.length, 40);
-  assert.equal(new Set(ISLAND_CATALOG.map((island) => island.id)).size, 40);
+  assert.equal(ISLAND_CATALOG.length, 49);
+  assert.equal(new Set(ISLAND_CATALOG.map((island) => island.id)).size, 49);
   assert.equal(islandByName("Chronos").region, "Aestrin");
   assert.equal(islandByName("  dead COVE ").id, "emerald/dead_cove");
   assert.equal(normalizeIslandName("Al’Nilem"), normalizeIslandName("Al'Nilem"));
