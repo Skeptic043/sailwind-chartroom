@@ -24,13 +24,13 @@ export function createChart({ name = "Uncharted Sea", seed = "" } = {}) {
     createdAt: now,
     updatedAt: now,
     view: { lat: 10, lon: 0, zoom: 5 },
-    layers: { grid: true, labels: true, track: true, routeDistances: true, bearings: true, winds: true, boats: true, vanillaMap: false, secretIslands: false, tradeWinds: false },
+    layers: { grid: true, labels: true, track: true, routeDistances: true, measure: true, winds: true, boats: true, islands: true, vanillaMap: false, secretIslands: false, tradeWinds: false },
     speedKn: 6,
     features: [],
     route: [],
     savedRoutes: [],
     track: [],
-    bearings: [],
+    measures: [],
     winds: [],
     searches: [],
     segments: []
@@ -142,9 +142,10 @@ export function sanitizeChart(value) {
     labels: value.layers?.labels !== false,
     track: value.layers?.track !== false,
     routeDistances: value.layers?.routeDistances !== false,
-    bearings: value.layers?.bearings !== false,
+    measure: value.layers?.measure !== false,
     winds: value.layers?.winds !== false,
     boats: value.layers?.boats !== false,
+    islands: value.layers?.islands !== false,
     vanillaMap: value.layers?.vanillaMap === true,
     secretIslands: value.layers?.secretIslands === true,
     tradeWinds: value.layers?.tradeWinds === true
@@ -154,7 +155,8 @@ export function sanitizeChart(value) {
   base.route = arrayOf(value.route, sanitizeRoutePoint);
   base.savedRoutes = arrayOf(value.savedRoutes, sanitizeSavedRoute);
   base.track = arrayOf(value.track, (point) => sanitizeTrackPoint(point));
-  base.bearings = arrayOf(value.bearings, sanitizeBearing);
+  // A chart keeps one measure line; a new measurement replaces it.
+  base.measures = arrayOf(value.measures, sanitizeMeasure).slice(-1);
   base.winds = arrayOf(value.winds, sanitizeWind);
   base.searches = arrayOf(value.searches, sanitizeSearch);
   base.segments = arrayOf(value.segments, sanitizeSegment);
@@ -186,8 +188,8 @@ export function locationRangeForType(type, rangeNm) {
   return Number.isFinite(value) && value > 0 ? clampNumber(value, 0.1, MAX_RANGE_NM, 10) : 10;
 }
 
-export function createBearing({ lat, lon, bearing, label = "" }) {
-  return sanitizeBearing({ id: makeId("bearing"), lat, lon, bearing, label });
+export function createMeasure(from, to) {
+  return sanitizeMeasure({ id: makeId("measure"), lat: from.lat, lon: from.lon, end: { lat: to.lat, lon: to.lon } });
 }
 
 export function createWind({ lat, lon, bearing, label = "" }) {
@@ -259,7 +261,7 @@ export function followAnchors(chart) {
 }
 
 // Every kind of item a selection can hold. A saved route owns its waypoints, which can also be selected alone.
-const ITEM_LISTS = { feature: "features", route: "route", bearing: "bearings", wind: "winds", search: "searches" };
+const ITEM_LISTS = { feature: "features", route: "route", measure: "measures", wind: "winds", search: "searches" };
 export const ITEM_KINDS = Object.freeze([...Object.keys(ITEM_LISTS), "saved-route", "saved-point"]);
 
 export function chartItems(chart, kind) {
@@ -305,11 +307,12 @@ export function translateChartItems(chart, refs, delta, { strict = false } = {})
   });
   let lat = Number(delta?.lat) || 0;
   let lon = Number(delta?.lon) || 0;
-  const limits = moving.reduce((result, { item }) => ({
-    minLat: Math.max(result.minLat, WORLD_BOUNDS.minLat - item.lat),
-    maxLat: Math.min(result.maxLat, WORLD_BOUNDS.maxLat - item.lat),
-    minLon: Math.max(result.minLon, WORLD_BOUNDS.minLon - item.lon),
-    maxLon: Math.min(result.maxLon, WORLD_BOUNDS.maxLon - item.lon)
+  // A measure line moves both of its ends.
+  const limits = moving.flatMap(({ item }) => item.end ? [item, item.end] : [item]).reduce((result, point) => ({
+    minLat: Math.max(result.minLat, WORLD_BOUNDS.minLat - point.lat),
+    maxLat: Math.min(result.maxLat, WORLD_BOUNDS.maxLat - point.lat),
+    minLon: Math.max(result.minLon, WORLD_BOUNDS.minLon - point.lon),
+    maxLon: Math.min(result.maxLon, WORLD_BOUNDS.maxLon - point.lon)
   }), { minLat: -Infinity, maxLat: Infinity, minLon: -Infinity, maxLon: Infinity });
   if (strict && (lat < limits.minLat || lat > limits.maxLat || lon < limits.minLon || lon > limits.maxLon)) {
     throw new Error("That move would put part of the selection outside the chart.");
@@ -319,6 +322,10 @@ export function translateChartItems(chart, refs, delta, { strict = false } = {})
   for (const { ref, item } of moving) {
     item.lat += lat;
     item.lon += lon;
+    if (item.end) {
+      item.end.lat += lat;
+      item.end.lon += lon;
+    }
     if (ref.kind === "search" && item.anchor) delete item.anchor;
   }
   followAnchors(chart);
@@ -504,6 +511,7 @@ export function searchEvidenceOpacity(hasOverlap) {
 
 export function chartItemFocusPoint(kind, item) {
   if (kind === "search") return searchExtent(item).centre;
+  if (kind === "measure") return { lat: (item.lat + item.end.lat) / 2, lon: (item.lon + item.end.lon) / 2 };
   if (kind === "saved-route") {
     const lats = item.points.map((point) => point.lat);
     const lons = item.points.map((point) => point.lon);
@@ -625,6 +633,12 @@ function sanitizeBearing(value) {
   };
 }
 
+function sanitizeMeasure(value) {
+  const point = sanitizePoint(value, "measure");
+  if (!point || !isFiniteCoordinate(value.end?.lat, value.end?.lon)) return null;
+  return { id: point.id, lat: point.lat, lon: point.lon, end: { lat: Number(value.end.lat), lon: Number(value.end.lon) } };
+}
+
 function sanitizeWind(value) {
   const wind = sanitizeBearing(value);
   if (!wind) return null;
@@ -733,39 +747,6 @@ export function destinationPoint(origin, bearing, nm) {
     lat: Number(origin.lat) + Math.cos(radians) * degrees,
     lon: Number(origin.lon) + Math.sin(radians) * degrees
   };
-}
-
-// Where two bearing lines cross on the flat chart, or null when they are parallel or meet behind either observer.
-export function bearingIntersection(a, b) {
-  const da = direction(a.bearing);
-  const db = direction(b.bearing);
-  const cross = da.x * db.y - da.y * db.x;
-  if (Math.abs(cross) < 1e-9) return null;
-  const ox = Number(b.lon) - Number(a.lon);
-  const oy = Number(b.lat) - Number(a.lat);
-  const t = (ox * db.y - oy * db.x) / cross;
-  const s = (ox * da.y - oy * da.x) / cross;
-  if (t < 0 || s < 0) return null;
-  const point = { lat: Number(a.lat) + da.y * t, lon: Number(a.lon) + da.x * t };
-  return isFiniteCoordinate(point.lat, point.lon) ? point : null;
-}
-
-export function bearingFixes(bearings) {
-  const fixes = [];
-  for (let i = 0; i < bearings.length; i += 1) {
-    for (let j = i + 1; j < bearings.length; j += 1) {
-      const point = bearingIntersection(bearings[i], bearings[j]);
-      if (!point) continue;
-      const spread = Math.abs(((bearings[i].bearing - bearings[j].bearing + 540) % 360) - 180);
-      fixes.push({ ...point, ids: [bearings[i].id, bearings[j].id], cut: Math.min(spread, 180 - spread) });
-    }
-  }
-  return fixes;
-}
-
-function direction(bearing) {
-  const radians = Number(bearing) * Math.PI / 180;
-  return { x: Math.sin(radians), y: Math.cos(radians) };
 }
 
 export function parseBearing(input) {

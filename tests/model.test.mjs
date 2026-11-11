@@ -2,13 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   bearingDegrees,
-  bearingFixes,
-  bearingIntersection,
   archiveActiveRoute,
   chartItemFocusPoint,
   clusteredLabelIds,
   compassPoint,
   createChart,
+  createMeasure,
   createRoutePoint,
   commonSearchOverlap,
   createSearch,
@@ -143,16 +142,19 @@ test("plots a position from course and distance on the flat chart", () => {
   assert.ok(Math.abs(back.lat + 1) < 1e-9 && Math.abs(back.lon + 1) < 1e-9);
 });
 
-test("fixes a position where two forward bearings cross", () => {
-  const fromWest = { id: "a", lat: 0, lon: 0, bearing: 45 };
-  const fromEast = { id: "b", lat: 0, lon: 2, bearing: 315 };
-  const fix = bearingIntersection(fromWest, fromEast);
-  assert.ok(Math.abs(fix.lat - 1) < 1e-9 && Math.abs(fix.lon - 1) < 1e-9);
-  assert.equal(bearingIntersection(fromWest, { ...fromEast, bearing: 135 }), null, "lines meeting behind an observer are not a fix");
-  assert.equal(bearingIntersection(fromWest, { ...fromEast, bearing: 45 }), null, "parallel lines never cross");
-  const [only] = bearingFixes([fromWest, fromEast]);
-  assert.deepEqual(only.ids, ["a", "b"]);
-  assert.equal(only.cut, 90);
+test("a chart keeps one measure line that moves and deletes as a whole", () => {
+  const chart = createChart();
+  const older = createMeasure({ lat: 0, lon: 0 }, { lat: 1, lon: 1 });
+  const line = createMeasure({ lat: 2, lon: 3 }, { lat: 4, lon: 7 });
+  chart.measures = [older, line, { id: "broken", lat: 1, lon: 1 }];
+  const [restored] = sanitizeWorkspace({ activeChartId: chart.id, charts: [chart] }).charts;
+  assert.deepEqual(restored.measures, [line]);
+  assert.deepEqual(chartItemFocusPoint("measure", line), { lat: 3, lon: 5 });
+  translateChartItems(restored, [{ kind: "measure", id: line.id }], { lat: 1, lon: -1 }, { strict: true });
+  assert.deepEqual([restored.measures[0].lat, restored.measures[0].lon, restored.measures[0].end], [3, 2, { lat: 5, lon: 6 }]);
+  assert.throws(() => translateChartItems(restored, [{ kind: "measure", id: line.id }], { lat: 86, lon: 0 }, { strict: true }), /outside/, "the far end counts too");
+  removeChartItems(restored, [{ kind: "measure", id: line.id }]);
+  assert.deepEqual(restored.measures, []);
 });
 
 test("a search area covers its compass point and distance margin", () => {
@@ -231,10 +233,12 @@ test("Fire Fish Lagoon islands carry only their own town and rocks", () => {
 test("vanilla map layers start off and trade winds follow the game's zones", () => {
   const layers = createChart().layers;
   assert.deepEqual([layers.vanillaMap, layers.secretIslands, layers.tradeWinds], [false, false, false]);
+  assert.deepEqual([layers.measure, layers.islands], [true, true]);
   const chart = createChart();
-  chart.layers = { grid: true, vanillaMap: true, tradeWinds: true };
+  chart.layers = { grid: true, vanillaMap: true, tradeWinds: true, measure: false, islands: false };
   const restored = sanitizeWorkspace({ activeChartId: chart.id, charts: [chart] }).charts[0].layers;
   assert.deepEqual([restored.vanillaMap, restored.secretIslands, restored.tradeWinds], [true, false, true]);
+  assert.deepEqual([restored.measure, restored.islands], [false, false]);
   assert.deepEqual(tradeWindAt(40, 0), { zone: "aestrin", east: 1, north: 0.5 });
   assert.deepEqual(tradeWindAt(31, -10), { zone: "alankh", east: 0.75, north: 0.75 });
   assert.deepEqual(tradeWindAt(31, 5), { zone: "emerald", east: -1, north: -0.5 });

@@ -3,7 +3,7 @@ import { archiveActiveRoute, savedRouteForPoint } from "./model.mjs";
 import { connectHost } from "./host.mjs";
 import { clamp } from "./format.mjs";
 import { canvas, elements, showToast } from "./dom.mjs";
-import { activeChart, clearSelection, commit, initState, persist, redo, resetHistory, selectItem, selectedItem, selectedRefs, selection, setSaveStatus, undo, workspace } from "./state.mjs";
+import { activeChart, clearSelection, commit, initState, persist, redo, resetHistory, selectItem, selectedItem, selection, setSaveStatus, undo, workspace } from "./state.mjs";
 import { eventPoint, screenToWorld } from "./viewport.mjs";
 import { drawChart, fitData, resizeCanvas, setOverlay } from "./render.mjs";
 import { findHit } from "./hits.mjs";
@@ -81,23 +81,25 @@ elements["clear-route"].addEventListener("click", () => {
   if (!activeChart().route.length) return;
   commit((chart) => { chart.route = []; clearSelection(); });
 });
+// The speed field has no min, so its arrows step from 0 in whole and half knots; 0.1 kn is still the lowest speed.
 elements["route-speed"].addEventListener("change", (event) => {
-  const speed = Number(event.target.value);
-  if (!Number.isFinite(speed) || speed <= 0) { renderRouteSummary(); return; }
+  const speed = event.target.valueAsNumber;
+  if (!Number.isFinite(speed)) { renderRouteSummary(); return; }
   commit((chart) => { chart.speedKn = clamp(speed, 0.1, 30); }, { history: false });
+  event.target.value = activeChart().speedKn;
 });
 
 // Layers
-for (const [elementId, key] of [["layer-grid", "grid"], ["layer-labels", "labels"], ["layer-track", "track"], ["layer-distances", "routeDistances"], ["layer-bearings", "bearings"], ["layer-winds", "winds"], ["layer-boats", "boats"], ["layer-vanilla", "vanillaMap"], ["layer-secrets", "secretIslands"], ["layer-trade-winds", "tradeWinds"]]) {
+for (const [elementId, key] of [["layer-grid", "grid"], ["layer-labels", "labels"], ["layer-track", "track"], ["layer-distances", "routeDistances"], ["layer-measure", "measure"], ["layer-winds", "winds"], ["layer-boats", "boats"], ["layer-islands", "islands"], ["layer-vanilla", "vanillaMap"], ["layer-secrets", "secretIslands"], ["layer-trade-winds", "tradeWinds"]]) {
   elements[elementId].addEventListener("change", (event) => commit((chart) => { chart.layers[key] = event.target.checked; }, { history: false }));
 }
 
 // Inspectors
-for (const kind of ["feature", "route", "bearing", "search", "wind"]) {
+for (const kind of ["feature", "route", "search", "wind"]) {
   elements[`${kind}-form`].addEventListener("change", () => updateSelectedFromForm(kind));
   elements[`${kind}-form`].addEventListener("submit", (event) => event.preventDefault());
 }
-for (const id of ["delete-feature", "delete-route-point", "delete-saved-route", "delete-bearing", "delete-search", "delete-wind"]) {
+for (const id of ["delete-feature", "delete-route-point", "delete-saved-route", "delete-measure", "delete-search", "delete-wind"]) {
   elements[id].addEventListener("click", deleteSelected);
 }
 elements["saved-route-form"].addEventListener("change", updateSavedRouteFromForm);
@@ -169,13 +171,6 @@ elements["paste-form"].addEventListener("submit", (event) => {
 elements["clear-track"].addEventListener("click", () => {
   commit((chart) => { chart.track = []; });
   showToast("Track cleared. Undo brings it back.");
-});
-elements["clear-bearings"].addEventListener("click", () => {
-  commit((chart) => {
-    chart.bearings = [];
-    if (selectedRefs().some((ref) => ref.kind === "bearing")) clearSelection();
-  });
-  showToast("Bearing lines cleared. Undo brings them back.");
 });
 elements["import-json"].addEventListener("click", () => elements["json-file"].click());
 elements["json-file"].addEventListener("change", (event) => reportErrors(() => importChartFile(event.target.files[0]), event.target));

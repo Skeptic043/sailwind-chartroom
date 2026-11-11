@@ -1,12 +1,10 @@
 // Converts between chart coordinates and canvas pixels for the active chart's view.
-import { NM_PER_DEGREE, WORLD_BOUNDS } from "./model.mjs";
-import { visibleIsland } from "./islands.mjs";
+import { WORLD_BOUNDS } from "./model.mjs";
+import { searchIsland, visibleIsland } from "./islands.mjs";
 import { boatMarkerSize, visibleBoat } from "./boats.mjs";
 import { clamp } from "./format.mjs";
 import { canvas } from "./dom.mjs";
 import { activeChart } from "./state.mjs";
-
-export const BEARING_REACH_NM = 360 * NM_PER_DEGREE;
 
 export function worldToScreen(point) {
   const rectangle = canvas.getBoundingClientRect();
@@ -40,8 +38,17 @@ export function islandPixelSpan(island) {
   return Math.max(island.bounds.maxLon - island.bounds.minLon, island.bounds.maxLat - island.bounds.minLat) * activeChart().view.zoom;
 }
 
+// The island outline a location or search area draws, unless View hides island outlines.
+export function chartIsland(feature) {
+  return activeChart().layers.islands ? visibleIsland(feature) : null;
+}
+
+export function chartSearchIsland(search) {
+  return activeChart().layers.islands ? searchIsland(search) : null;
+}
+
 export function boatIconBounds(feature) {
-  return boatIconBoundsAt(feature, visibleIsland(feature), 1, visibleBoat(feature));
+  return boatIconBoundsAt(feature, chartIsland(feature), 1, visibleBoat(feature));
 }
 
 // One size rule for every chart symbol. Each is `full` pixels at SYMBOL_FULL_SIZE_ZOOM and grows and

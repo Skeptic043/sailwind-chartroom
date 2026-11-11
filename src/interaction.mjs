@@ -1,13 +1,13 @@
 // Tool modes and pointer handling on the chart canvas, including the previews tools draw while active.
-import { COMPASS_STEP_DEG, ITEM_KINDS, MAX_RANGE_NM, MAX_ZOOM, MIN_ZOOM, WORLD_BOUNDS, bearingDegrees, chartItemFocusPoint, chartItems, compassPoint, createFeature, createRoutePoint, createSearch, createWind, distanceNm, formatCoordinate, itemForRef, searchExtent, searchesAnsweredBy, translateChartItems, visibleSavedRoutes } from "./model.mjs";
+import { COMPASS_STEP_DEG, ITEM_KINDS, MAX_RANGE_NM, MAX_ZOOM, MIN_ZOOM, WORLD_BOUNDS, bearingDegrees, chartItemFocusPoint, chartItems, createFeature, createMeasure, createRoutePoint, createSearch, createWind, distanceNm, formatCoordinate, itemForRef, searchExtent, searchesAnsweredBy, translateChartItems, visibleSavedRoutes } from "./model.mjs";
 import { assignedIsland, islandById, searchIsland } from "./islands.mjs";
 import { drawBoatSilhouette, visibleBoat } from "./boats.mjs";
 import { clamp, formatDirection, formatNm } from "./format.mjs";
 import { canvas, context, elements } from "./dom.mjs";
 import { activeChart, commit, host, isSelected, persist, pushUndo, refreshSelection, replaceSelectionState, selectItem, selectedItem, selectedKeys, selectedRefs, selection, selectionKey, setPrimarySelection } from "./state.mjs";
 import { boatIconBoundsAt, coordinatePrecision, eventPoint, screenToWorld, worldToScreen } from "./viewport.mjs";
-import { boatColours, drawAreaCircle, drawChart, drawIslandSilhouette, drawLine, drawSearchWedge, drawWindIndicator, labelPill, magnetRing } from "./render.mjs";
-import { findHit, resetHitCycle, nearestTrackPoint, onSelectedAreaEdge, snapAlongRay, snapPoint } from "./hits.mjs";
+import { boatColours, drawAreaCircle, drawChart, drawIslandSilhouette, drawLine, drawMeasureLine, drawSearchWedge, drawWindIndicator, labelPill, magnetRing } from "./render.mjs";
+import { findHit, resetHitCycle, nearestTrackPoint, onSelectedAreaEdge, selectedMeasureEnd, snapAlongRay, snapPoint } from "./hits.mjs";
 import { addLocation, addSearch, addWind, setAnchor } from "./edits.mjs";
 import { renderEverything, renderInspector, renderRouteSummary } from "./panels.mjs";
 
@@ -15,10 +15,10 @@ import { renderEverything, renderInspector, renderRouteSummary } from "./panels.
 const placesFreely = (event) => host.platform === "mac" ? event.altKey : event.ctrlKey;
 
 const MODE_HINTS = {
-  select: "Drag the chart to pan. Shift-click or Shift-drag to select several chart items.",
+  select: "Drag the chart to pan. Shift-click or Shift-drag to select several chart items. Drag either end of a selected measure line to adjust it.",
   location: "Click anywhere to add a location. Double-click also works from Select mode.",
   route: "Click to add route waypoints. Right-click or press Escape when finished.",
-  measure: "Click two points for a temporary bearing and distance. Click again to restart.",
+  measure: "Drag from one point to another, or click each end. The line stays until you delete it or measure a new one.",
   area: "Press where the area is centred and drag out its radius. Drag the edge of a selected area to resize it.",
   search: "Press on the port or position that gave the direction, drag toward the destination and let go at the distance. Snaps to compass points.",
   wind: "Press where the regional wind belongs, then drag in the direction it is blowing toward."
@@ -38,7 +38,8 @@ let hoverTarget = null;
 
 export let pointerState = null;
 
-let measure = [];
+// The first end of a measurement being drawn. The finished line is kept on the chart.
+let measureStart = null;
 
 let islandPlacement = null;
 
@@ -71,7 +72,7 @@ let edgePan = null;
 
 export function setMode(nextMode) {
   mode = nextMode;
-  measure = [];
+  measureStart = null;
   resetHitCycle();
   if (nextMode !== "location") islandPlacement = null;
   if (nextMode !== "resolve") resolutionDraft = null;
@@ -136,6 +137,10 @@ export function drawSearchDraft(palette) {
 
 // A ring shows where a click will land when the magnet has pulled it onto a mark or line.
 export function drawMagnet(palette) {
+  if (pointerState?.type === "measure-end") {
+    if (pointerState.target?.snapped) magnetRing(worldToScreen(pointerState.target), palette);
+    return;
+  }
   if (mode === "select" || pointerState?.type === "search" || pointerState?.type === "pan" || !hoverTarget?.snapped) return;
   magnetRing(worldToScreen(hoverTarget), palette);
 }
@@ -186,31 +191,35 @@ export function drawMarquee(palette) {
   context.restore();
 }
 
+// The kept measure line is drawn here with the tool, so a new measurement hides it while it is drawn.
 export function drawMeasure(palette) {
-  if (!measure.length) return;
-  const end = measure[1] ?? hoverTarget;
-  if (!end) return;
-  const from = worldToScreen(measure[0]);
-  const to = worldToScreen(end);
-  context.save();
-  context.strokeStyle = palette.select;
-  context.lineWidth = 1.5;
-  context.setLineDash([6, 5]);
-  drawLine(from, to);
-  context.setLineDash([]);
-  context.fillStyle = palette.select;
-  context.beginPath(); context.arc(from.x, from.y, 4, 0, Math.PI * 2); context.fill();
-  context.beginPath(); context.arc(to.x, to.y, 4, 0, Math.PI * 2); context.fill();
-  const bearing = bearingDegrees(measure[0], end);
-  labelPill(`${distanceNm(measure[0], end).toFixed(1)} nm · ${Math.round(bearing)}° ${compassPoint(bearing)}`, (from.x + to.x) / 2, (from.y + to.y) / 2 - 12, palette);
-  context.restore();
+  if (measureStart) {
+    if (hoverTarget) drawMeasureLine(measureStart, hoverTarget, true, palette);
+    return;
+  }
+  if (!activeChart().layers.measure) return;
+  for (const item of activeChart().measures) drawMeasureLine(item, item.end, isSelected("measure", item.id), palette);
+}
+
+// A new measurement replaces the last one, is selected so Delete removes it, and shows even if View had hidden the line.
+function finishMeasure(end) {
+  const start = measureStart;
+  measureStart = null;
+  stopEdgePan();
+  if (distanceNm(start, end) < .05) return drawChart();
+  commit((chart) => {
+    const line = createMeasure(start, end);
+    chart.measures = [line];
+    chart.layers.measure = true;
+    replaceSelectionState("measure", line.id);
+  });
 }
 
 function edgePanEligible() {
   return mode === "resolve"
     || pointerState?.type === "area"
     || pointerState?.type === "search"
-    || (mode === "measure" && measure.length === 1);
+    || (mode === "measure" && measureStart !== null);
 }
 
 function updateEdgePan(screen, free = false) {
@@ -306,9 +315,15 @@ export function startPointer(event) {
     return;
   }
   if (mode === "measure") {
-    measure = measure.length >= 2 ? [target] : [...measure, target];
-    if (measure.length >= 2) stopEdgePan();
+    // Pressing starts a line; letting go after a drag finishes it, otherwise the next click does.
+    if (measureStart) return finishMeasure(target);
+    measureStart = target;
+    pointerState = { type: "measure", pointerId: event.pointerId, start: screen, moved: false };
     drawChart();
+    return;
+  }
+  if (!event.shiftKey && selectedMeasureEnd(screen)) {
+    pointerState = { type: "measure-end", end: selectedMeasureEnd(screen), pointerId: event.pointerId, start: screen, moved: false };
     return;
   }
   if (!event.shiftKey && onSelectedAreaEdge(screen)) {
@@ -319,8 +334,6 @@ export function startPointer(event) {
   if (hit?.passive) {
     selectItem(hit.kind, hit.id, { additive: event.shiftKey });
     if (!event.shiftKey) startPan(event, screen);
-  } else if (hit?.fix) {
-    selectItem(hit.kind, hit.id, { additive: event.shiftKey });
   } else if (hit) {
     if (event.shiftKey) {
       selectItem(hit.kind, hit.id, { additive: true });
@@ -365,6 +378,7 @@ export function movePointer(event) {
   }
   if (!pointerState || pointerState.pointerId !== event.pointerId) {
     canvas.classList.toggle("resize", mode === "select" && onSelectedAreaEdge(screen));
+    canvas.classList.toggle("move-end", mode === "select" && Boolean(selectedMeasureEnd(screen)));
     if (mode !== "select") drawChart();
     return;
   }
@@ -375,6 +389,19 @@ export function movePointer(event) {
     activeChart().view.lat = clamp(pointerState.original.lat + dy / activeChart().view.zoom, -90, 90);
     drawChart();
   } else if (pointerState.type === "area") {
+    drawChart();
+  } else if (pointerState.type === "measure") {
+    pointerState.moved ||= Math.hypot(screen.x - pointerState.start.x, screen.y - pointerState.start.y) >= DRAG_THRESHOLD_PX;
+    drawChart();
+  } else if (pointerState.type === "measure-end") {
+    if (!pointerState.moved && Math.hypot(screen.x - pointerState.start.x, screen.y - pointerState.start.y) < DRAG_THRESHOLD_PX) return;
+    if (!pointerState.moved) pushUndo();
+    pointerState.moved = true;
+    const item = selectedItem();
+    const target = snapPoint(screen, placesFreely(event));
+    Object.assign(pointerState.end === "start" ? item : item.end, { lat: target.lat, lon: target.lon });
+    pointerState.target = target;
+    renderInspector();
     drawChart();
   } else if (pointerState.type === "search" || pointerState.type === "wind") {
     pointerState.cursor = screen;
@@ -420,6 +447,12 @@ export function movePointer(event) {
 
 export function endPointer(event) {
   if (!pointerState || pointerState.pointerId !== event.pointerId) return;
+  if (pointerState.type === "measure") {
+    const { moved } = pointerState;
+    pointerState = null;
+    if (moved && measureStart) finishMeasure(snapPoint(eventPoint(event), placesFreely(event)));
+    return;
+  }
   if (pointerState.type === "area") {
     stopEdgePan();
     const { center, start } = pointerState;
@@ -462,7 +495,7 @@ export function endPointer(event) {
     else drawChart();
     return;
   }
-  if (pointerState.type === "move-items" || pointerState.type === "resize-area") {
+  if (pointerState.type === "move-items" || pointerState.type === "resize-area" || pointerState.type === "measure-end") {
     if (pointerState.moved) {
       activeChart().updatedAt = new Date().toISOString();
       persist();

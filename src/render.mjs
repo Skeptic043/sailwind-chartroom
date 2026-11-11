@@ -1,12 +1,12 @@
 // Draws the chart canvas and moves its view. Tool previews are drawn by interaction.mjs through setOverlay().
 import { mapPalette, paperTile } from "./theme.mjs";
-import { MAX_ZOOM, MIN_ZOOM, NM_PER_DEGREE, bearingDegrees, bearingFixes, clusteredLabelIds, destinationPoint, searchChartLabel, searchEvidenceOpacity, searchExtent, searchIconAnchors, searchNameLabelIds, searchOverlapGroups, summarizeRoute, tradeWindAt, visibleSavedRoutes } from "./model.mjs";
-import { VANILLA_ISLANDS, islandWorldBounds, searchIsland, visibleIsland } from "./islands.mjs";
+import { MAX_ZOOM, MIN_ZOOM, NM_PER_DEGREE, bearingDegrees, clusteredLabelIds, destinationPoint, distanceNm, formatDuration, searchChartLabel, searchEvidenceOpacity, searchExtent, searchIconAnchors, searchNameLabelIds, searchOverlapGroups, summarizeRoute, tradeWindAt, visibleSavedRoutes } from "./model.mjs";
+import { VANILLA_ISLANDS, islandWorldBounds } from "./islands.mjs";
 import { boatMarkerSize, drawBoatSilhouette, visibleBoat } from "./boats.mjs";
-import { clamp, formatDirection, formatNm, isNightTime, nearlyMultiple, shortCoordinate } from "./format.mjs";
+import { clamp, formatBearing, formatDirection, formatNm, isNightTime, nearlyMultiple, shortCoordinate } from "./format.mjs";
 import { canvas, context, elements } from "./dom.mjs";
 import { activeChart, isSelected, persist } from "./state.mjs";
-import { BEARING_REACH_NM, boatIconBounds, boatIconBoundsAt, islandPixelSpan, screenToWorld, symbolSize, worldToScreen } from "./viewport.mjs";
+import { boatIconBounds, boatIconBoundsAt, chartIsland, chartSearchIsland, islandPixelSpan, screenToWorld, symbolSize, worldToScreen } from "./viewport.mjs";
 
 let visibleChartLabels = new Set();
 
@@ -60,18 +60,6 @@ function chartLabelCandidates() {
     add("route-leg", index, "Route distance", { lat: (leg.from.lat + leg.to.lat) / 2, lon: (leg.from.lon + leg.to.lon) / 2 }, false, 40);
   });
   if (chart.layers.winds) for (const wind of chart.winds) add("wind", wind.id, wind.label, wind, isSelected("wind", wind.id));
-  if (chart.layers.bearings) for (const bearing of chart.bearings) {
-    const radians = bearing.bearing * Math.PI / 180;
-    const from = worldToScreen(bearing);
-    candidates.push({
-      id: labelKey("bearing", bearing.id),
-      name: bearing.label || "Bearing",
-      x: from.x + Math.sin(radians) * 46,
-      y: from.y - Math.cos(radians) * 46,
-      selected: isSelected("bearing", bearing.id),
-      priority: 10
-    });
-  }
   if (chart.layers.track && chart.track.length) add("track", "last", "Last fix", chart.track.at(-1));
   return candidates;
 }
@@ -128,7 +116,6 @@ export function drawChart() {
   drawSearches(palette);
   if (activeChart().layers.winds) drawWinds(palette);
   if (activeChart().layers.track) drawTrack(palette);
-  if (activeChart().layers.bearings) drawBearings(palette);
   drawSavedRoutes(palette);
   drawRoute(palette);
   drawFeatures(palette);
@@ -264,7 +251,7 @@ function drawSearches(palette) {
   const anchors = searchIconAnchors(searches);
   // The shared island is whichever one the group's searches show, whoever carries the name.
   const sharedIslands = new Map(groups.flatMap((group) => {
-    const island = group.map(searchIsland).find(Boolean) ?? null;
+    const island = group.map(chartSearchIsland).find(Boolean) ?? null;
     return group.map((search) => [search.id, island]);
   }));
   for (const group of groups) drawSearchOverlap(group);
@@ -303,7 +290,7 @@ function drawSearchOverlap(group) {
 export function drawSearchWedge(search, selected, palette, evidenceOpacity = .12, showName = true, showLabel = true, iconAt = undefined, sharedIsland = null) {
   const { nearNm, farNm, fromDeg, toDeg, centre } = searchExtent(search);
   const shared = iconAt !== undefined;
-  const previewIsland = iconAt === null ? null : shared ? sharedIsland : searchIsland(search);
+  const previewIsland = iconAt === null ? null : shared ? sharedIsland : chartSearchIsland(search);
   const far = worldToScreen(destinationPoint(search, search.bearing, farNm));
   const origin = worldToScreen(search);
   const middle = worldToScreen(iconAt ?? centre);
@@ -397,40 +384,39 @@ export function drawWindIndicator(wind, selected, palette) {
   if (activeChart().layers.labels && wind.label && labelVisible("wind", wind.id)) labelText(wind.label, start.x, start.y + 12, palette);
 }
 
-function drawBearings(palette) {
-  const bearings = activeChart().bearings;
-  if (!bearings.length) return;
+// The measure line, and the one being drawn: distance, bearing and passage time at the chart's speed.
+export function drawMeasureLine(from, to, selected, palette) {
+  const a = worldToScreen(from);
+  const b = worldToScreen(to);
+  const speed = activeChart().speedKn;
   context.save();
-  for (const bearing of bearings) {
-    const selected = isSelected("bearing", bearing.id);
-    const from = worldToScreen(bearing);
-    const to = worldToScreen(destinationPoint(bearing, bearing.bearing, BEARING_REACH_NM));
-    context.strokeStyle = selected ? palette.select : palette.bearing;
-    context.lineWidth = selected ? 2 : 1.4;
-    context.setLineDash([9, 5]);
-    drawLine(from, to);
-    context.setLineDash([]);
-    context.fillStyle = palette.bearing;
-    context.beginPath(); context.arc(from.x, from.y, symbolSize("dot"), 0, Math.PI * 2); context.fill();
-    if (selected) selectionHalo(from, palette);
-    if (activeChart().layers.labels && labelVisible("bearing", bearing.id)) {
-      const along = 46;
-      const radians = bearing.bearing * Math.PI / 180;
-      const text = `${bearing.label ? `${bearing.label} ` : ""}${String(Math.round(bearing.bearing) % 360).padStart(3, "0")}°`;
-      labelPill(text, from.x + Math.sin(radians) * along, from.y - Math.cos(radians) * along, palette);
-    }
-  }
-  for (const fix of bearingFixes(bearings)) {
-    const screen = worldToScreen(fix);
-    context.strokeStyle = fix.cut < 30 ? palette.faded : palette.select;
-    context.lineWidth = 2;
-    context.beginPath();
-    context.moveTo(screen.x - 6, screen.y - 6); context.lineTo(screen.x + 6, screen.y + 6);
-    context.moveTo(screen.x + 6, screen.y - 6); context.lineTo(screen.x - 6, screen.y + 6);
-    context.stroke();
-    context.beginPath(); context.arc(screen.x, screen.y, 9, 0, Math.PI * 2); context.stroke();
+  context.strokeStyle = palette.paperB;
+  context.lineWidth = selected ? 5 : 4;
+  context.globalAlpha = .55;
+  drawLine(a, b);
+  context.globalAlpha = 1;
+  context.strokeStyle = palette.select;
+  context.lineWidth = selected ? 2.5 : 1.75;
+  context.setLineDash([7, 5]);
+  drawLine(a, b);
+  context.setLineDash([]);
+  for (const end of [a, b]) {
+    context.fillStyle = palette.paperA;
+    context.beginPath(); context.arc(end.x, end.y, selected ? 5 : 4, 0, Math.PI * 2); context.fill(); context.stroke();
   }
   context.restore();
+  const nm = distanceNm(from, to);
+  const text = `${formatNm(nm)} nm · ${formatBearing(bearingDegrees(from, to))} · ${formatDuration(nm / speed)} at ${speed} kn`;
+  // The label sits beside the middle of the line, on its upper side, far enough out to clear it at any angle.
+  context.save();
+  context.font = PILL_FONT;
+  const halfWidth = context.measureText(text).width / 2 + 6;
+  context.restore();
+  const length = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+  let normal = { x: (b.y - a.y) / length, y: -(b.x - a.x) / length };
+  if (normal.y > 0) normal = { x: -normal.x, y: -normal.y };
+  const offset = Math.abs(normal.x) * halfWidth + Math.abs(normal.y) * 9 + 6;
+  labelPill(text, (a.x + b.x) / 2 + normal.x * offset, (a.y + b.y) / 2 + normal.y * offset, palette);
 }
 
 // Saved routes sit back at reduced opacity until the route or one of its waypoints is selected.
@@ -582,7 +568,7 @@ function drawFeatures(palette) {
   for (const feature of activeChart().features) {
     const screen = worldToScreen(feature);
     const selected = isSelected("feature", feature.id);
-    const island = visibleIsland(feature);
+    const island = chartIsland(feature);
     context.save();
     // A location showing its island needs no yellow mark; the outline is the mark. Far out, where the
     // outline is smaller than a few pixels, a land-coloured dot keeps the island visible.
@@ -710,9 +696,11 @@ function labelText(text, x, y, palette) {
   context.restore();
 }
 
+const PILL_FONT = "bold 11px ui-sans-serif, system-ui";
+
 export function labelPill(text, x, y, palette) {
   context.save();
-  context.font = "bold 11px ui-sans-serif, system-ui";
+  context.font = PILL_FONT;
   context.textAlign = "center";
   context.textBaseline = "middle";
   const width = context.measureText(text).width + 12;
@@ -737,11 +725,11 @@ function updateZoomLabel() {
 
 export function fitData() {
   const chart = activeChart();
-  const points = [...chart.route, ...visibleSavedRoutes(chart).flatMap((route) => route.points), ...chart.track, ...chart.bearings, ...chart.winds, ...chart.segments.flatMap((segment) => [segment.a, segment.b])];
+  const points = [...chart.route, ...visibleSavedRoutes(chart).flatMap((route) => route.points), ...chart.track, ...chart.measures.flatMap((measure) => [measure, measure.end]), ...chart.winds, ...chart.segments.flatMap((segment) => [segment.a, segment.b])];
   for (const feature of chart.features) {
     points.push(feature);
     if (feature.rangeNm) points.push(...[0, 90, 180, 270].map((bearing) => destinationPoint(feature, bearing, feature.rangeNm)));
-    const island = visibleIsland(feature);
+    const island = chartIsland(feature);
     if (island) {
       const bounds = islandWorldBounds(island, feature);
       points.push({ lat: bounds.minLat, lon: bounds.minLon }, { lat: bounds.maxLat, lon: bounds.maxLon });

@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.6.5
+
+### Added
+- A new `Island outlines` toggle in the View menu
+- Small icons on each chart tool
+
+### Changed
+- The measure line stays on the chart until you delete it or measure a new one
+- Drag either end of a selected measure line to adjust it
+- The View menu's `Bearing lines and fixes` toggle is now `Measure line` and applies to measure lines
+
+### Removed
+- Clear bearing lines from the File menu
+
+### Fixed
+- Route speed arrows step in whole and half knots instead of 3.1, 3.6, 4.1
+
 ## 0.6.3
 
 ### Added

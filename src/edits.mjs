@@ -55,10 +55,6 @@ export function updateSelectedFromForm(kind) {
       name: elements["route-name"].value.trim(),
       notes: elements["route-notes"].value.trim()
     });
-    if (kind === "bearing") Object.assign(updates, {
-      label: elements["bearing-label"].value.trim(),
-      bearing: parseBearing(elements["bearing-value"].value)
-    });
     if (kind === "wind") Object.assign(updates, {
       label: elements["wind-label"].value.trim(),
       bearing: parseBearing(elements["wind-direction"].value)

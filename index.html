@@ -27,7 +27,6 @@
           <button id="export-all" type="button">Back up all charts</button>
           <hr>
           <button id="clear-track" type="button">Clear imported track</button>
-          <button id="clear-bearings" type="button">Clear bearing lines</button>
           <button id="open-folder" type="button" hidden>Open save folder</button>
           <hr>
           <button id="open-settings" type="button" hidden>Settings</button>
@@ -48,9 +47,10 @@
           <label class="menu-check"><input id="layer-labels" type="checkbox" checked><span>Chart labels</span></label>
           <label class="menu-check"><input id="layer-track" type="checkbox" checked><span>Imported track</span></label>
           <label class="menu-check"><input id="layer-distances" type="checkbox" checked><span>Route distances</span></label>
-          <label class="menu-check"><input id="layer-bearings" type="checkbox" checked><span>Bearing lines and fixes</span></label>
+          <label class="menu-check"><input id="layer-measure" type="checkbox" checked><span>Measure line</span></label>
           <label class="menu-check"><input id="layer-winds" type="checkbox" checked><span>Wind indicators</span></label>
           <label class="menu-check"><input id="layer-boats" type="checkbox" checked><span>Boat markers</span></label>
+          <label class="menu-check"><input id="layer-islands" type="checkbox" checked><span>Island outlines</span></label>
           <hr>
           <label class="menu-check"><input id="layer-vanilla" type="checkbox"><span>Vanilla map</span></label>
           <label class="menu-check menu-check-sub"><input id="layer-secrets" type="checkbox"><span>Secret islands</span></label>
@@ -94,15 +94,15 @@
       <section class="panel-section">
         <h2>Chart tools</h2>
         <div class="tool-grid" role="toolbar" aria-label="Chart tools">
-          <button class="tool active" type="button" data-mode="select"><b>V</b><span>Select & pan</span></button>
-          <button class="tool" type="button" data-mode="location"><b>L</b><span>Add location</span></button>
-          <button class="tool" type="button" data-mode="route"><b>R</b><span>Plot route</span></button>
-          <button class="tool" type="button" data-mode="measure"><b>M</b><span>Measure</span></button>
-          <button class="tool" type="button" data-mode="area"><b>A</b><span>Rough area</span></button>
-          <button class="tool" type="button" data-mode="search"><b>S</b><span>Search area</span></button>
-          <button class="tool" type="button" data-mode="wind"><b>W</b><span>Add wind</span></button>
+          <button class="tool active" type="button" data-mode="select"><b>V</b><span>Select & pan</span><svg class="tool-icon icon-select" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 3.5v15.2l4.1-3.9 2.6 5.7 2.6-1.2-2.6-5.6 5.6-.4z" fill="currentColor" fill-opacity=".18" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg></button>
+          <button class="tool" type="button" data-mode="location"><b>L</b><span>Add location</span><svg class="tool-icon icon-location" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 21.5s-6.2-6.4-6.2-11.2a6.2 6.2 0 0 1 12.4 0c0 4.8-6.2 11.2-6.2 11.2z" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><circle cx="12" cy="10.2" r="2.3" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button>
+          <button class="tool" type="button" data-mode="route"><b>R</b><span>Plot route</span><svg class="tool-icon icon-route" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4.5 18 11.5 7.5 19.5 15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2 2.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="4.5" cy="18" r="2.4" fill="currentColor"/><circle cx="11.5" cy="7.5" r="2.4" fill="currentColor"/><circle cx="19.5" cy="15" r="2.4" fill="currentColor"/></svg></button>
+          <button class="tool" type="button" data-mode="measure"><b>M</b><span>Measure</span><svg class="tool-icon icon-measure" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><g transform="rotate(-35 12 12)"><rect x="2" y="8.5" width="20" height="7" rx="1.2" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 8.5v3M9 8.5v2M12.5 8.5v3M16 8.5v2M19.5 8.5v3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></g></svg></button>
+          <button class="tool" type="button" data-mode="area"><b>A</b><span>Rough area</span><svg class="tool-icon icon-area" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="8.5" fill="currentColor" fill-opacity=".14" stroke="currentColor" stroke-width="1.5" stroke-dasharray="3.2 2.2"/><circle cx="12" cy="12" r="1.8" fill="currentColor"/></svg></button>
+          <button class="tool" type="button" data-mode="search"><b>S</b><span>Search area</span><svg class="tool-icon icon-search" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 20.5 4.6 7.7a13 13 0 0 1 14.8 0z" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M12 20.5V5" stroke="currentColor" stroke-width="1.1" stroke-dasharray="1.6 2" stroke-linecap="round"/><circle cx="12" cy="20.5" r="1.7" fill="currentColor"/></svg></button>
+          <button class="tool" type="button" data-mode="wind"><b>W</b><span>Add wind</span><svg class="tool-icon icon-wind" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 9h10.5a2.6 2.6 0 1 0-2.6-2.6M3 13h15a2.8 2.8 0 1 1-2.8 2.8M3 17h7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
         </div>
-        <p id="mode-hint" class="hint">Drag the chart to pan. Select a mark, waypoint or bearing line to edit it.</p>
+        <p id="mode-hint" class="hint">Drag the chart to pan. Select a mark, waypoint or measure line to edit it.</p>
       </section>
 
       <div id="inspector-host"></div>
@@ -118,7 +118,7 @@
       <div id="route-summary" class="route-summary" aria-live="polite" hidden>
         <div><span id="route-summary-title">Route</span><strong id="route-distance">0 nm</strong></div>
         <div><span>Next bearing</span><strong id="route-bearing">—</strong></div>
-        <div><label for="route-speed">Speed kn</label><input id="route-speed" type="number" min="0.1" max="30" step="0.5"></div>
+        <div><label for="route-speed">Speed kn</label><input id="route-speed" type="number" max="30" step="0.5"></div>
         <div><span>Passage</span><strong id="route-eta">—</strong></div>
         <div id="route-actions" class="route-actions">
           <button id="save-route" type="button">Save route</button>
@@ -133,7 +133,7 @@
       <section id="empty-inspector" class="panel-section empty-state">
         <div class="empty-icon">⌖</div>
         <h2>Nothing selected</h2>
-        <p>Select a location, waypoint or bearing line to inspect it. Double-click the chart to add a location anywhere.</p>
+        <p>Select a location, waypoint or measure line to inspect it. Double-click the chart to add a location anywhere.</p>
       </section>
 
       <section id="feature-inspector" class="panel-section inspector" hidden>
@@ -204,20 +204,13 @@
         </form>
       </section>
 
-      <section id="bearing-inspector" class="panel-section inspector" hidden>
+      <section id="measure-inspector" class="panel-section inspector" hidden>
         <div class="section-heading">
-          <div><div class="eyebrow">Selected bearing</div><h2>Edit bearing line</h2></div>
-          <button id="delete-bearing" class="danger icon-button" type="button" title="Delete bearing line" aria-label="Delete bearing line">×</button>
+          <div><div class="eyebrow">Measure line</div><h2>Measured distance</h2></div>
+          <button id="delete-measure" class="danger icon-button" type="button" title="Delete measure line" aria-label="Delete measure line">×</button>
         </div>
-        <form id="bearing-form" class="stack-form">
-          <label>Sighted <input id="bearing-label" maxlength="100" placeholder="What you took the bearing to"></label>
-          <div class="two-columns">
-            <label>From latitude <input id="bearing-lat" inputmode="decimal"></label>
-            <label>From longitude <input id="bearing-lon" inputmode="decimal"></label>
-          </div>
-          <label>Bearing <input id="bearing-value" inputmode="decimal"></label>
-        </form>
-        <div id="bearing-fixes" class="fix-list"></div>
+        <div id="measure-detail" class="leg-detail"></div>
+        <p class="fineprint">Drag either end to adjust the line. Measuring again replaces it.</p>
       </section>
 
       <section id="search-inspector" class="panel-section inspector" hidden>
@@ -270,7 +263,7 @@
 
       <section class="panel-section locations-section">
         <div class="section-heading"><h2>Chart items</h2><span id="feature-count" class="count">0</span></div>
-        <div class="list-actions"><select id="item-filter" aria-label="Filter chart items"><option value="all">All chart items</option><option value="feature">Locations</option><option value="route">Waypoints</option><option value="saved-route">Saved routes</option><option value="search">Search areas</option><option value="bearing">Bearings</option><option value="wind">Wind</option></select></div>
+        <div class="list-actions"><select id="item-filter" aria-label="Filter chart items"><option value="all">All chart items</option><option value="feature">Locations</option><option value="route">Waypoints</option><option value="saved-route">Saved routes</option><option value="search">Search areas</option><option value="measure">Measure line</option><option value="wind">Wind</option></select></div>
         <input id="feature-search" class="search" type="search" placeholder="Search chart items" aria-label="Search chart items">
         <div id="feature-list" class="feature-list"></div>
       </section>
@@ -316,7 +309,7 @@
         <div><kbd data-shortcut="select">V</kbd><span>Select marks and pan the chart</span></div>
         <div><kbd data-shortcut="location">L</kbd><span>Add a location</span></div>
         <div><kbd data-shortcut="route">R</kbd><span>Plot route waypoints</span></div>
-        <div><kbd data-shortcut="measure">M</kbd><span>Measure a temporary bearing and distance</span></div>
+        <div><kbd data-shortcut="measure">M</kbd><span>Measure: drag between two points, or click each end, for the distance, bearing and passage time. The line stays until you delete it or measure again.</span></div>
         <div><kbd data-shortcut="area">A</kbd><span>Rough area: press where it is centred and drag out the radius. Drag the edge of a selected area to resize it.</span></div>
         <div><kbd data-shortcut="search">S</kbd><span>Search area: press on the port or position that gave the direction, drag toward it and let go at the distance. The direction snaps to compass points.</span></div>
         <div><kbd>Space</kbd><span>Hold while dragging to pan from any tool</span></div>

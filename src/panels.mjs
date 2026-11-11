@@ -1,12 +1,11 @@
 // Renders the side panels: chart header, layers, route summary, inspectors and the chart item list.
-import { anchorTarget, bearingFixes, chartItemFocusPoint, formatCoordinate, formatDuration, savedRouteForPoint, searchExtent, summarizeRoute } from "./model.mjs";
+import { anchorTarget, bearingDegrees, chartItemFocusPoint, distanceNm, formatCoordinate, formatDuration, savedRouteForPoint, searchExtent, summarizeRoute } from "./model.mjs";
 import { assignedIsland, searchIsland, visibleIsland } from "./islands.mjs";
 import { assignedBoat } from "./boats.mjs";
 import { formatBearing, formatDirection, formatLeg, formatNm, plainDegrees } from "./format.mjs";
 import { elements } from "./dom.mjs";
 import { activeChart, isSelected, selectItem, selectedItem, selectedKeys, selection, updateUndoButtons, workspace } from "./state.mjs";
 import { centerOn, drawChart } from "./render.mjs";
-import { addLocation } from "./edits.mjs";
 
 export function renderEverything() {
   renderHeader();
@@ -46,9 +45,10 @@ function renderLayerControls() {
   elements["layer-labels"].checked = layers.labels;
   elements["layer-track"].checked = layers.track;
   elements["layer-distances"].checked = layers.routeDistances;
-  elements["layer-bearings"].checked = layers.bearings;
+  elements["layer-measure"].checked = layers.measure;
   elements["layer-winds"].checked = layers.winds;
   elements["layer-boats"].checked = layers.boats;
+  elements["layer-islands"].checked = layers.islands;
   elements["layer-vanilla"].checked = layers.vanillaMap;
   // Secret islands and trade winds are parts of the vanilla map, so they keep their setting but wait for it.
   for (const [elementId, key] of [["layer-secrets", "secretIslands"], ["layer-trade-winds", "tradeWinds"]]) {
@@ -56,7 +56,6 @@ function renderLayerControls() {
     elements[elementId].disabled = !layers.vanillaMap;
   }
   elements["clear-track"].disabled = activeChart().track.length === 0;
-  elements["clear-bearings"].disabled = activeChart().bearings.length === 0;
 }
 
 // Shows the active route, or a saved route while it or one of its waypoints is selected.
@@ -81,17 +80,17 @@ export function renderInspector() {
   const isFeature = selection?.kind === "feature" && item;
   const isRoute = (selection?.kind === "route" || selection?.kind === "saved-point") && item;
   const isSavedRoute = selection?.kind === "saved-route" && item;
-  const isBearing = selection?.kind === "bearing" && item;
+  const isMeasure = selection?.kind === "measure" && item;
   const isSearch = selection?.kind === "search" && item;
   const isWind = selection?.kind === "wind" && item;
   elements["empty-inspector"].hidden = Boolean(item);
   elements["feature-inspector"].hidden = !isFeature;
   elements["route-inspector"].hidden = !isRoute;
   elements["saved-route-inspector"].hidden = !isSavedRoute;
-  elements["bearing-inspector"].hidden = !isBearing;
+  elements["measure-inspector"].hidden = !isMeasure;
   elements["search-inspector"].hidden = !isSearch;
   elements["wind-inspector"].hidden = !isWind;
-  if (isBearing) renderBearingInspector(item);
+  if (isMeasure) renderMeasureInspector(item);
   if (isSearch) renderSearchInspector(item);
   if (isWind) {
     elements["wind-label"].value = item.label;
@@ -155,32 +154,17 @@ function renderSavedRouteInspector(route) {
   ].join("\n");
 }
 
-function renderBearingInspector(bearing) {
-  elements["bearing-label"].value = bearing.label;
-  elements["bearing-lat"].value = bearing.lat.toFixed(4);
-  elements["bearing-lon"].value = bearing.lon.toFixed(4);
-  elements["bearing-value"].value = bearing.bearing.toFixed(1);
-  const bearings = activeChart().bearings;
-  const fixes = bearingFixes(bearings).filter((fix) => fix.ids.includes(bearing.id));
-  const rows = fixes.map((fix) => {
-    const other = bearings.find((candidate) => candidate.id === fix.ids.find((id) => id !== bearing.id));
-    const row = document.createElement("div");
-    row.className = "fix-row";
-    row.innerHTML = `<span><strong></strong><small></small></span><button type="button">Add location</button>`;
-    row.querySelector("strong").textContent = `Crosses ${other.label || formatBearing(other.bearing)}`;
-    row.querySelector("small").textContent = `${formatCoordinate(fix.lat, "lat", 3)} · ${formatCoordinate(fix.lon, "lon", 3)} · ${Math.round(fix.cut)}° cut${fix.cut < 30 ? " (weak)" : ""}`;
-    row.querySelector("button").addEventListener("click", () => {
-      addLocation(fix, bearing.label || other.label || "Bearing fix", { notes: `Fixed by bearings ${formatBearing(bearing.bearing)} and ${formatBearing(other.bearing)}${fix.cut < 30 ? " (weak cut)" : ""}.` });
-    });
-    return row;
-  });
-  if (!rows.length) {
-    const empty = document.createElement("p");
-    empty.className = "fineprint";
-    empty.textContent = "Take another bearing to the same object from a different position to fix it.";
-    rows.push(empty);
-  }
-  elements["bearing-fixes"].replaceChildren(...rows);
+function renderMeasureInspector(measure) {
+  const nm = distanceNm(measure, measure.end);
+  const speed = activeChart().speedKn;
+  const at = (point) => `${formatCoordinate(point.lat, "lat", 3)} · ${formatCoordinate(point.lon, "lon", 3)}`;
+  elements["measure-detail"].textContent = [
+    `${formatNm(nm)} nm · ${formatBearing(bearingDegrees(measure, measure.end))}`,
+    `Back: ${formatBearing(bearingDegrees(measure.end, measure))}`,
+    `${formatDuration(nm / speed)} at ${speed} kn`,
+    `From ${at(measure)}`,
+    `To ${at(measure.end)}`
+  ].join("\n");
 }
 
 function renderSearchInspector(search) {
@@ -228,11 +212,11 @@ export function renderFeatureList() {
       marker: "◇"
     })),
     ...chart.searches.map((item) => ({ kind: "search", item, name: item.label || "Search area", detail: `${formatDirection(item.bearing)} · ${formatNm(item.distanceNm)} nm${assignedBoat(item) ? ` · ${assignedBoat(item).name}` : ""}`, marker: "⌖" })),
-    ...chart.bearings.map((item) => ({ kind: "bearing", item, name: item.label || "Bearing", detail: formatBearing(item.bearing), marker: "↗" })),
+    ...chart.measures.map((item) => ({ kind: "measure", item, name: "Measure line", detail: `${formatNm(distanceNm(item, item.end))} nm · ${formatBearing(bearingDegrees(item, item.end))}`, marker: "↔" })),
     ...chart.winds.map((item) => ({ kind: "wind", item, name: item.label || "Wind", detail: `Flows toward ${formatDirection(item.bearing)}`, marker: "➤" }))
   ].filter((entry) => (filter === "all" || entry.kind === filter)
     && `${entry.name} ${entry.detail} ${assignedBoat(entry.item)?.provider ?? ""} ${entry.item.notes ?? ""} ${entry.search ?? ""}`.toLowerCase().includes(query));
-  elements["feature-count"].textContent = chart.features.length + chart.route.length + chart.savedRoutes.length + chart.searches.length + chart.bearings.length + chart.winds.length;
+  elements["feature-count"].textContent = chart.features.length + chart.route.length + chart.savedRoutes.length + chart.searches.length + chart.measures.length + chart.winds.length;
   elements["feature-list"].replaceChildren(...items.map((entry) => {
     const { kind, item } = entry;
     const focus = chartItemFocusPoint(kind, item);
