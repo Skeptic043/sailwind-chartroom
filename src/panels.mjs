@@ -105,6 +105,7 @@ export function renderInspector() {
     elements["feature-title"].textContent = isArea ? "Edit rough area" : "Edit location";
     elements["feature-type"].value = isArea ? "area" : "location";
     elements["feature-name"].value = item.name;
+    elements["feature-show-name"].checked = item.showName !== false;
     elements["feature-lat"].value = item.lat.toFixed(4);
     elements["feature-lon"].value = item.lon.toFixed(4);
     elements["feature-day"].value = item.day;

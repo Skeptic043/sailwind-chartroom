@@ -1,17 +1,21 @@
-name: macOS release candidate
+name: macOS release
 
-# Pushing a tag such as mac-v0.6.0-rc.1 builds and tests that version, then leaves a draft prerelease
-# holding the ZIP and a workflow artifact holding the updated appcast. Nothing is public until the
-# draft is published and the appcast is pushed to the appcast branch.
+# Builds and tests the macOS app for a pushed tag, then leaves the ZIP on a draft release and the
+# updated appcast in a workflow artifact. Nothing is public until the draft is published and the
+# appcast is pushed to the appcast branch.
+#
+#   mac-v0.6.0-rc.1  a release candidate: a draft prerelease, offered only to builds on the rc channel
+#   v0.6.0           a release: the ZIP joins that version's release beside the Windows ZIP, and the
+#                    appcast offers it to every build, candidates included
 on:
   push:
-    tags: ["mac-v*-rc.*"]
+    tags: ["mac-v*-rc.*", "v[0-9]+.[0-9]+.[0-9]+"]
 
 permissions:
   contents: write
 
 jobs:
-  candidate:
+  release:
     runs-on: macos-15
     env:
       GH_TOKEN: ${{ github.token }}
@@ -22,7 +26,17 @@ jobs:
         with:
           node-version: 22
       - name: Read the version from the tag
-        run: echo "VERSION=${GITHUB_REF_NAME#mac-v}" >> "$GITHUB_ENV"
+        run: |
+          version=${GITHUB_REF_NAME#mac-}
+          version=${version#v}
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          if [[ $version == *-rc.* ]]; then
+            echo "CHANNEL=--channel rc" >> "$GITHUB_ENV"
+            echo "PRERELEASE=--prerelease" >> "$GITHUB_ENV"
+            echo "TITLE=Sailwind Chartroom $version for macOS" >> "$GITHUB_ENV"
+          else
+            echo "TITLE=Sailwind Chartroom $version" >> "$GITHUB_ENV"
+          fi
       - name: Package
         run: bash macos/scripts/package.sh "$VERSION" "$RUNNER_TEMP/packages"
       - name: Check the signing key matches the app
@@ -40,21 +54,27 @@ jobs:
           # Earlier versions stay listed: start from the published appcast when there is one.
           if git fetch --quiet origin appcast 2>/dev/null; then git show FETCH_HEAD:appcast.xml > "$feed/appcast.xml"; fi
           cp "$RUNNER_TEMP/packages/SailwindChartroom-macos-universal-$VERSION.zip" "$feed/"
+          # CHANNEL is empty for a release, which puts it on the channel every build follows.
           echo "$SPARKLE_PRIVATE_KEY" | macos/.build/artifacts/sparkle/Sparkle/bin/generate_appcast --ed-key-file - \
             --download-url-prefix "https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/" \
-            --link "https://github.com/$GITHUB_REPOSITORY/releases" --channel rc --maximum-deltas 0 "$feed"
+            --link "https://github.com/$GITHUB_REPOSITORY/releases" $CHANNEL --maximum-deltas 0 "$feed"
           cat "$feed/appcast.xml"
       - name: Keep the appcast and test reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: macos-release-candidate
+          name: macos-release
           if-no-files-found: ignore
           path: |
             ${{ runner.temp }}/feed/appcast.xml
             ${{ runner.temp }}/smoke/*.json
             ${{ runner.temp }}/smoke/*.png
-      - name: Create the draft prerelease
+      - name: Add the ZIP to the release
         run: |
-          gh release create "$GITHUB_REF_NAME" "$RUNNER_TEMP/packages/SailwindChartroom-macos-universal-$VERSION.zip" \
-            --draft --prerelease --verify-tag --title "Sailwind Chartroom $VERSION for macOS" --notes "Draft."
+          zip="$RUNNER_TEMP/packages/SailwindChartroom-macos-universal-$VERSION.zip"
+          # A release may already hold this version's Windows ZIP; otherwise a draft is started for it.
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "$zip" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "$zip" --draft $PRERELEASE --verify-tag --title "$TITLE" --notes "Draft."
+          fi

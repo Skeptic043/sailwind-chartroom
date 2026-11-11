@@ -41,7 +41,7 @@ function chartLabelCandidates() {
   };
   // The player's own names come first; a vanilla name shows only where it has room.
   for (const island of vanillaIslands()) if (!island.partOf) add("vanilla", island.id, island.name, island.sourceCenter, false, 60);
-  for (const feature of chart.features) add("feature", feature.id, feature.name, feature, isSelected("feature", feature.id), 0);
+  for (const feature of chart.features) if (feature.showName !== false) add("feature", feature.id, feature.name, feature, isSelected("feature", feature.id), 0);
   for (const search of chart.searches) {
     const selected = isSelected("search", search.id);
     if (search.label && !namedSearchLabels.has(search.id) && !selected) continue;
@@ -545,13 +545,19 @@ function drawTradeWinds(width, height, palette) {
   const northwest = screenToWorld(0, 0);
   const southeast = screenToWorld(width, height);
   const first = (value) => Math.floor(value / step) * step + step / 2;
-  context.strokeStyle = palette.track;
-  context.fillStyle = palette.track;
+  const latitudes = [];
+  for (let lat = first(southeast.lat); lat <= northwest.lat && lat < 90; lat += step) latitudes.push(lat);
+  // The Al'Ankh and Emerald winds blow in bands only two and three degrees tall. Once the rows are
+  // further apart than that, the bands get a row of their own so they never drop off the chart.
+  const rows = step > 2 ? [...latitudes.filter((lat) => lat < 30 || lat > 33), 31] : latitudes;
+  const colours = { aestrin: palette.bearing, alankh: palette.accent, emerald: palette.track };
   context.lineWidth = 1.5;
   for (let lon = first(northwest.lon); lon <= southeast.lon; lon += step) {
-    for (let lat = first(southeast.lat); lat <= northwest.lat; lat += step) {
+    for (const lat of rows) {
       const wind = tradeWindAt(lat, lon);
       if (!wind) continue;
+      context.strokeStyle = colours[wind.zone];
+      context.fillStyle = colours[wind.zone];
       const centre = worldToScreen({ lat, lon });
       const half = TRADE_WIND_ARROW_PX / 2;
       context.save();

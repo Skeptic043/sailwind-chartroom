@@ -519,13 +519,13 @@ const LANDMARK_LABEL_PRIORITY = new Map([
   ["fort aestrin", 3]
 ]);
 
-// The game's permanent trade wind at a position, as the east and north parts of the direction it
-// blows toward, or null where there is none. These are the game's three wind zones.
+// The game's permanent trade wind at a position: which of its three wind zones this is, and the east
+// and north parts of the direction the wind blows toward. Null where there is none.
 export function tradeWindAt(lat, lon) {
   if (lat < 30) return null;
-  if (lat > 33) return { east: 1, north: 0.5 };
-  if (lon < -2) return { east: 0.75, north: 0.75 };
-  if (lat < 32) return { east: -1, north: -0.5 };
+  if (lat > 33) return { zone: "aestrin", east: 1, north: 0.5 };
+  if (lon < -2) return { zone: "alankh", east: 0.75, north: 0.75 };
+  if (lat < 32) return { zone: "emerald", east: -1, north: -0.5 };
   return null;
 }
 
@@ -608,6 +608,7 @@ function sanitizeFeature(value) {
     rangeNm: clampNumber(value.rangeNm, 0, MAX_RANGE_NM, 0),
     ...(islandId && { islandId }),
     showIsland: value.showIsland !== false,
+    ...(value.showName === false && { showName: false }),
     ...(boatId && { boatId, boatCorner: "se", showBoat: true })
   };
 }

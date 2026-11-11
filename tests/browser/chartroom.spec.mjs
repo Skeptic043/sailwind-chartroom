@@ -62,6 +62,23 @@ test("drags out a search area that snaps to a compass point", async ({ chartroom
   expect(search.distanceNm).toBeGreaterThan(0);
 });
 
+test("a location can hide its name on the chart", async ({ chartroom, page }) => {
+  await chartroom.open();
+  await chartroom.press("l");
+  await chartroom.clickChart(500, 400);
+  await page.locator("#feature-name").fill("Quiet cove");
+  await page.locator("#feature-name").blur();
+  const picture = () => page.locator("#chart-canvas").evaluate((canvas) => canvas.toDataURL());
+  const named = await picture();
+  await expect(page.locator("#feature-show-name")).toBeChecked();
+  await page.locator("#feature-show-name").uncheck();
+  expect((await chartroom.chart()).features[0].showName).toBe(false);
+  expect(await picture()).not.toBe(named);
+  await page.locator("#feature-show-name").check();
+  expect((await chartroom.chart()).features[0].showName).toBeUndefined();
+  expect(await picture()).toBe(named);
+});
+
 test("a search area takes an island from the library and can drop it again", async ({ chartroom, page }) => {
   await chartroom.open();
   await chartroom.press("s");

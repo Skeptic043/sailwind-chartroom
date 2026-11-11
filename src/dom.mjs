@@ -7,7 +7,7 @@ export const elements = Object.fromEntries([
   "import-track", "paste-track", "import-json", "export-json", "export-csv", "export-all", "clear-track", "clear-bearings",
   "cursor-coordinates", "zoom-label", "hover-info", "route-summary", "route-summary-title", "route-actions", "route-distance", "route-bearing", "route-speed", "route-eta", "save-route", "clear-route", "toast",
   "empty-inspector", "feature-inspector", "feature-kind", "feature-title", "feature-form", "feature-type", "feature-name", "feature-lat", "feature-lon", "feature-day", "feature-time", "feature-range-row", "feature-range", "feature-notes", "delete-feature",
-  "feature-selection-note", "feature-island-status", "choose-feature-island", "feature-boat-status", "choose-feature-boat", "feature-navigation", "resolve-feature",
+  "feature-show-name", "feature-selection-note", "feature-island-status", "choose-feature-island", "feature-boat-status", "choose-feature-boat", "feature-navigation", "resolve-feature",
   "route-inspector", "route-form", "route-point-kind", "route-name", "route-lat", "route-lon", "route-notes", "route-leg-detail", "delete-route-point", "select-saved-route",
   "saved-route-inspector", "saved-route-form", "saved-route-name", "saved-route-visible", "saved-route-detail", "delete-saved-route",
   "bearing-inspector", "bearing-form", "bearing-label", "bearing-lat", "bearing-lon", "bearing-value", "bearing-fixes", "delete-bearing",

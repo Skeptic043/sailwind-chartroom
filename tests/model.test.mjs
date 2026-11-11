@@ -235,9 +235,9 @@ test("vanilla map layers start off and trade winds follow the game's zones", () 
   chart.layers = { grid: true, vanillaMap: true, tradeWinds: true };
   const restored = sanitizeWorkspace({ activeChartId: chart.id, charts: [chart] }).charts[0].layers;
   assert.deepEqual([restored.vanillaMap, restored.secretIslands, restored.tradeWinds], [true, false, true]);
-  assert.deepEqual(tradeWindAt(40, 0), { east: 1, north: 0.5 });
-  assert.deepEqual(tradeWindAt(31, -10), { east: 0.75, north: 0.75 });
-  assert.deepEqual(tradeWindAt(31, 5), { east: -1, north: -0.5 });
+  assert.deepEqual(tradeWindAt(40, 0), { zone: "aestrin", east: 1, north: 0.5 });
+  assert.deepEqual(tradeWindAt(31, -10), { zone: "alankh", east: 0.75, north: 0.75 });
+  assert.deepEqual(tradeWindAt(31, 5), { zone: "emerald", east: -1, north: -0.5 });
   assert.equal(tradeWindAt(32.5, 5), null);
   assert.equal(tradeWindAt(28, 3), null);
 });
