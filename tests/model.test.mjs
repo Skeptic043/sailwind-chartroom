@@ -44,7 +44,7 @@ import {
   tradeWindAt,
   translateChartItems
 } from "../src/model.mjs";
-import { ISLAND_CATALOG, VANILLA_ISLANDS, assignedIsland, islandById, islandByName, normalizeIslandName, searchIsland, visibleIsland } from "../src/islands.mjs";
+import { ISLAND_CATALOG, ISLAND_GROUPS, VANILLA_ISLANDS, assignedIsland, islandGroup, islandById, islandByName, normalizeIslandName, searchIsland, visibleIsland } from "../src/islands.mjs";
 import { BOAT_CATALOG, assignedBoat, boatById, boatMarkerSize, visibleBoat } from "../src/boats.mjs";
 
 test("parses decimal and degree-minute-second coordinates", () => {
@@ -222,7 +222,7 @@ test("Fire Fish Lagoon islands carry only their own town and rocks", () => {
   }
   assert.equal(lagoon.filter((island) => island.partOf === "firefish/fire_fish_islands").length, 9);
   assert.ok(islandById("firefish/fire_fish_islands"), "charts that placed the whole lagoon keep their outline");
-  assert.equal(VANILLA_ISLANDS.length, ISLAND_CATALOG.length - 1, "the vanilla map draws the lagoon from its pieces, once");
+  assert.equal(VANILLA_ISLANDS.length, ISLAND_CATALOG.filter((island) => !island.provider).length - 1, "the vanilla map draws the lagoon from its pieces, once");
   // The source map saved Sen'na by the centre of every lagoon rock; the import moves it onto the island.
   const senna = importLegacyMap({ islands: { "firefish/senna": { x: 2.9504, y: 28.1807 } } }).features[0];
   assert.ok(Math.abs(senna.lon - 2.78) < 0.01 && Math.abs(senna.lat - 28.19) < 0.01);
@@ -320,6 +320,35 @@ test("wind markers have no distracting default label", () => {
   assert.equal(restored.label, "");
 });
 
+test("the island library lists islands by group, small islands and mod islands last", () => {
+  const groups = ISLAND_CATALOG.map(islandGroup);
+  assert.deepEqual([...new Set(groups)], ISLAND_GROUPS, "each group appears once, in menu order");
+  const smallIslands = ISLAND_CATALOG.filter((island) => islandGroup(island) === "Small Islands").map((island) => island.name);
+  assert.deepEqual(smallIslands, ["Chronos", "Happy Bay", "Mirage Mountain", "Oasis", "Saffron", "Eleann Island", "Rock of Despair"], "ports first, then islands without one");
+  assert.equal(islandGroup(islandByName("Oracle")), "Aestrin");
+  assert.equal(islandGroup(islandByName("Bone Isle")), "Aestrin");
+  assert.equal(islandGroup(islandByName("Isle of Clear Mind")), "Al’Ankh");
+  assert.equal(islandByName("Rock of Despair").secret, false);
+  const aestrin = ISLAND_CATALOG.filter((island) => islandGroup(island) === "Aestrin").map((island) => island.name);
+  assert.deepEqual(aestrin.slice(-2), ["Bone Isle", "Oracle"], "islands without a port follow the ports");
+  const bottleneck = islandByName("Bottleneck Isle");
+  assert.equal(islandGroup(bottleneck), "Mod Islands");
+  assert.equal(VANILLA_ISLANDS.includes(bottleneck), false, "the vanilla map does not draw mod islands");
+  assert.equal(islandById("firefish/fire_fish_islands/west_islet"), ISLAND_CATALOG[ISLAND_CATALOG.indexOf(islandById("firefish/fire_fish_islands")) + 1], "lagoon pieces follow the lagoon");
+});
+
+test("the boat library lists stock boats by region, then each mod together, small to large", () => {
+  const names = BOAT_CATALOG.map((boat) => boat.name);
+  assert.deepEqual(names.slice(0, 8), ["Dhow", "Sanbuq", "Baghlah (Bigbuq)", "Kakam", "Junk", "Jong", "Cog", "Brig"]);
+  const providers = BOAT_CATALOG.slice(8).map((boat) => boat.provider);
+  assert.deepEqual(providers.filter((provider, index) => provider !== providers[index - 1]), [...new Set(providers)], "a mod's boats stay together");
+  const rank = { Small: 0, Medium: 1, Large: 2 };
+  for (const provider of new Set(providers)) {
+    const sizes = BOAT_CATALOG.filter((boat) => boat.provider === provider).map((boat) => rank[boat.size]);
+    assert.deepEqual(sizes, [...sizes].sort(), `${provider} runs small to large`);
+  }
+});
+
 test("formats passage times", () => {
   assert.equal(formatDuration(0.5), "30m");
   assert.equal(formatDuration(2.25), "2h 15m");
@@ -328,8 +357,8 @@ test("formats passage times", () => {
 });
 
 test("bundles the licensed island catalog and matches location names exactly", () => {
-  assert.equal(ISLAND_CATALOG.length, 49);
-  assert.equal(new Set(ISLAND_CATALOG.map((island) => island.id)).size, 49);
+  assert.equal(ISLAND_CATALOG.length, 50);
+  assert.equal(new Set(ISLAND_CATALOG.map((island) => island.id)).size, 50);
   assert.equal(islandByName("Chronos").region, "Aestrin");
   assert.equal(islandByName("  dead COVE ").id, "emerald/dead_cove");
   assert.equal(normalizeIslandName("Al’Nilem"), normalizeIslandName("Al'Nilem"));

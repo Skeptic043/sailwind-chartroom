@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.6.3
+
+### Added
+- Bottleneck Isle from Better Ports in the island library
+
+### Changed
+- Reworked region filters for island selection to make more sense
+- Boats are sorted by region then size, with mod boats being grouped together
+
+### Fixed
+- Rock of Despair is no longer marked as a secret island
+
 ## 0.6.1
 
 ### Added

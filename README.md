@@ -37,6 +37,7 @@ Charts save automatically to `%APPDATA%\Sailwind Chartroom` on Windows and `~/Li
 ## Credits
 
 - Island outlines and large amounts of inspiration come from the [Sailwind Web Map](https://github.com/MoffKalast/Sailwind-Map) by MoffKalast and Sycosys/Fizzygig, used under the MIT License. See [THIRD-PARTY-NOTICES.md](https://github.com/Skeptic043/sailwind-chartroom/blob/main/THIRD-PARTY-NOTICES.md).
+- The Bottleneck Isle outline is traced from [Better Ports](https://github.com/winterspices/BetterPorts) by winterspices.
 - Reads tracks from [Coordinate Viewer](https://github.com/AppSailwindMods/CoordinateViewer).
 - Boat markers include boats from [Age of Exploration](https://thunderstore.io/c/sailwind/p/WinterSpicesEnterprises/AgeOfExploration/) and [HMS Leopard](https://github.com/winterspices/HMSLeopard) by winterspices, [Dinghies](https://thunderstore.io/c/sailwind/p/Pr0SkyNesis/Dinghies/) and [Paraw](https://github.com/alesparise/FFLParaw-Sailwind-Mod) by Pr0SkyNesis/alesparise, Old Chronian by Aquilartz, Happy Bay Boat by jazzpirat, and Shattered Seas by [TheOriginOfAllEvil](https://github.com/TheOriginOfAllEvil).
 - The Sailwind theme's paper is [old paper](https://opengameart.org/content/old-paper) by Flixberry Entertainment, and its tool scrolls are [Scroll UI Container](https://opengameart.org/content/scroll-ui-container) by Chloe Wolfe, both CC0.

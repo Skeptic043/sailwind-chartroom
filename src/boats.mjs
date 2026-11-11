@@ -31,31 +31,30 @@ function boat(id, name, provider, size, lengthM, profile) {
 
 // These are deliberately compact chart symbols. Their hull and rig combinations make the
 // boats distinguishable at a glance; they are not measured drawings of the game meshes.
+// Listed in library order: the stock boats by home region (Al'Ankh, Emerald, Aestrin), then each mod's
+// boats together, mods alphabetically. Each group runs from small to large.
 export const BOAT_CATALOG = Object.freeze([
   boat("vanilla/dhow", "Dhow", "Vanilla", "Small", 13.2, { hull: "dhow", rigs: [rig(42, 7, "lateen", 36, 1)], bowsprit: true }),
   boat("vanilla/sanbuq", "Sanbuq", "Vanilla", "Medium", 24.1, { hull: "sanbuq", rigs: [rig(36, 5, "lateen", 32, 1), rig(68, 10, "lateen", 24, 1)], structures: [[[69, 23], [83, 23], [86, 28], [68, 29]]], bowsprit: true }),
   boat("vanilla/baghlah", "Baghlah (Bigbuq)", "Vanilla", "Large", 27.8, { hull: "baghlah", rigs: [rig(38, 5, "lateen", 34, 1), rig(69, 9, "lateen", 25, 1)], structures: [[[5, 17], [21, 17], [26, 27], [7, 27]]], bowsprit: true, sternFlag: true }),
+  boat("vanilla/kakam", "Kakam", "Vanilla", "Small", 12.5, { hull: "kakam", rigs: [rig(52, 8, "junk", 25, 1)], structures: [[[11, 27], [37, 27], [34, 31], [13, 31]]] }),
+  boat("vanilla/junk", "Junk", "Vanilla", "Medium", 24.0, { hull: "junk", rigs: [rig(38, 5, "junk", 27, -1), rig(69, 9, "junk", 22, 1)], structures: [[[7, 22], [27, 22], [33, 29], [9, 29]]] }),
+  boat("vanilla/jong", "Jong", "Vanilla", "Large", 31.4, { hull: "jong", rigs: [rig(29, 7, "junk", 23, -1), rig(53, 3, "junk", 28, 1), rig(76, 9, "junk", 20, 1)], structures: [[[6, 20], [27, 20], [33, 28], [8, 28]]] }),
   boat("vanilla/cog", "Cog", "Vanilla", "Small", 14.6, { hull: "cog", rigs: [rig(48, 5, "square", 30), rig(49, 8, "staysail", 39, 1, { mast: false })], structures: [[[7, 21], [24, 21], [29, 28], [8, 28]]] }),
   boat("vanilla/brig", "Brig", "Vanilla", "Medium", 29.7, { hull: "brig", rigs: [rig(39, 3, "square", 25, 1, { tiers: 2 }), rig(68, 5, "square", 23, 1, { tiers: 2 })], structures: [[[5, 23], [25, 23], [30, 30], [7, 30]]], bowsprit: true }),
-  boat("vanilla/jong", "Jong", "Vanilla", "Large", 31.4, { hull: "jong", rigs: [rig(29, 7, "junk", 23, -1), rig(53, 3, "junk", 28, 1), rig(76, 9, "junk", 20, 1)], structures: [[[6, 20], [27, 20], [33, 28], [8, 28]]] }),
-  boat("vanilla/junk", "Junk", "Vanilla", "Medium", 24.0, { hull: "junk", rigs: [rig(38, 5, "junk", 27, -1), rig(69, 9, "junk", 22, 1)], structures: [[[7, 22], [27, 22], [33, 29], [9, 29]]] }),
-  boat("vanilla/kakam", "Kakam", "Vanilla", "Small", 12.5, { hull: "kakam", rigs: [rig(52, 8, "junk", 25, 1)], structures: [[[11, 27], [37, 27], [34, 31], [13, 31]]] }),
-
-  boat("happy-bay/boat", "Happy Bay Boat", "Happy Bay Boat", "Medium", 18.6, { hull: "happyBay", rigs: [rig(47, 5, "junk", 25, 1), rig(70, 10, "junk", 20, 1), rig(71, 11, "staysail", 21, 1, { mast: false })], structures: [[[5, 18], [25, 18], [31, 23], [29, 29], [6, 29]]], bowsprit: true }),
-  boat("shattered-seas/clipper", "Clipper", "Shattered Seas", "Large", 39.5, { hull: "clipper", rigs: [rig(30, 3, "square", 22, 1, { tiers: 2 }), rig(52, 2, "square", 24, 1, { tiers: 2 }), rig(74, 5, "square", 20, 1, { tiers: 2 })], structures: [[[4, 21], [21, 21], [27, 30], [6, 30]]], bowsprit: true, sternFlag: true }),
-  boat("shattered-seas/shba", "Sh'ba", "Shattered Seas", "Medium", 19.2, { hull: "shba", rigs: [rig(40, 6, "gaff", 24, -1), rig(69, 10, "lateen", 21, 1)], structures: [[[8, 24], [23, 24], [29, 31], [10, 31]]], bowsprit: true }),
-
-  boat("old-chronian/gloriana", "Gloriana", "Old Chronian", "Large", 35.5, { hull: "gloriana", rigs: [rig(29, 6, "square", 20, 1, { tiers: 2 }), rig(51, 2, "square", 25, 1, { tiers: 2 }), rig(74, 8, "lateen", 19, 1)], structures: [[[4, 14], [21, 14], [28, 26], [6, 26]]], bowsprit: true, sternFlag: true }),
-  boat("old-chronian/aelasyl", "Aelasyl", "Old Chronian", "Large", 43.4, { hull: "aelasyl", rigs: [rig(27, 4, "lateen", 24, -1), rig(51, 1, "square", 25, 1, { tiers: 2 }), rig(75, 5, "lateen", 22, 1)], structures: [[[4, 14], [21, 14], [28, 25], [6, 25]]], bowsprit: true, sternFlag: true }),
-  boat("old-chronian/caelanor", "Caelanor", "Old Chronian", "Medium", 21.6, { hull: "caelanor", rigs: [rig(39, 5, "square", 23), rig(68, 9, "gaff", 21, 1)], structures: [[[8, 20], [25, 20], [31, 29], [10, 29]]], bowsprit: true }),
-  boat("old-chronian/gallus", "Gallus", "Old Chronian", "Small", 13.6, { hull: "gallus", rigs: [rig(52, 6, "gaff", 25, 1)], structures: [[[11, 25], [25, 25], [30, 33], [13, 33]]], bowsprit: true }),
-
-  boat("hms-leopard/leopard", "HMS Leopard", "HMS Leopard", "Large", 53.0, { hull: "leopard", rigs: [rig(30, 2, "square", 21, 1, { tiers: 2 }), rig(52, 1, "square", 24, 1, { tiers: 2 }), rig(74, 4, "square", 20, 1, { tiers: 2 })], structures: [[[3, 12], [20, 12], [28, 24], [5, 24]]], bowsprit: true, gunports: 8, sternFlag: true }),
 
   boat("age-of-exploration/santa-maria", "Santa Maria", "Age of Exploration", "Medium", null, { hull: "santaMaria", rigs: [rig(31, 7, "square", 19), rig(53, 3, "square", 24, 1, { tiers: 2 }), rig(75, 11, "lateen", 17, 1)], structures: [[[5, 14], [22, 14], [29, 26], [7, 26]]], bowsprit: true, sternFlag: true }),
   boat("age-of-exploration/asturias", "Asturias", "Age of Exploration", "Large", null, { hull: "asturias", rigs: [rig(26, 6, "square", 18, 1, { tiers: 2 }), rig(46, 2, "square", 23, 1, { tiers: 2 }), rig(65, 3, "square", 21, 1, { tiers: 2 }), rig(81, 10, "lateen", 16, 1)], structures: [[[3, 11], [20, 11], [28, 23], [5, 23]]], bowsprit: true, gunports: 6, sternFlag: true }),
+  boat("dinghies/cutter", "Cutter", "Dinghies", "Small", 7.9, { hull: "cutter", rigs: [rig(53, 9, "gaff", 23, -1), rig(54, 12, "staysail", 31, 1, { mast: false })], bowsprit: true }),
+  boat("happy-bay/boat", "Happy Bay Boat", "Happy Bay Boat", "Medium", 18.6, { hull: "happyBay", rigs: [rig(47, 5, "junk", 25, 1), rig(70, 10, "junk", 20, 1), rig(71, 11, "staysail", 21, 1, { mast: false })], structures: [[[5, 18], [25, 18], [31, 23], [29, 29], [6, 29]]], bowsprit: true }),
+  boat("hms-leopard/leopard", "HMS Leopard", "HMS Leopard", "Large", 53.0, { hull: "leopard", rigs: [rig(30, 2, "square", 21, 1, { tiers: 2 }), rig(52, 1, "square", 24, 1, { tiers: 2 }), rig(74, 4, "square", 20, 1, { tiers: 2 })], structures: [[[3, 12], [20, 12], [28, 24], [5, 24]]], bowsprit: true, gunports: 8, sternFlag: true }),
+  boat("old-chronian/gallus", "Gallus", "Old Chronian", "Small", 13.6, { hull: "gallus", rigs: [rig(52, 6, "gaff", 25, 1)], structures: [[[11, 25], [25, 25], [30, 33], [13, 33]]], bowsprit: true }),
+  boat("old-chronian/caelanor", "Caelanor", "Old Chronian", "Medium", 21.6, { hull: "caelanor", rigs: [rig(39, 5, "square", 23), rig(68, 9, "gaff", 21, 1)], structures: [[[8, 20], [25, 20], [31, 29], [10, 29]]], bowsprit: true }),
+  boat("old-chronian/gloriana", "Gloriana", "Old Chronian", "Large", 35.5, { hull: "gloriana", rigs: [rig(29, 6, "square", 20, 1, { tiers: 2 }), rig(51, 2, "square", 25, 1, { tiers: 2 }), rig(74, 8, "lateen", 19, 1)], structures: [[[4, 14], [21, 14], [28, 26], [6, 26]]], bowsprit: true, sternFlag: true }),
+  boat("old-chronian/aelasyl", "Aelasyl", "Old Chronian", "Large", 43.4, { hull: "aelasyl", rigs: [rig(27, 4, "lateen", 24, -1), rig(51, 1, "square", 25, 1, { tiers: 2 }), rig(75, 5, "lateen", 22, 1)], structures: [[[4, 14], [21, 14], [28, 25], [6, 25]]], bowsprit: true, sternFlag: true }),
   boat("paraw/paraw", "Paraw", "Paraw", "Small", 14.4, { hull: "paraw", rigs: [rig(49, 6, "crab", 30, 1)], outriggers: true }),
-  boat("dinghies/cutter", "Cutter", "Dinghies", "Small", 7.9, { hull: "cutter", rigs: [rig(53, 9, "gaff", 23, -1), rig(54, 12, "staysail", 31, 1, { mast: false })], bowsprit: true })
+  boat("shattered-seas/shba", "Sh'ba", "Shattered Seas", "Medium", 19.2, { hull: "shba", rigs: [rig(40, 6, "gaff", 24, -1), rig(69, 10, "lateen", 21, 1)], structures: [[[8, 24], [23, 24], [29, 31], [10, 31]]], bowsprit: true }),
+  boat("shattered-seas/clipper", "Clipper", "Shattered Seas", "Large", 39.5, { hull: "clipper", rigs: [rig(30, 3, "square", 22, 1, { tiers: 2 }), rig(52, 2, "square", 24, 1, { tiers: 2 }), rig(74, 5, "square", 20, 1, { tiers: 2 })], structures: [[[4, 21], [21, 21], [27, 30], [6, 30]]], bowsprit: true, sternFlag: true })
 ]);
 
 const BY_ID = new Map(BOAT_CATALOG.map((entry) => [entry.id, entry]));
