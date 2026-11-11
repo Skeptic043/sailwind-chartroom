@@ -51,14 +51,14 @@ The macOS app needs a Mac with Xcode 16 or later and Node.js 22 or later. It run
 
 ```bash
 swift test --package-path macos
-SPARKLE_PUBLIC_KEY=<public key> bash macos/scripts/package.sh 0.6.0-rc.1
+bash macos/scripts/package.sh 0.6.0-rc.1
 ```
 
 `package.sh` builds a universal `Sailwind Chartroom.app`, signs it ad hoc and writes `artifacts/SailwindChartroom-macos-universal-<version>.zip`, then extracts the ZIP and checks the app inside. The version comes from the command line: `0.6.0` for a release, `0.6.0-rc.1` for a release candidate.
 
 `node macos/scripts/smoke.mjs <app> <work folder>` launches a packaged app three times: it adds a location, imports a chart and exports a backup, then checks that a relaunch restores the charts and that a damaged workspace file is recovered from the previous launch's copy. `bash macos/scripts/update-test.sh <work folder>` builds three versions with a throwaway key and updates one into the next from a feed served on the same machine. Both skip the save and open panels and the update window, so they prove the files and the updater, not those windows.
 
-The app updates itself with [Sparkle](https://sparkle-project.org) from an appcast, separately from the Windows updater. Updates are signed with an Ed25519 key: `node macos/scripts/make-update-key.mjs <private key file>` creates one and prints the public key that `package.sh` puts in the app. Release candidates are published on the appcast's `rc` channel, which only release candidate builds follow. Sparkle ignores the `-rc` suffix when it orders versions, so `package.sh` also gives each build a number, `<major>.<minor>.<patch × 1000 + candidate>`, using 999 for the release itself: `0.6.0-rc.1` is build `0.6.1` and `0.6.0` is build `0.6.999`.
+The app updates itself with [Sparkle](https://sparkle-project.org) from an appcast, separately from the Windows updater. Updates are signed with an Ed25519 key: the public key is in `package.sh` and the private key is the repository's `SPARKLE_PRIVATE_KEY` secret. (`node macos/scripts/make-update-key.mjs <private key file>` creates a new pair.) Release candidates are published on the appcast's `rc` channel, which only release candidate builds follow. Pushing a tag such as `mac-v0.6.0-rc.1` runs the release candidate workflow: it packages and tests that version, checks the signing key against the app, and leaves a draft prerelease with the ZIP and a workflow artifact with the updated `appcast.xml`. The candidate goes live when the draft is published and that `appcast.xml` is pushed to the `appcast` branch. Sparkle ignores the `-rc` suffix when it orders versions, so `package.sh` also gives each build a number, `<major>.<minor>.<patch × 1000 + candidate>`, using 999 for the release itself: `0.6.0-rc.1` is build `0.6.1` and `0.6.0` is build `0.6.999`.
 
 ## Chart files
 

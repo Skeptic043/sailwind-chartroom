@@ -4,14 +4,14 @@
 #   package.sh <version> [output folder]
 #
 # <version> is 0.6.0 for a release or 0.6.0-rc.1 for a release candidate.
-# SPARKLE_PUBLIC_KEY  the update-signing public key (from make-update-key.mjs). Required.
+# SPARKLE_PUBLIC_KEY  the update-signing public key. Defaults to the project's key.
 # SPARKLE_FEED_URL    the appcast address. Defaults to the project's appcast.
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
 version=${1:?Usage: package.sh <version> [output folder]}
 out=${2:-$root/artifacts}
-public_key=${SPARKLE_PUBLIC_KEY:?Set SPARKLE_PUBLIC_KEY to the update-signing public key.}
+public_key=${SPARKLE_PUBLIC_KEY:-vwtFs2yfepe/qxP8LGQA3ctlxYJMrNL58cdzOKiuC1Y=}
 feed_url=${SPARKLE_FEED_URL:-https://raw.githubusercontent.com/Skeptic043/sailwind-chartroom/appcast/appcast.xml}
 
 # Sparkle orders updates by the build number and ignores any "-rc" suffix. The build number is

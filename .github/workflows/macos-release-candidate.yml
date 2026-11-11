@@ -1,0 +1,60 @@
+name: macOS release candidate
+
+# Pushing a tag such as mac-v0.6.0-rc.1 builds and tests that version, then leaves a draft prerelease
+# holding the ZIP and a workflow artifact holding the updated appcast. Nothing is public until the
+# draft is published and the appcast is pushed to the appcast branch.
+on:
+  push:
+    tags: ["mac-v*-rc.*"]
+
+permissions:
+  contents: write
+
+jobs:
+  candidate:
+    runs-on: macos-15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Read the version from the tag
+        run: echo "VERSION=${GITHUB_REF_NAME#mac-v}" >> "$GITHUB_ENV"
+      - name: Package
+        run: bash macos/scripts/package.sh "$VERSION" "$RUNNER_TEMP/packages"
+      - name: Check the signing key matches the app
+        run: |
+          mkdir -p "$RUNNER_TEMP/app"
+          ditto -x -k "$RUNNER_TEMP/packages/SailwindChartroom-macos-universal-$VERSION.zip" "$RUNNER_TEMP/app"
+          public=$(/usr/libexec/PlistBuddy -c "Print :SUPublicEDKey" "$RUNNER_TEMP/app/Sailwind Chartroom.app/Contents/Info.plist")
+          echo "$SPARKLE_PRIVATE_KEY" | node macos/scripts/check-update-key.mjs "$public"
+      - name: Launch, relaunch and recovery test
+        run: node macos/scripts/smoke.mjs "$RUNNER_TEMP/app/Sailwind Chartroom.app" "$RUNNER_TEMP/smoke"
+      - name: Add the version to the appcast
+        run: |
+          feed="$RUNNER_TEMP/feed"
+          mkdir -p "$feed"
+          # Earlier versions stay listed: start from the published appcast when there is one.
+          if git fetch --quiet origin appcast 2>/dev/null; then git show FETCH_HEAD:appcast.xml > "$feed/appcast.xml"; fi
+          cp "$RUNNER_TEMP/packages/SailwindChartroom-macos-universal-$VERSION.zip" "$feed/"
+          echo "$SPARKLE_PRIVATE_KEY" | macos/.build/artifacts/sparkle/Sparkle/bin/generate_appcast --ed-key-file - \
+            --download-url-prefix "https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/" \
+            --link "https://github.com/$GITHUB_REPOSITORY/releases" --channel rc --maximum-deltas 0 "$feed"
+          cat "$feed/appcast.xml"
+      - name: Keep the appcast and test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-release-candidate
+          if-no-files-found: ignore
+          path: |
+            ${{ runner.temp }}/feed/appcast.xml
+            ${{ runner.temp }}/smoke/*.json
+            ${{ runner.temp }}/smoke/*.png
+      - name: Create the draft prerelease
+        run: |
+          gh release create "$GITHUB_REF_NAME" "$RUNNER_TEMP/packages/SailwindChartroom-macos-universal-$VERSION.zip" \
+            --draft --prerelease --verify-tag --title "Sailwind Chartroom $VERSION for macOS" --notes "Draft."
