@@ -1,0 +1,16 @@
+<?xml version="1.0" standalone="yes"?>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+    <channel>
+        <title>Sailwind Chartroom</title>
+        <item>
+            <title>0.6.0-rc.1</title>
+            <pubDate>Wed, 11 Nov 2026 05:03:45 +0000</pubDate>
+            <link>https://github.com/Skeptic043/sailwind-chartroom/releases</link>
+            <sparkle:channel>rc</sparkle:channel>
+            <sparkle:version>0.6.1</sparkle:version>
+            <sparkle:shortVersionString>0.6.0-rc.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/Skeptic043/sailwind-chartroom/releases/download/mac-v0.6.0-rc.1/SailwindChartroom-macos-universal-0.6.0-rc.1.zip" length="1558063" type="application/octet-stream" sparkle:edSignature="EzJd/eEit83ucpcYdENDvzHfA3/++dJgblP3xjV8UupQEoVBf3d8zQAK+Qd+SJsHtXSEb0Im7YzfK+StyyQMCQ=="/>
+        </item>
+    </channel>
+</rss>
