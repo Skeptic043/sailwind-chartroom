@@ -1,6 +1,6 @@
 // Finds what is under the pointer and where drawing clicks snap to.
 import { NM_PER_DEGREE, destinationPoint, insideSearch, searchExtent, searchIconAnchors, itemShown, shownItems, summarizeRoute } from "./model.mjs";
-import { islandContains } from "./islands.mjs";
+import { islandById, islandContains } from "./islands.mjs";
 import { visibleBoat } from "./boats.mjs";
 import { clamp } from "./format.mjs";
 import { activeChart, selectedItem, selection } from "./state.mjs";
@@ -73,6 +73,20 @@ function findHits(x, y) {
     const end = { x: start.x + Math.sin(radians) * length, y: start.y - Math.cos(radians) * length };
     const near = closestOnSegment({ a: start, b: end }, { x, y });
     consider("wind", wind.id, wind, Math.hypot(near.x - x, near.y - y));
+  }
+  // A Scrambled Seas map's islands. Pressing one selects it and pans the chart, as it cannot be moved.
+  for (const item of shownItems(chart, "map-island")) {
+    const island = islandById(item.id);
+    const centre = worldToScreen(item);
+    const distance = Math.hypot(centre.x - x, centre.y - y);
+    const inside = islandPixelSpan(island) >= 14 && islandContains(island, item, world);
+    if (inside || distance <= 8) consider("map-island", item.id, item, inside ? 12 : distance + 4, true);
+  }
+  // Coordinate Viewer positions; anything else at the same spot wins.
+  for (const point of shownItems(chart, "track")) {
+    const screen = worldToScreen(point);
+    const distance = Math.hypot(screen.x - x, screen.y - y);
+    if (distance <= 8) consider("track", point.id, point, distance + 2);
   }
   // The measure line and kept lines are clickable along their length; marks at their ends win when they are as close.
   for (const kind of ["measure", "line"]) for (const line of shownItems(chart, kind)) {

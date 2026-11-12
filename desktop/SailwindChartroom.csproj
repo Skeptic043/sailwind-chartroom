@@ -10,7 +10,7 @@
     <RootNamespace>SailwindChartroom</RootNamespace>
     <AssemblyName>Sailwind Chartroom</AssemblyName>
     <!-- The only version number. The page shows what the host reports from this value. -->
-    <Version>0.6.10</Version>
+    <Version>0.6.13</Version>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <Product>Sailwind Chartroom</Product>
     <Copyright>Copyright (c) 2026 skeptic043</Copyright>

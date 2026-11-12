@@ -12,6 +12,7 @@
   <ItemGroup>
     <Compile Include="..\..\desktop\WorkspaceStore.cs" Link="Host\WorkspaceStore.cs" />
     <Compile Include="..\..\desktop\HostMessage.cs" Link="Host\HostMessage.cs" />
+    <Compile Include="..\..\desktop\TrackFollower.cs" Link="Host\TrackFollower.cs" />
     <Compile Include="..\..\desktop\SettingsRules.cs" Link="Host\SettingsRules.cs" />
     <Compile Include="..\..\desktop\Updates\*.cs" Link="Host\Updates\%(Filename)%(Extension)" />
   </ItemGroup>

@@ -50,7 +50,7 @@ import {
   translateChartItems
 } from "../src/model.mjs";
 import { ISLAND_CATALOG, ISLAND_GROUPS, VANILLA_ISLANDS, assignedIsland, islandGroup, islandById, islandByName, normalizeIslandName, searchIsland, visibleIsland } from "../src/islands.mjs";
-import { gameMapIslands, parseScrambledSeasXml } from "../src/scrambled-seas.mjs";
+import { importedMapIslands, parseScrambledSeasXml } from "../src/scrambled-seas.mjs";
 import { readFileSync } from "node:fs";
 import { BOAT_CATALOG, assignedBoat, boatById, boatMarkerSize, visibleBoat } from "../src/boats.mjs";
 
@@ -713,16 +713,33 @@ function scrambleXml(count) {
 test("a Scrambled Seas save moves each island by its own offset", () => {
   const chart = importScrambledSeas(parseScrambledSeasXml(scrambleXml(43)));
   assert.equal(chart.seed, "-42");
-  assert.equal(chart.layers.vanillaMap, true);
+  assert.equal(chart.layers.importedMap, true);
   assert.equal(chart.layers.expandedWinds, true, "the save says Border Expander was installed");
   const goldRock = islandById("alankh/gold_rock_city").sourceCenter;
-  assert.deepEqual(chart.scramble.islands["alankh/gold_rock_city"], { lat: Math.round((goldRock.lat - 1) * 1e5) / 1e5, lon: Math.round((goldRock.lon + 1) * 1e5) / 1e5 });
+  const moved = (id) => chart.scramble.islands.find((island) => island.id === id);
+  assert.deepEqual(moved("alankh/gold_rock_city"), { id: "alankh/gold_rock_city", notes: "", lat: Math.round((goldRock.lat - 1) * 1e5) / 1e5, lon: Math.round((goldRock.lon + 1) * 1e5) / 1e5 });
   const fireFish = islandById("firefish/fire_fish_town").sourceCenter;
-  assert.ok(Math.abs(chart.scramble.islands["firefish/fire_fish_town"].lon - (fireFish.lon + 26)) < 1e-4, "island 26 is Fire Fish Town");
-  const map = gameMapIslands(chart);
+  assert.ok(Math.abs(moved("firefish/fire_fish_town").lon - (fireFish.lon + 26)) < 1e-4, "island 26 is Fire Fish Town");
+  const map = importedMapIslands(chart);
   assert.ok(map.some(({ island }) => island.id === "better-ports/bottleneck"), "island 43 is Better Ports' Bottleneck Isle");
   const restored = sanitizeWorkspace({ activeChartId: chart.id, charts: [chart] }).charts[0];
   assert.deepEqual(restored.scramble, chart.scramble);
+  const old = sanitizeWorkspace({ charts: [{ ...createChart(), scramble: { islands: { "alankh/oasis": { lat: 1, lon: 2 } } } }] }).charts[0];
+  assert.deepEqual(old.scramble.islands, [{ id: "alankh/oasis", lat: 1, lon: 2, notes: "" }], "0.6.10 charts keep their world");
+  const shown = sanitizeWorkspace({ charts: [{ ...createChart(), layers: { vanillaMap: true }, scramble: { islands: { "alankh/oasis": { lat: 1, lon: 2 } } } }] }).charts[0].layers;
+  assert.deepEqual([shown.importedMap, shown.vanillaMap], [true, false], "and show it as the imported map");
+});
+
+test("an imported map's islands take notes and can be removed, but stay where the world put them", () => {
+  const chart = importScrambledSeas(parseScrambledSeasXml(scrambleXml(43)));
+  const oasis = itemForRef(chart, { kind: "map-island", id: "alankh/oasis" });
+  const before = { lat: oasis.lat, lon: oasis.lon };
+  translateChartItems(chart, [{ kind: "map-island", id: oasis.id }], { lat: 1, lon: 1 });
+  assert.deepEqual({ lat: oasis.lat, lon: oasis.lon }, before);
+  chart.layers.importedMap = false;
+  assert.equal(itemShown(chart, "map-island", oasis), false);
+  removeChartItems(chart, [{ kind: "map-island", id: oasis.id }]);
+  assert.equal(itemForRef(chart, { kind: "map-island", id: oasis.id }), null);
 });
 
 test("a Scrambled Seas preset without island positions explains what to import instead", () => {

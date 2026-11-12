@@ -1,6 +1,6 @@
 // Renders the side panels: chart header, layers, route summary, inspectors and the chart item list.
 import { anchorTarget, bearingDegrees, chartItemFocusPoint, distanceNm, formatCoordinate, formatDuration, savedRouteForPoint, searchExtent, summarizeRoute } from "./model.mjs";
-import { assignedIsland, searchIsland, visibleIsland } from "./islands.mjs";
+import { assignedIsland, islandById, searchIsland, visibleIsland } from "./islands.mjs";
 import { assignedBoat } from "./boats.mjs";
 import { formatBearing, formatDirection, formatLeg, formatNm, plainDegrees } from "./format.mjs";
 import { elements } from "./dom.mjs";
@@ -40,7 +40,7 @@ function renderHeader() {
 }
 
 // Each View checkbox, its layer, and the layers it sits under. A part keeps its own setting but is
-// disabled until everything above it is shown.
+// disabled until everything above it is shown; "a|b" is shown when either is.
 export const LAYER_CONTROLS = Object.freeze([
   ["layer-locations", "locations", []],
   ["layer-location-islands", "locationIslands", ["locations", "islands"]],
@@ -63,18 +63,23 @@ export const LAYER_CONTROLS = Object.freeze([
   ["layer-islands", "islands", []],
   ["layer-track", "track", []],
   ["layer-vanilla", "vanillaMap", []],
-  ["layer-secrets", "secretIslands", ["vanillaMap"]],
+  ["layer-imported-map", "importedMap", []],
+  // Secret islands are part of whichever map is on.
+  ["layer-secrets", "secretIslands", ["vanillaMap|importedMap"]],
   ["layer-trade-winds", "tradeWinds", []],
   ["layer-expanded-winds", "expandedWinds", ["tradeWinds"]]
 ]);
 
 function renderLayerControls() {
-  const layers = activeChart().layers;
+  const chart = activeChart();
+  const layers = chart.layers;
+  // The imported map is offered only on a chart imported from Scrambled Seas.
+  elements["layer-imported-row"].hidden = !chart.scramble;
+  const shown = (key) => key === "importedMap" ? layers.importedMap && Boolean(chart.scramble) : layers[key];
   for (const [elementId, key, parents] of LAYER_CONTROLS) {
     elements[elementId].checked = layers[key];
-    elements[elementId].disabled = parents.some((parent) => !layers[parent]);
+    elements[elementId].disabled = parents.some((parent) => !parent.split("|").some(shown));
   }
-  elements["layer-vanilla-name"].textContent = activeChart().scramble ? "Scrambled Seas map" : "Vanilla map";
   elements["clear-track"].disabled = activeChart().track.length === 0;
 }
 
@@ -103,6 +108,8 @@ export function renderInspector() {
   const isMeasure = (selection?.kind === "measure" || selection?.kind === "line") && item;
   const isSearch = selection?.kind === "search" && item;
   const isWind = selection?.kind === "wind" && item;
+  const isTrack = selection?.kind === "track" && item;
+  const isMapIsland = selection?.kind === "map-island" && item;
   elements["empty-inspector"].hidden = Boolean(item);
   elements["feature-inspector"].hidden = !isFeature;
   elements["route-inspector"].hidden = !isRoute;
@@ -110,6 +117,18 @@ export function renderInspector() {
   elements["measure-inspector"].hidden = !isMeasure;
   elements["search-inspector"].hidden = !isSearch;
   elements["wind-inspector"].hidden = !isWind;
+  elements["track-inspector"].hidden = !isTrack;
+  elements["map-island-inspector"].hidden = !isMapIsland;
+  if (isMapIsland) {
+    elements["map-island-name"].textContent = islandById(item.id)?.name ?? "Island";
+    elements["map-island-detail"].textContent = `${formatCoordinate(item.lat, "lat", 3)} · ${formatCoordinate(item.lon, "lon", 3)}`;
+    elements["map-island-notes"].value = item.notes;
+  }
+  if (isTrack) {
+    for (const field of ["name", "day", "time", "wind"]) elements[`track-${field}`].value = item[field];
+    elements["track-lat"].value = item.lat.toFixed(4);
+    elements["track-lon"].value = item.lon.toFixed(4);
+  }
   if (isMeasure) renderMeasureInspector(item, selection.kind === "line");
   if (isSearch) renderSearchInspector(item);
   if (isWind) {

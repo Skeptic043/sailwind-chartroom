@@ -60,6 +60,12 @@ export function updateSelectedFromForm(kind) {
       day: elements["route-day"].value.trim(),
       time: elements["route-time"].value.trim()
     });
+    if (kind === "track") Object.assign(updates, {
+      name: elements["track-name"].value.trim(),
+      day: elements["track-day"].value.trim(),
+      time: elements["track-time"].value.trim(),
+      wind: elements["track-wind"].value.trim()
+    });
     if (kind === "wind") Object.assign(updates, {
       label: elements["wind-label"].value.trim(),
       bearing: parseBearing(elements["wind-direction"].value),

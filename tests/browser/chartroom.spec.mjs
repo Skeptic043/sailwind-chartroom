@@ -538,10 +538,71 @@ test("imports a Scrambled Seas save as a chart of its moved islands", async ({ c
   const vectors = Array.from({ length: 43 }, () => "<Vector3><x>90000</x><y>0</y><z>0</z></Vector3>").join("");
   const xml = `<?xml version="1.0" encoding="utf-8"?><ScrambledSeasSaveContainer><worldScramblerSeed>7</worldScramblerSeed><borderExpander>0</borderExpander><islandOffsets>${vectors}</islandOffsets></ScrambledSeasSaveContainer>`;
   await page.locator("#json-file").setInputFiles({ name: "scramble_0.xml", mimeType: "text/xml", buffer: Buffer.from(xml) });
-  await expect(page.locator("#layer-vanilla-name")).toHaveText("Scrambled Seas map");
+  await expect(page.locator("#layer-imported-map")).toBeChecked();
+  await expect(page.locator("#layer-vanilla")).not.toBeChecked();
   const chart = await chartroom.chart();
   expect(chart.name).toContain("Scrambled Seas 7");
-  expect(chart.scramble.islands["alankh/gold_rock_city"].lon).toBeCloseTo(-4.867 + 10, 2);
+  expect(chart.scramble.islands.find((island) => island.id === "alankh/gold_rock_city").lon).toBeCloseTo(-4.867 + 10, 2);
   await page.locator("#json-file").setInputFiles({ name: "preset.xml", mimeType: "text/xml", buffer: Buffer.from("<ScrambledSeasSaveContainer><islandOffsets /></ScrambledSeasSaveContainer>") });
   await expect(page.locator("#toast")).toContainText("no island positions yet");
+});
+
+test("follows Coordinate Viewer live into the chart it started on", async ({ chartroom, page }) => {
+  await chartroom.open();
+  await chartroom.press("l");
+  await chartroom.clickChart(500, 400);
+  await page.locator('.app-menu[data-menu="file"] > summary').click();
+  await page.locator("#follow-track").click();
+  await expect(page.locator("#follow-track")).toHaveText("Stop following coords_0.txt");
+  // Nothing is saved until the first position arrives, so this waits on the host itself.
+  await expect.poll(() => page.evaluate(() => window.__host.workspace?.charts?.[0]?.track?.length ?? 0)).toBe(2);
+  const [first, second] = (await chartroom.chart()).track;
+  expect([first.lat, first.day, second.lon]).toEqual([40.1, "3", 0.6]);
+  await chartroom.press("Control+z");
+  const undone = await chartroom.chart();
+  expect(undone.features, "undo takes back the location").toHaveLength(0);
+  expect(undone.track, "but keeps the live positions").toHaveLength(2);
+  await page.locator('.app-menu[data-menu="file"] > summary').click();
+  await page.locator("#follow-track").click();
+  await expect(page.locator("#follow-track")).toHaveText("Follow live");
+});
+
+test("the macOS app offers live following too", async ({ chartroom, page }) => {
+  await chartroom.open(null, { platform: "mac" });
+  await expect(page.locator("#follow-track")).toBeVisible({ visible: false });
+  await page.locator('.app-menu[data-menu="file"] > summary').click();
+  await expect(page.locator("#follow-track")).toBeVisible();
+});
+
+test("a route copies for SailMaster as a web map path", async ({ chartroom, page }) => {
+  await chartroom.open();
+  await chartroom.press("r");
+  await chartroom.clickChart(400, 300);
+  await chartroom.clickChart(600, 300);
+  await page.locator("#copy-sailmaster").click();
+  const copied = await page.evaluate(() => window.__host.copied);
+  const route = JSON.parse(copied);
+  expect(route.path).toHaveLength(2);
+  expect(route.path.every((entry) => entry.colour === "orangepoint" && entry.pos.length === 2)).toBe(true);
+});
+
+test("a Coordinate Viewer position can be selected, edited and deleted", async ({ chartroom, page }) => {
+  await chartroom.open();
+  await page.locator('.app-menu[data-menu="file"] > summary').click();
+  await page.locator("#follow-track").click();
+  // Nothing is saved until the first position arrives, so this waits on the host itself.
+  await expect.poll(() => page.evaluate(() => window.__host.workspace?.charts?.[0]?.track?.length ?? 0)).toBe(2);
+  await page.keyboard.press("Escape");
+  const box = await chartroom.canvas.boundingBox();
+  const spot = await page.evaluate(() => {
+    const canvas = document.querySelector("#chart-canvas").getBoundingClientRect();
+    return { width: canvas.width, height: canvas.height };
+  });
+  await chartroom.clickChart(spot.width / 2, spot.height / 2);
+  await expect(page.locator("#track-inspector")).toBeVisible();
+  await page.locator("#track-name").fill("Noon fix");
+  await page.locator("#track-name").press("Tab");
+  expect((await chartroom.chart()).track.map((point) => point.name)).toContain("Noon fix");
+  await chartroom.press("Delete");
+  expect((await chartroom.chart()).track).toHaveLength(1);
 });

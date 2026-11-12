@@ -1,5 +1,5 @@
 // Entry point: connects to the host, loads the workspace and wires the page's controls.
-import { archiveActiveRoute, createLine, revealLayer, savedRouteForPoint } from "./model.mjs";
+import { archiveActiveRoute, createLine, revealLayer, sailMasterRoute, savedRouteForPoint } from "./model.mjs";
 import { connectHost } from "./host.mjs";
 import { clamp } from "./format.mjs";
 import { canvas, elements, showToast } from "./dom.mjs";
@@ -14,6 +14,7 @@ import { applyLayout, endPanelResize, movePanelResize, resizePanelFromKeyboard, 
 import { deleteChart, openAbout, openBoatLibrary, openChartDialog, openIslandLibrary, renderBoatLibrary, renderIslandLibrary, saveChartDialog, selectedBoatOwner, selectedIslandOwner } from "./dialogs.mjs";
 import { exportActiveChart, exportLocationsCsv, exportWorkspace, importChartFile, importTrackFile, importTrackText } from "./files.mjs";
 import { initUpdates } from "./updates.mjs";
+import { initLiveTrack } from "./live-track.mjs";
 import { initSettings, initTheme, stepInterfaceSize } from "./settings.mjs";
 import "./menus.mjs";
 
@@ -82,6 +83,18 @@ elements["clear-route"].addEventListener("click", () => {
   commit((chart) => { chart.route = []; clearSelection(); });
 });
 // The speed field has no min, so its arrows step from 0 in whole and half knots; 0.1 kn is still the lowest speed.
+// The route the summary shows: a saved route while it or one of its waypoints is selected, else the active one.
+elements["copy-sailmaster"].addEventListener("click", () => {
+  const saved = selection?.kind === "saved-route" ? selectedItem()
+    : selection?.kind === "saved-point" ? savedRouteForPoint(activeChart(), selection.id) : null;
+  const points = saved?.points ?? activeChart().route;
+  if (!points.length) return;
+  // A plain browser may refuse the clipboard; the desktop apps always take it.
+  Promise.resolve(host.copyText(sailMasterRoute(points))).then(
+    () => showToast(`Copied ${points.length} waypoint${points.length === 1 ? "" : "s"}. Paste them into SailMaster's route box.`),
+    () => showToast("The route could not be copied.", true)
+  );
+});
 elements["route-speed"].addEventListener("change", (event) => {
   const speed = event.target.valueAsNumber;
   if (!Number.isFinite(speed)) { renderRouteSummary(); return; }
@@ -95,15 +108,20 @@ for (const [elementId, key] of LAYER_CONTROLS) {
 }
 
 // Inspectors
-for (const kind of ["feature", "route", "search", "wind"]) {
+for (const kind of ["feature", "route", "search", "wind", "track"]) {
   elements[`${kind}-form`].addEventListener("change", () => updateSelectedFromForm(kind));
   elements[`${kind}-form`].addEventListener("submit", (event) => event.preventDefault());
 }
-for (const id of ["delete-feature", "delete-route-point", "delete-saved-route", "delete-measure", "delete-search", "delete-wind"]) {
+for (const id of ["delete-feature", "delete-route-point", "delete-saved-route", "delete-measure", "delete-search", "delete-wind", "delete-track", "delete-map-island"]) {
   elements[id].addEventListener("click", deleteSelected);
 }
 elements["saved-route-form"].addEventListener("change", updateSavedRouteFromForm);
 elements["line-form"].addEventListener("submit", (event) => event.preventDefault());
+elements["map-island-form"].addEventListener("submit", (event) => event.preventDefault());
+elements["map-island-notes"].addEventListener("change", (event) => {
+  const island = selection?.kind === "map-island" ? selectedItem() : null;
+  if (island) commit(() => { island.notes = event.target.value.trim(); });
+});
 elements["line-colour"].addEventListener("change", (event) => {
   const line = selection?.kind === "line" ? selectedItem() : null;
   // A line moved to a hidden colour shows that colour again, so it does not vanish while selected.
@@ -283,3 +301,4 @@ renderEverything();
 resizeCanvas();
 initSettings();
 initUpdates();
+initLiveTrack();

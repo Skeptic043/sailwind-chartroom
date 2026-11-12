@@ -67,12 +67,12 @@ export function scrambledIslands({ offsets }) {
   return positions;
 }
 
-// The islands the game map layer draws for a chart, and where: as the game places them, or where the
-// chart's Scrambled Seas world moved them.
-export function gameMapIslands(chart) {
-  const moved = chart.scramble?.islands;
-  if (!moved) return VANILLA_ISLANDS.map((island) => ({ island, centre: island.sourceCenter }));
-  return MAP_ISLANDS.filter((island) => moved[island.id]).map((island) => ({ island, centre: moved[island.id] }));
+// The islands of the game's own map, where the game places them.
+export const VANILLA_MAP = Object.freeze(VANILLA_ISLANDS.map((island) => ({ island, centre: island.sourceCenter })));
+
+// The islands of the chart's imported Scrambled Seas world, where it put them. They are also chart items.
+export function importedMapIslands(chart) {
+  return (chart.scramble?.islands ?? []).map((item) => ({ island: islandById(item.id), centre: item, item })).filter(({ island }) => island);
 }
 
 function round(value) {

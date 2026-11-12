@@ -2,7 +2,7 @@
 import { mapPalette, paperTile } from "./theme.mjs";
 import { MAX_ZOOM, MIN_ZOOM, NM_PER_DEGREE, WORLD_BOUNDS, bearingDegrees, clusteredLabelIds, destinationPoint, distanceNm, formatDuration, searchChartLabel, searchEvidenceOpacity, searchExtent, searchIconAnchors, searchNameLabelIds, searchOverlapGroups, shownItems, summarizeRoute, tradeWindAt } from "./model.mjs";
 import { islandWorldBounds } from "./islands.mjs";
-import { gameMapIslands } from "./scrambled-seas.mjs";
+import { VANILLA_MAP, importedMapIslands } from "./scrambled-seas.mjs";
 import { boatMarkerSize, drawBoatSilhouette, visibleBoat } from "./boats.mjs";
 import { clamp, formatBearing, formatDirection, formatNm, isNightTime, nearlyMultiple, shortCoordinate } from "./format.mjs";
 import { canvas, context, elements } from "./dom.mjs";
@@ -42,7 +42,7 @@ function chartLabelCandidates() {
     candidates.push({ id: labelKey(kind, id), name, x: screen.x, y: screen.y + below, width: context.measureText(name).width, selected, priority });
   };
   // The player's own names come first; a vanilla name shows only where it has room.
-  for (const { island, centre } of vanillaIslands()) if (!island.partOf) add("vanilla", island.id, island.name, centre, false, 60);
+  for (const { island, centre, item } of vanillaIslands()) if (!island.partOf) add(item ? "imported" : "vanilla", island.id, island.name, centre, false, 60);
   for (const feature of shownItems(chart, "feature")) if (feature.showName !== false) add("feature", feature.id, feature.name, feature, isSelected("feature", feature.id), 0);
   for (const search of searches) {
     const selected = isSelected("search", search.id);
@@ -119,14 +119,15 @@ export function drawChart() {
     drawTradeWinds(width, height, palette);
     context.restore();
   }
-  if (activeChart().layers.vanillaMap) drawVanillaMap(width, height, palette);
+  drawVanillaMap(width, height, palette);
   drawLines(palette);
   drawAreas(palette);
   drawSearches(palette);
   if (activeChart().layers.winds) drawWinds(palette);
-  if (activeChart().layers.track) drawTrack(palette);
   drawSavedRoutes(palette);
   drawRoute(palette);
+  // Coordinate Viewer positions sit above route lines, which often run along them.
+  if (activeChart().layers.track) drawTrack(palette);
   drawFeatures(palette);
   overlay(palette);
   drawCompassRose(width - 56, height - 64, palette);
@@ -230,6 +231,7 @@ function drawTrack(palette) {
     context.beginPath();
     context.arc(screen.x, screen.y, 2.2, 0, Math.PI * 2);
     context.fill();
+    if (isSelected("track", point.id)) selectionHalo(screen, palette);
   }
   const last = track.at(-1);
   const previous = track.at(-2);
@@ -529,27 +531,30 @@ function drawRoute(palette) {
   context.restore();
 }
 
-// The game map's islands, where the game or the chart's Scrambled Seas world places them.
+// The map islands on show: the game's own map, and the chart's imported Scrambled Seas world.
 function vanillaIslands() {
   const layers = activeChart().layers;
-  if (!layers.vanillaMap) return [];
-  return gameMapIslands(activeChart()).filter(({ island }) => layers.secretIslands || !island.secret);
+  return [...(layers.vanillaMap ? VANILLA_MAP : []), ...(layers.importedMap ? importedMapIslands(activeChart()) : [])]
+    .filter(({ island }) => layers.secretIslands || !island.secret);
 }
 
 // The game's own map, drawn faintly beneath the player's chart. It cannot be selected or edited.
 function drawVanillaMap(width, height, palette) {
   context.save();
   context.globalAlpha = 0.55;
-  for (const { island, centre } of vanillaIslands()) {
+  for (const { island, centre, item } of vanillaIslands()) {
     const screen = worldToScreen(centre);
-    drawIslandSilhouette(centre, island, false, palette);
+    const selected = item ? isSelected("map-island", item.id) : false;
+    if (selected) context.globalAlpha = 1;
+    drawIslandSilhouette(centre, island, selected, palette);
+    context.globalAlpha = 0.55;
     if (islandPixelSpan(island) < MIN_VISIBLE_ISLAND_PX) {
       context.fillStyle = palette.islandDot;
       context.beginPath();
       context.arc(screen.x, screen.y, symbolSize("mark"), 0, Math.PI * 2);
       context.fill();
     }
-    if (activeChart().layers.labels && labelVisible("vanilla", island.id)) labelText(island.name, screen.x, screen.y + 13, palette);
+    if (activeChart().layers.labels && labelVisible(item ? "imported" : "vanilla", island.id)) labelText(island.name, screen.x, screen.y + 13, palette);
   }
   context.restore();
 }
@@ -762,7 +767,7 @@ export function fitData() {
   const points = [...shownItems(chart, "route"), ...shownItems(chart, "saved-point"), ...(chart.layers.track ? chart.track : []),
     ...shownItems(chart, "measure").flatMap((measure) => [measure, measure.end]), ...shownItems(chart, "wind"), ...shownItems(chart, "line").flatMap((line) => [line, line.end])];
   // A Scrambled Seas world's map counts while it is shown, so the whole world fits on screen.
-  if (chart.scramble) for (const { centre } of vanillaIslands()) points.push(centre);
+  for (const { centre, item } of vanillaIslands()) if (item) points.push(centre);
   for (const feature of shownItems(chart, "feature")) {
     points.push(feature);
     if (feature.rangeNm) points.push(...[0, 90, 180, 270].map((bearing) => destinationPoint(feature, bearing, feature.rangeNm)));

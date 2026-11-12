@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.6.13
+
+### Added
+- `Follow live` under `Coordinate Viewer` in the `File` menu adds your position to the chart each time Coordinate Viewer records it
+- `Copy for SailMaster` in the route panel copies a route to paste into SailMaster's route box
+- Coordinate Viewer positions can be selected, edited and deleted
+- Islands on an imported Scrambled Seas map can be selected to add notes or remove them
+- `Imported map` toggle in the `View` menu for charts imported from Scrambled Seas
+
+### Changed
+- Coordinate Viewer options have their own section in the `File` menu
+- `Vanilla map` always shows the game's own map, separately from an imported one
+
+### Fixed
+- Coordinate Viewer positions show above route lines instead of behind them
+
 ## 0.6.10
 
 ### Added

@@ -41,7 +41,7 @@ export function createChart({ name = "Uncharted Sea", seed = "" } = {}) {
 }
 
 // The View menu's layers. The first group follows the chart tools, each with its own parts beneath it;
-// the vanilla map and the trade winds start hidden.
+// the vanilla map and the trade winds start hidden. The imported map shows on charts that have one.
 const LAYER_DEFAULTS = Object.freeze({
   locations: true, locationIslands: true,
   routes: true, routeDistances: true, savedRoutes: true,
@@ -50,7 +50,7 @@ const LAYER_DEFAULTS = Object.freeze({
   searches: true, searchLines: true, searchIslands: true,
   winds: true,
   grid: true, labels: true, boats: true, islands: true, track: true,
-  vanillaMap: false, secretIslands: false, tradeWinds: false, expandedWinds: false
+  vanillaMap: false, importedMap: true, secretIslands: false, tradeWinds: false, expandedWinds: false
 });
 
 function defaultLayers() {
@@ -67,6 +67,8 @@ export function itemShown(chart, kind, item) {
   if (kind === "wind") return layers.winds;
   if (kind === "measure") return layers.measure;
   if (kind === "line") return layers.measure && layers[`${item.color}Lines`];
+  if (kind === "track") return layers.track;
+  if (kind === "map-island") return layers.importedMap && (layers.secretIslands || !islandById(item.id)?.secret);
   return true;
 }
 
@@ -210,6 +212,11 @@ export function sanitizeChart(value) {
   base.segments = arrayOf(value.segments, sanitizeSegment);
   const scramble = sanitizeScramble(value.scramble);
   if (scramble) base.scramble = scramble;
+  // In 0.6.10 an imported world showed under Vanilla map; it now has its own layer.
+  if (scramble && value.layers?.importedMap === undefined) {
+    base.layers.importedMap = value.layers?.vanillaMap === true;
+    base.layers.vanillaMap = false;
+  }
   followAnchors(base);
   return base;
 }
@@ -319,12 +326,14 @@ export function followAnchors(chart) {
 }
 
 // Every kind of item a selection can hold. A saved route owns its waypoints, which can also be selected alone.
-const ITEM_LISTS = { feature: "features", route: "route", measure: "measures", line: "segments", wind: "winds", search: "searches" };
-export const ITEM_KINDS = Object.freeze([...Object.keys(ITEM_LISTS), "saved-route", "saved-point"]);
+const ITEM_LISTS = { feature: "features", route: "route", measure: "measures", line: "segments", wind: "winds", search: "searches", track: "track" };
+// An imported Scrambled Seas map's islands can be selected, noted and deleted, but never moved.
+export const ITEM_KINDS = Object.freeze([...Object.keys(ITEM_LISTS), "saved-route", "saved-point", "map-island"]);
 
 export function chartItems(chart, kind) {
   if (kind === "saved-route") return chart.savedRoutes;
   if (kind === "saved-point") return chart.savedRoutes.flatMap((route) => route.points);
+  if (kind === "map-island") return chart.scramble?.islands ?? [];
   return chart[ITEM_LISTS[kind]] ?? [];
 }
 
@@ -345,6 +354,8 @@ export function removeChartItems(chart, refs) {
     const ids = idsOf(kind);
     if (ids.size) chart[key] = chart[key].filter((item) => !ids.has(item.id));
   }
+  const mapIslands = idsOf("map-island");
+  if (mapIslands.size && chart.scramble) chart.scramble.islands = chart.scramble.islands.filter((island) => !mapIslands.has(island.id));
   const routes = idsOf("saved-route");
   const points = idsOf("saved-point");
   for (const route of chart.savedRoutes) route.points = route.points.filter((point) => !points.has(point.id));
@@ -355,6 +366,7 @@ export function removeChartItems(chart, refs) {
 export function translateChartItems(chart, refs, delta, { strict = false } = {}) {
   const unique = new Map();
   for (const ref of pointRefs(chart, refs)) {
+    if (ref.kind === "map-island") continue;
     const item = itemForRef(chart, ref);
     if (item) unique.set(`${ref.kind}:${ref.id}`, { ref, item });
   }
@@ -938,18 +950,32 @@ export function importScrambledSeas(world) {
   const seed = Number.isInteger(world.seed) ? String(world.seed) : "";
   const chart = createChart({ name: uniqueImportedName(seed ? `Scrambled Seas ${seed}` : "Scrambled Seas"), seed });
   chart.scramble = sanitizeScramble({ islands: scrambledIslands(world) });
-  chart.layers.vanillaMap = true;
+  chart.layers.importedMap = true;
   // Scrambled Seas records whether Border Expander was installed, and so whether its trade winds blow.
   chart.layers.expandedWinds = world.borderExpander === true;
   return chart;
 }
 
+// A Scrambled Seas world's islands, each where that world put it and with the player's notes.
+// 0.6.10 kept them as an object of positions by island id.
 function sanitizeScramble(value) {
-  if (!value?.islands || typeof value.islands !== "object") return null;
-  const islands = Object.fromEntries(Object.entries(value.islands)
-    .filter(([id, point]) => islandById(id) && isFiniteCoordinate(point?.lat, point?.lon))
-    .map(([id, point]) => [id, { lat: Number(point.lat), lon: Number(point.lon) }]));
-  return Object.keys(islands).length ? { islands } : null;
+  const entries = Array.isArray(value?.islands) ? value.islands
+    : value?.islands && typeof value.islands === "object" ? Object.entries(value.islands).map(([id, point]) => ({ ...point, id })) : [];
+  const islands = entries
+    .filter((entry) => islandById(entry?.id) && isFiniteCoordinate(entry.lat, entry.lon))
+    .map((entry) => ({ id: entry.id, lat: Number(entry.lat), lon: Number(entry.lon), notes: cleanText(entry.notes, 1000) }));
+  return islands.length ? { islands } : null;
+}
+
+// A route as a Sailwind Interactive Map export, which SailMaster's autopilot takes pasted into its
+// route box: its waypoints are path entries coloured orangepoint, at [longitude, latitude].
+export function sailMasterRoute(points) {
+  return JSON.stringify({
+    lines: [],
+    path: points.map((point) => ({ description: point.name ?? "", pos: [point.lon, point.lat], colour: "orangepoint", day: 0, time: 0, winddir: "" })),
+    points: [],
+    goals: []
+  });
 }
 
 export function importLegacyMap(value, name = "Imported legacy map") {

@@ -19,15 +19,17 @@
           <button id="save-chart" type="button">Save chart</button>
           <button id="chart-settings" type="button">Chart details</button>
           <hr>
-          <button id="import-track" type="button">Import Coordinate Viewer file</button>
-          <button id="paste-track" type="button">Paste Coordinate Viewer positions</button>
           <button id="import-json" type="button">Import chart, map or Scrambled Seas world</button>
           <button id="export-json" type="button">Export this chart</button>
           <button id="export-csv" type="button">Export locations as CSV</button>
           <button id="export-all" type="button">Back up all charts</button>
-          <hr>
-          <button id="clear-track" type="button">Clear imported track</button>
           <button id="open-folder" type="button" hidden>Open save folder</button>
+          <hr>
+          <p class="menu-heading">Coordinate Viewer</p>
+          <button id="follow-track" type="button" hidden>Follow live</button>
+          <button id="import-track" type="button">Import file</button>
+          <button id="paste-track" type="button">Paste positions</button>
+          <button id="clear-track" type="button">Clear track</button>
           <hr>
           <button id="open-settings" type="button" hidden>Settings</button>
           <p id="storage-note" class="menu-note">Everything stays in this browser unless you export it.</p>
@@ -65,7 +67,8 @@
           <label class="menu-check"><input id="layer-islands" type="checkbox" checked><span>Island outlines</span></label>
           <label class="menu-check"><input id="layer-track" type="checkbox" checked><span>Imported track</span></label>
           <hr>
-          <label class="menu-check"><input id="layer-vanilla" type="checkbox"><span id="layer-vanilla-name">Vanilla map</span></label>
+          <label class="menu-check"><input id="layer-vanilla" type="checkbox"><span>Vanilla map</span></label>
+          <label id="layer-imported-row" class="menu-check" hidden><input id="layer-imported-map" type="checkbox" checked><span>Imported map</span></label>
           <label class="menu-check menu-check-sub"><input id="layer-secrets" type="checkbox"><span>Secret islands</span></label>
           <label class="menu-check"><input id="layer-trade-winds" type="checkbox"><span>Trade winds</span></label>
           <label class="menu-check menu-check-sub"><input id="layer-expanded-winds" type="checkbox"><span>Border Expander winds</span></label>
@@ -142,6 +145,7 @@
           <button id="save-route" type="button">Save route</button>
           <button id="clear-route" type="button">Clear route</button>
         </div>
+        <button id="copy-sailmaster" class="route-copy" type="button" title="Copies this route for SailMaster's autopilot. Paste it into SailMaster's route box.">Copy for SailMaster</button>
       </div>
       <div id="toast" class="toast" role="status" aria-live="polite"></div>
     </section>
@@ -272,6 +276,37 @@
         <button id="search-mark" type="button">Resolve to location</button>
       </section>
 
+      <section id="map-island-inspector" class="panel-section inspector" hidden>
+        <div class="section-heading">
+          <div><div class="eyebrow">Scrambled Seas map</div><h2 id="map-island-name">Island</h2></div>
+          <button id="delete-map-island" class="danger icon-button" type="button" title="Remove island from this map" aria-label="Remove island from this map">×</button>
+        </div>
+        <div id="map-island-detail" class="leg-detail"></div>
+        <form id="map-island-form" class="stack-form">
+          <label>Notes <textarea id="map-island-notes" rows="3" maxlength="1000" placeholder="Ports, landmarks, what you found…"></textarea></label>
+        </form>
+        <p class="fineprint">This island stays where the imported world put it.</p>
+      </section>
+
+      <section id="track-inspector" class="panel-section inspector" hidden>
+        <div class="section-heading">
+          <div><div class="eyebrow">Coordinate Viewer</div><h2>Edit track position</h2></div>
+          <button id="delete-track" class="danger icon-button" type="button" title="Delete track position" aria-label="Delete track position">×</button>
+        </div>
+        <form id="track-form" class="stack-form">
+          <label>Label <input id="track-name" maxlength="100" placeholder="Optional"></label>
+          <div class="two-columns">
+            <label>Latitude <input id="track-lat" inputmode="decimal"></label>
+            <label>Longitude <input id="track-lon" inputmode="decimal"></label>
+          </div>
+          <div class="two-columns">
+            <label>Day <input id="track-day" maxlength="30" placeholder="Optional"></label>
+            <label>Time <input id="track-time" maxlength="30" placeholder="Optional"></label>
+          </div>
+          <label>Recorded wind <input id="track-wind" maxlength="30" placeholder="Optional"></label>
+        </form>
+      </section>
+
       <section id="wind-inspector" class="panel-section inspector" hidden>
         <div class="section-heading">
           <div><div class="eyebrow">Selected wind</div><h2>Edit wind indicator</h2></div>
@@ -357,6 +392,7 @@
       <p class="help-note"><strong>Routes:</strong> Save route keeps a finished route on the chart and starts a new one. Saved routes are listed under Chart items. Click a saved route's line to select or drag the whole route, or click one of its waypoints to edit that point. Add waypoints continues a saved route from its last waypoint.</p>
       <p class="help-note"><strong>Distance model:</strong> the original Sailwind map uses a flat chart and approximately 140 nautical miles per degree. Chartroom preserves that convention; it does not treat the game world as a globe.</p>
       <p class="help-note"><strong>Long plots:</strong> while a measurement, search or area is active, hold the pointer against the chart edge briefly to pan in that direction.</p>
+      <p class="help-note"><strong>Following your boat:</strong> start recording in Coordinate Viewer, then choose File, Coordinate Viewer, Follow live and pick the coords file in Coordinate Viewer's plugin folder. Each position it records joins the chart you started on.</p>
       <p class="help-note"><strong>Scrambled Seas:</strong> turn on ExternalSave in Scrambled Seas' settings and save your game, then use File, Import to open the scramble_&lt;slot&gt;.xml file in its plugin folder. Chartroom makes a new chart with the Scrambled Seas map in View, showing where that world's islands are.</p>
       <p class="help-note"><strong>Your charts:</strong> Chartroom saves automatically and keeps a copy from your previous launch. Use File, Back up all charts to keep your own copy, or to move your charts to another computer.</p>
       <p class="help-note"><strong>Layout:</strong> use the two panel buttons at the top to hide either sidebar. Drag a sidebar's inner edge to resize it.</p>

@@ -6,6 +6,9 @@ public sealed class HostMessageTests
     [InlineData("""{"type":"ready"}""", typeof(HostMessage.Ready))]
     [InlineData("""{"type":"pin"}""", typeof(HostMessage.Pin))]
     [InlineData("""{"type":"open-folder"}""", typeof(HostMessage.OpenFolder))]
+    [InlineData("""{"type":"follow-track","chartId":"chart-1"}""", typeof(HostMessage.FollowTrack))]
+    [InlineData("""{"type":"stop-track"}""", typeof(HostMessage.StopTrack))]
+    [InlineData("""{"type":"copy-text","text":"route"}""", typeof(HostMessage.CopyText))]
     public void RecognisesPageRequests(string json, Type expected) =>
         Assert.IsType(expected, HostMessage.Parse(json));
 
@@ -27,6 +30,7 @@ public sealed class HostMessageTests
     [InlineData("""{"type":"export-file","name":"chart.json"}""")]
     [InlineData("""{"type":"export-file","name":"","contents":"{}"}""")]
     [InlineData("""{"type":"save"}""")]
+    [InlineData("""{"type":"follow-track"}""")]
     [InlineData("""{"type":"save","workspace":"text"}""")]
     [InlineData("""{"type":"save","workspace":{"charts":{}}}""")]
     [InlineData("""{"type":42}""")]

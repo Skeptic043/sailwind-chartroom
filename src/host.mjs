@@ -84,6 +84,8 @@ async function connectDesktop({ post, listen }) {
     dataFolder: String(init.dataFolder ?? ""),
     version: String(init.version ?? ""),
     textScale: Number(init.textScale) || 100,
+    // The Windows host can follow a Coordinate Viewer file as the game writes it.
+    liveTrack: init.liveTrack === true,
     on: events.on,
     // The host shows the Settings window and answers OK or Apply with "settings-changed".
     openSettings: (settings, defaults) => post({ type: "open-settings", settings, defaults }),
@@ -94,8 +96,12 @@ async function connectDesktop({ post, listen }) {
     save: (workspace) => post({ type: "save", workspace }),
     // The host asks where to save and writes the file.
     exportFile: (name, contents) => post({ type: "export-file", name, contents }),
+    // The host asks which file, then sends "track-following", "track-lines" with each new run of lines, and "track-stopped".
+    followTrack: (chartId) => post({ type: "follow-track", chartId }),
+    stopTrack: () => post({ type: "stop-track" }),
     togglePin: () => post({ type: "pin" }),
     openFolder: () => post({ type: "open-folder" }),
+    copyText: (text) => post({ type: "copy-text", text }),
     // Windows answers with "updates", then "update-progress" and "update-failed" while installing.
     // macOS shows its own update windows; background checks stay silent unless an update is found.
     checkUpdates: (background = false) => post({ type: "check-updates", background }),
@@ -121,6 +127,7 @@ function connectBrowser() {
     dataFolder: "",
     version: "",
     textScale: 100,
+    liveTrack: false,
     on: events.on,
     openSettings() {},
     setZoom() {},
@@ -143,6 +150,7 @@ function connectBrowser() {
       setTimeout(() => URL.revokeObjectURL(url), 0);
     },
     togglePin() {},
-    openFolder() {}
+    openFolder() {},
+    copyText: (text) => navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject(new Error("No clipboard"))
   };
 }

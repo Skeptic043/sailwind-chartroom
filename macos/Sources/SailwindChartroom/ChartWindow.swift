@@ -1,5 +1,6 @@
 import AppKit
 import ChartroomCore
+import UniformTypeIdentifiers
 import WebKit
 
 /// The app's one window: the chart page in a web view, and everything the page asks its host to do.
@@ -25,6 +26,11 @@ final class ChartWindow: NSObject, NSWindowDelegate, WKScriptMessageHandler, WKN
     private var currentWorkspace: String?
     private var pendingWorkspace: String?
     private var saveTimer: Timer?
+    private var follower: TrackFollower?
+    // The chart the followed positions go to, kept here so a reloaded page sends them to the same one.
+    private var followedChartId = ""
+    // Counts follows, so lines from one that has since been stopped or replaced are dropped.
+    private var followSession = 0
 
     private var version: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "" }
 
@@ -104,7 +110,9 @@ final class ChartWindow: NSObject, NSWindowDelegate, WKScriptMessageHandler, WKN
             // The workspace goes in as its own JSON text, exactly as it was saved.
             let workspace = currentWorkspace ?? "null"
             let folder = Self.jsonString(store.folder.path)
-            postJSON(#"{"type":"init","platform":"mac","workspace":\#(workspace),"dataFolder":\#(folder),"version":\#(Self.jsonString(version)),"textScale":100}"#)
+            postJSON(#"{"type":"init","platform":"mac","workspace":\#(workspace),"dataFolder":\#(folder),"version":\#(Self.jsonString(version)),"textScale":100,"liveTrack":true}"#)
+            // A reloaded page learns that a file is still being followed.
+            if let follower { post(["type": "track-following", "name": follower.url.lastPathComponent, "chartId": followedChartId, "resumed": true]) }
             smoke?.pageIsReady()
         case .save(let workspace):
             currentWorkspace = workspace
@@ -131,6 +139,13 @@ final class ChartWindow: NSObject, NSWindowDelegate, WKScriptMessageHandler, WKN
             settings?.window.appearance = appearance
         case .exportFile(let name, let contents):
             export(name: name, contents: contents)
+        case .followTrack(let chartId):
+            chooseTrackFile(chartId: chartId)
+        case .stopTrack:
+            stopFollowing()
+        case .copyText(let text):
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(text, forType: .string)
         case nil:
             break
         }
@@ -171,7 +186,52 @@ final class ChartWindow: NSObject, NSWindowDelegate, WKScriptMessageHandler, WKN
     }
 
     func windowWillClose(_ notification: Notification) {
+        follower?.stop()
+        follower = nil
+        followSession += 1
         flushSave()
+    }
+
+    // MARK: Following Coordinate Viewer
+
+    // The player picks the coords_<slot>.txt file Coordinate Viewer writes beside itself while recording.
+    private func chooseTrackFile(chartId: String) {
+        let panel = NSOpenPanel()
+        panel.title = "Follow a Coordinate Viewer file"
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowedContentTypes = [.plainText]
+        panel.beginSheetModal(for: window) { [weak self] response in
+            guard response == .OK, let url = panel.url else { return }
+            self?.startFollowing(url, chartId: chartId)
+        }
+    }
+
+    private func startFollowing(_ url: URL, chartId: String) {
+        stopFollowing()
+        do {
+            followSession += 1
+            let session = followSession
+            follower = try TrackFollower(url: url) { [weak self] text in
+                DispatchQueue.main.async {
+                    guard let self, session == self.followSession, self.follower != nil else { return }
+                    self.post(["type": "track-lines", "text": text])
+                }
+            }
+            followedChartId = chartId
+            post(["type": "track-following", "name": url.lastPathComponent, "chartId": chartId, "resumed": false])
+        } catch {
+            log.write("Could not follow \(url.lastPathComponent): \(error.localizedDescription)")
+            warn("Chartroom could not follow that file:\n\(error.localizedDescription)")
+        }
+    }
+
+    private func stopFollowing() {
+        guard let follower else { return }
+        follower.stop()
+        self.follower = nil
+        followSession += 1
+        post(["type": "track-stopped"])
     }
 
     // MARK: Exports and settings
