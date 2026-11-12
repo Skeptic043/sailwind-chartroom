@@ -1,10 +1,10 @@
 // Finds what is under the pointer and where drawing clicks snap to.
-import { NM_PER_DEGREE, destinationPoint, insideSearch, searchExtent, searchIconAnchors, itemShown, shownItems, summarizeRoute } from "./model.mjs";
+import { NM_PER_DEGREE, destinationPoint, insideSearch, legPieces, searchExtent, searchIconAnchors, itemShown, shownItems, summarizeRoute } from "./model.mjs";
 import { islandById, islandContains } from "./islands.mjs";
-import { visibleBoat } from "./boats.mjs";
+import { assignedBoats } from "./boats.mjs";
 import { clamp } from "./format.mjs";
 import { activeChart, selectedItem, selection } from "./state.mjs";
-import { boatIconBounds, boatIconBoundsAt, chartIsland, chartSearchIsland, islandPixelSpan, screenToWorld, symbolSize, worldToScreen } from "./viewport.mjs";
+import { boatRowAt, chartIsland, chartSearchIsland, featureBoats, insideBounds, islandPixelSpan, screenToWorld, symbolSize, worldToScreen } from "./viewport.mjs";
 
 const POINT_MAGNET_PX = 11;
 
@@ -32,33 +32,27 @@ function findHits(x, y) {
   for (const feature of shownItems(chart, "feature")) {
     const island = chartIsland(feature);
     const inside = island && islandPixelSpan(island) >= 14 && islandContains(island, feature, world);
-    const boatBounds = chart.layers.boats && visibleBoat(feature) ? boatIconBounds(feature) : null;
-    const insideBoat = boatBounds && x >= boatBounds.x - boatBounds.width / 2 && x <= boatBounds.x + boatBounds.width / 2
-      && y >= boatBounds.y - boatBounds.height / 2 && y <= boatBounds.y + boatBounds.height / 2;
+    const insideBoat = chart.layers.boats && featureBoats(feature).some(({ bounds }) => insideBounds(bounds, x, y));
     consider("feature", feature.id, feature, inside || insideBoat ? 0 : null);
   }
   for (const point of shownItems(chart, "route")) consider("route", point.id, point);
   for (const route of shownItems(chart, "saved-route")) {
     for (const point of route.points) consider("saved-point", point.id, point);
     // Clicking a saved route's line picks the whole route; its waypoints win when they are as close.
-    for (const leg of summarizeRoute(route.points).legs) {
-      const line = { a: worldToScreen(leg.from), b: worldToScreen(leg.to) };
-      const near = closestOnSegment(line, { x, y });
+    for (const [a, b] of summarizeRoute(route.points, chart.circumnavigation).legs.flatMap(legPieces)) {
+      const near = closestOnSegment({ a: worldToScreen(a), b: worldToScreen(b) }, { x, y });
       const distance = Math.hypot(near.x - x, near.y - y);
-      if (distance <= SAVED_ROUTE_LINE_PX) consider("saved-route", route.id, leg.from, distance + 3);
+      if (distance <= SAVED_ROUTE_LINE_PX) consider("saved-route", route.id, a, distance + 3);
     }
   }
   const searches = shownItems(chart, "search");
   const iconAnchors = searchIconAnchors(searches);
   for (const search of searches) {
     let insideBoat = false;
-    if (chart.layers.boats && visibleBoat(search)) {
+    if (chart.layers.boats) {
       const island = iconAnchors.has(search.id) ? null : chartSearchIsland(search);
       const scale = island ? clamp(28 / Math.max(1, islandPixelSpan(island)), 1, 8) : 1;
-      const boat = visibleBoat(search);
-      const bounds = boatIconBoundsAt(searchExtent(search).centre, island, scale, boat);
-      insideBoat = x >= bounds.x - bounds.width / 2 && x <= bounds.x + bounds.width / 2
-        && y >= bounds.y - bounds.height / 2 && y <= bounds.y + bounds.height / 2;
+      insideBoat = boatRowAt(searchExtent(search).centre, island, scale, assignedBoats(search)).some(({ bounds }) => insideBounds(bounds, x, y));
     }
     const searchOrigin = worldToScreen(search);
     const originDistance = Math.hypot(searchOrigin.x - x, searchOrigin.y - y);
@@ -118,7 +112,7 @@ export function findHit(x, y, { cycle = false } = {}) {
 export function selectedLineEnd(screen) {
   const kind = selection?.kind;
   const item = (kind === "measure" || kind === "line") && itemShown(activeChart(), kind, selectedItem() ?? {}) ? selectedItem() : null;
-  if (!item) return null;
+  if (!item || item.locked) return null;
   const distanceTo = (point) => {
     const projected = worldToScreen(point);
     return Math.hypot(projected.x - screen.x, projected.y - screen.y);
@@ -130,7 +124,7 @@ export function selectedLineEnd(screen) {
 
 export function onSelectedAreaEdge(screen) {
   const item = selection?.kind === "feature" ? selectedItem() : null;
-  if (!item?.rangeNm || !itemShown(activeChart(), "feature", item)) return false;
+  if (!item?.rangeNm || item.locked || !itemShown(activeChart(), "feature", item)) return false;
   const center = worldToScreen(item);
   const radius = item.rangeNm / NM_PER_DEGREE * activeChart().view.zoom;
   return Math.abs(Math.hypot(screen.x - center.x, screen.y - center.y) - radius) <= 6;
@@ -186,7 +180,7 @@ function magnetLines() {
   const add = (a, b) => lines.push({ a: worldToScreen(a), b: worldToScreen(b) });
   if (chart.layers.searchLines) for (const search of shownItems(chart, "search")) add(search, destinationPoint(search, search.bearing, searchExtent(search).farNm));
   for (const points of [shownItems(chart, "route"), ...shownItems(chart, "saved-route").map((route) => route.points)]) {
-    for (const leg of summarizeRoute(points).legs) add(leg.from, leg.to);
+    for (const [a, b] of summarizeRoute(points, chart.circumnavigation).legs.flatMap(legPieces)) add(a, b);
   }
   for (const line of shownItems(chart, "line")) add(line, line.end);
   return lines;

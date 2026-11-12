@@ -1,5 +1,5 @@
 // Chart edits started from panels, dialogs and tools.
-import { createFeature, createSearch, createWind, destinationPoint, locationRangeForType, parseBearing, parseCoordinate, removeChartItems, revealLayer, searchExtent, translateChartItems } from "./model.mjs";
+import { createFeature, createSearch, createWind, destinationPoint, locationRangeForType, parseBearing, parseCoordinate, removeChartItems, revealLayer, searchExtent, setLocked, translateChartItems } from "./model.mjs";
 import { clamp, positiveNumber } from "./format.mjs";
 import { elements, showToast } from "./dom.mjs";
 import { clearSelection, commit, refreshSelection, replaceSelectionState, selectedItem, selectedRefs, selection } from "./state.mjs";
@@ -49,10 +49,12 @@ export function updateSelectedFromForm(kind) {
   const item = selectedItem();
   if (!item || (FORM_FOR_KIND[selection.kind] ?? selection.kind) !== kind) return;
   try {
-    const target = {
-      lat: parseCoordinate(elements[`${kind}-lat`].value, "lat"),
-      lon: parseCoordinate(elements[`${kind}-lon`].value, "lon")
+    // The fields show four decimals, so a field left as shown keeps the item's own finer position.
+    const coordinate = (axis) => {
+      const text = elements[`${kind}-${axis}`].value;
+      return text === item[axis].toFixed(4) ? item[axis] : parseCoordinate(text, axis);
     };
+    const target = { lat: coordinate("lat"), lon: coordinate("lon") };
     const updates = {};
     if (kind === "route") Object.assign(updates, {
       name: elements["route-name"].value.trim(),
@@ -107,6 +109,12 @@ export function updateSavedRouteFromForm() {
     route.name = elements["saved-route-name"].value.trim() || route.name;
     route.hidden = !elements["saved-route-visible"].checked;
   });
+}
+
+export function lockSelected(locked) {
+  if (!selection) return;
+  const refs = selectedRefs();
+  commit((chart) => setLocked(chart, refs, locked));
 }
 
 export function deleteSelected() {

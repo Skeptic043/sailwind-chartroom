@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.7.1
+
+### Added
+- `Circumnavigation` toggle in the route panel: routes take the short way around the world, wrapping across the chart's east and west edges
+- Lock button for placed chart items
+- `Lock selected` and `Unlock selected` in the `Edit` menu
+- Several boats can be marked at one location
+
+### Changed
+- Zoom in much further
+
+Thanks to cap'n beaver and herpderp for suggesting deeper zoom, cap'n beaver for several boats per island, and daniel prates for locking locations
+
 ## 0.6.13
 
 ### Added

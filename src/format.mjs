@@ -1,5 +1,5 @@
 // Display formatting and small numeric helpers shared by the chart and its panels.
-import { COMPASS_STEP_DEG, bearingDegrees, compassPoint, distanceNm } from "./model.mjs";
+import { COMPASS_STEP_DEG, bearingDegrees, compassPoint, distanceNm, legEnd } from "./model.mjs";
 
 export function formatNm(value) {
   return value >= 100 ? Math.round(value).toLocaleString() : value.toFixed(1);
@@ -29,13 +29,14 @@ export function plainDegrees(degrees) {
   return `${String(Math.round((degrees % 360 + 360) % 360) % 360).padStart(3, "0")}°`;
 }
 
-export function formatLeg(from, to) {
-  return `${distanceNm(from, to).toFixed(1)} nm · ${formatBearing(bearingDegrees(from, to))}`;
+export function formatLeg(from, to, wrap = false) {
+  const end = legEnd(from, to, wrap);
+  return `${distanceNm(from, end).toFixed(1)} nm · ${formatBearing(bearingDegrees(from, end))}`;
 }
 
 export function shortCoordinate(value, axis, step) {
   const absolute = Math.abs(value);
-  const decimals = step >= 1 ? 0 : step >= .1 ? 1 : 2;
+  const decimals = step >= 1 ? 0 : step >= .1 ? 1 : step >= .01 ? 2 : step >= .001 ? 3 : 4;
   const label = absolute.toFixed(step === .25 ? 2 : decimals);
   const cardinal = axis === "lat" ? (value < 0 ? "S" : "N") : (value < 0 ? "W" : "E");
   return `${label}°${cardinal}`;

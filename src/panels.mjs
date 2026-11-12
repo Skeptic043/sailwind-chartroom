@@ -1,10 +1,10 @@
 // Renders the side panels: chart header, layers, route summary, inspectors and the chart item list.
-import { anchorTarget, bearingDegrees, chartItemFocusPoint, distanceNm, formatCoordinate, formatDuration, savedRouteForPoint, searchExtent, summarizeRoute } from "./model.mjs";
+import { anchorTarget, bearingDegrees, chartItemFocusPoint, distanceNm, formatCoordinate, formatDuration, isLocked, savedRouteForPoint, searchExtent, summarizeRoute } from "./model.mjs";
 import { assignedIsland, islandById, searchIsland, visibleIsland } from "./islands.mjs";
-import { assignedBoat } from "./boats.mjs";
+import { assignedBoats } from "./boats.mjs";
 import { formatBearing, formatDirection, formatLeg, formatNm, plainDegrees } from "./format.mjs";
 import { elements } from "./dom.mjs";
-import { activeChart, isSelected, selectItem, selectedItem, selectedKeys, selection, updateUndoButtons, workspace } from "./state.mjs";
+import { activeChart, isSelected, selectItem, selectedItem, selectedKeys, selectedRefs, selection, updateUndoButtons, workspace } from "./state.mjs";
 import { centerOn, drawChart } from "./render.mjs";
 
 export function renderEverything() {
@@ -89,7 +89,8 @@ export function renderRouteSummary() {
   const saved = selection?.kind === "saved-route" ? selectedItem()
     : selection?.kind === "saved-point" ? savedRouteForPoint(chart, selection.id) : null;
   const points = saved?.points ?? chart.route;
-  const summary = summarizeRoute(points);
+  const summary = summarizeRoute(points, chart.circumnavigation);
+  elements["route-circumnavigation"].checked = chart.circumnavigation;
   elements["route-summary"].hidden = points.length === 0;
   elements["route-summary-title"].textContent = saved ? saved.name : "Route";
   elements["route-actions"].hidden = Boolean(saved);
@@ -179,15 +180,40 @@ export function renderInspector() {
     const previous = points[index - 1];
     const next = points[index + 1];
     const details = [];
-    if (previous) details.push(`From previous: ${formatLeg(previous, item)}`);
-    if (next) details.push(`To next: ${formatLeg(item, next)}`);
+    const wrap = activeChart().circumnavigation;
+    if (previous) details.push(`From previous: ${formatLeg(previous, item, wrap)}`);
+    if (next) details.push(`To next: ${formatLeg(item, next, wrap)}`);
     elements["route-leg-detail"].textContent = details.join("\n") || "Add another waypoint to calculate a leg.";
   }
   if (isSavedRoute) renderSavedRouteInspector(item);
+  renderLockControls();
+}
+
+// Fields that place or shape an item. A locked item keeps them until it is unlocked.
+const PLACEMENT_FIELDS = Object.freeze([
+  "feature-type", "feature-lat", "feature-lon", "feature-range", "route-lat", "route-lon", "track-lat", "track-lon", "wind-lat", "wind-lon", "wind-direction",
+  "search-lat", "search-lon", "search-direction", "search-distance", "search-spread", "search-tolerance"
+]);
+
+function renderLockControls() {
+  const chart = activeChart();
+  const locked = Boolean(selection) && isLocked(chart, selection);
+  for (const button of document.querySelectorAll("[data-lock]")) {
+    const label = locked ? "Unlock" : "Lock in place";
+    button.classList.toggle("active", locked);
+    button.setAttribute("aria-pressed", String(locked));
+    button.setAttribute("aria-label", label);
+    button.title = label;
+  }
+  for (const id of PLACEMENT_FIELDS) elements[id].disabled = locked;
+  elements["resolve-feature"].disabled = locked;
+  const refs = selectedRefs().filter((ref) => ref.kind !== "map-island");
+  elements["lock-selected"].disabled = !refs.some((ref) => !isLocked(chart, ref));
+  elements["unlock-selected"].disabled = !refs.some((ref) => isLocked(chart, ref));
 }
 
 function renderSavedRouteInspector(route) {
-  const summary = summarizeRoute(route.points);
+  const summary = summarizeRoute(route.points, activeChart().circumnavigation);
   const speed = activeChart().speedKn;
   elements["saved-route-name"].value = route.name;
   elements["saved-route-visible"].checked = !route.hidden;
@@ -236,8 +262,13 @@ function renderSearchInspector(search) {
 }
 
 function renderBoatControls(item, prefix) {
-  const boat = assignedBoat(item);
-  elements[`${prefix}-boat-status`].textContent = boat ? `${boat.name} · ${boat.provider}` : "None";
+  const boats = assignedBoats(item);
+  elements[`${prefix}-boat-status`].textContent = boats.length === 1 ? `${boats[0].name} · ${boats[0].provider}` : boatNames(boats) || "None";
+  elements[`choose-${prefix}-boat`].textContent = boats.length ? "Edit boats" : "Choose boats";
+}
+
+function boatNames(boats) {
+  return boats.map((boat) => boat.name).join(", ");
 }
 
 function withDayTime(detail, item) {
@@ -250,25 +281,25 @@ export function renderFeatureList() {
   const chart = activeChart();
   const items = [
     ...chart.features.map((item) => {
-      const boat = assignedBoat(item);
+      const boats = assignedBoats(item);
       const location = item.rangeNm ? `Area · ${formatNm(item.rangeNm)} nm radius` : assignedIsland(item)?.name ?? (item.day ? `Day ${item.day}${item.time ? ` ${item.time}` : ""}` : "Location");
-      return { kind: "feature", item, name: item.name || (item.rangeNm ? "Rough area" : "Location"), detail: boat ? `${location} · ${boat.name}` : location, marker: boat ? "⛵" : visibleIsland(item) ? "◈" : item.rangeNm ? "◎" : "●" };
+      return { kind: "feature", item, name: item.name || (item.rangeNm ? "Rough area" : "Location"), detail: boats.length ? `${location} · ${boatNames(boats)}` : location, marker: boats.length ? "⛵" : visibleIsland(item) ? "◈" : item.rangeNm ? "◎" : "●" };
     }),
     ...chart.route.map((item, index) => ({ kind: "route", item, name: item.name || `Waypoint ${index + 1}`, detail: withDayTime("Route waypoint", item), marker: "◆" })),
     ...chart.savedRoutes.map((item) => ({
       kind: "saved-route",
       item,
       name: item.name,
-      detail: `Saved route · ${item.points.length} waypoints · ${formatNm(summarizeRoute(item.points).totalNm)} nm${item.hidden ? " · hidden" : ""}`,
+      detail: `Saved route · ${item.points.length} waypoints · ${formatNm(summarizeRoute(item.points, chart.circumnavigation).totalNm)} nm${item.hidden ? " · hidden" : ""}`,
       search: item.points.map((point) => `${point.name} ${point.notes}`).join(" "),
       marker: "◇"
     })),
-    ...chart.searches.map((item) => ({ kind: "search", item, name: item.label || "Search area", detail: `${formatDirection(item.bearing)} · ${formatNm(item.distanceNm)} nm${assignedBoat(item) ? ` · ${assignedBoat(item).name}` : ""}`, marker: "⌖" })),
+    ...chart.searches.map((item) => ({ kind: "search", item, name: item.label || "Search area", detail: `${formatDirection(item.bearing)} · ${formatNm(item.distanceNm)} nm${assignedBoats(item).length ? ` · ${boatNames(assignedBoats(item))}` : ""}`, marker: "⌖" })),
     ...chart.measures.map((item) => ({ kind: "measure", item, name: "Measure line", detail: `${formatNm(distanceNm(item, item.end))} nm · ${formatBearing(bearingDegrees(item, item.end))}`, marker: "↔" })),
     ...chart.segments.map((item) => ({ kind: "line", item, name: `Kept ${item.color} line`, detail: `${formatNm(distanceNm(item, item.end))} nm · ${formatBearing(bearingDegrees(item, item.end))}`, marker: "╱" })),
     ...chart.winds.map((item) => ({ kind: "wind", item, name: item.label || "Wind", detail: withDayTime(`Flows toward ${formatDirection(item.bearing)}`, item), marker: "➤" }))
   ].filter((entry) => (filter === "all" || entry.kind === filter)
-    && `${entry.name} ${entry.detail} ${assignedBoat(entry.item)?.provider ?? ""} ${entry.item.notes ?? ""} ${entry.search ?? ""}`.toLowerCase().includes(query));
+    && `${entry.name} ${entry.detail} ${assignedBoats(entry.item).map((boat) => boat.provider).join(" ")} ${entry.item.notes ?? ""} ${entry.search ?? ""}`.toLowerCase().includes(query));
   elements["feature-count"].textContent = chart.features.length + chart.route.length + chart.savedRoutes.length + chart.searches.length + chart.measures.length + chart.segments.length + chart.winds.length;
   elements["feature-list"].replaceChildren(...items.map((entry) => {
     const { kind, item } = entry;
@@ -279,7 +310,7 @@ export function renderFeatureList() {
     button.innerHTML = `<span class="marker"></span><span><strong></strong><small></small></span><span class="coords"></span>`;
     button.querySelector(".marker").textContent = entry.marker;
     button.querySelector("strong").textContent = entry.name;
-    button.querySelector("small").textContent = entry.detail;
+    button.querySelector("small").textContent = isLocked(chart, { kind, id: item.id }) ? `${entry.detail} · Locked` : entry.detail;
     button.querySelector(".coords").textContent = `${focus.lat.toFixed(1)}°, ${focus.lon.toFixed(1)}°`;
     button.addEventListener("click", (event) => {
       selectItem(kind, item.id, { additive: event.shiftKey });

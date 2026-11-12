@@ -52,7 +52,8 @@ import {
 import { ISLAND_CATALOG, ISLAND_GROUPS, VANILLA_ISLANDS, assignedIsland, islandGroup, islandById, islandByName, normalizeIslandName, searchIsland, visibleIsland } from "../src/islands.mjs";
 import { importedMapIslands, parseScrambledSeasXml } from "../src/scrambled-seas.mjs";
 import { readFileSync } from "node:fs";
-import { BOAT_CATALOG, assignedBoat, boatById, boatMarkerSize, visibleBoat } from "../src/boats.mjs";
+import { BOAT_CATALOG, assignedBoats, boatById, boatMarkerSize } from "../src/boats.mjs";
+import { isLocked, legPieces, setLocked, summarizeRoute as routeSummary } from "../src/model.mjs";
 
 test("parses decimal and degree-minute-second coordinates", () => {
   assert.equal(parseCoordinate("35.5 N", "lat"), 35.5);
@@ -129,10 +130,11 @@ test("sanitizes malformed workspace data into a usable chart", () => {
 });
 
 test("quotes CSV fields safely", () => {
-  const csv = featuresToCsv([{ name: "Rock, north", lat: 1, lon: 2, day: "", time: "", boatId: "vanilla/dhow", boatCorner: "ne", showBoat: false, notes: "He said \"shoal\"" }]);
+  const csv = featuresToCsv([{ name: "Rock, north", lat: 1, lon: 2, day: "", time: "", boatIds: ["vanilla/dhow", "vanilla/cog"], notes: "He said \"shoal\"" }]);
   assert.match(csv, /"Rock, north"/);
   assert.match(csv, /"He said ""shoal"""/);
-  assert.match(csv, /show_island,boat_id,notes/);
+  assert.match(csv, /show_island,boat_ids,notes/);
+  assert.match(csv, /,vanilla\/dhow vanilla\/cog,/);
   assert.doesNotMatch(csv, /boat_corner|show_boat/);
 });
 
@@ -166,7 +168,7 @@ test("a chart keeps one measure line that moves and deletes as a whole", () => {
 });
 
 test("a search area covers its compass point and distance margin", () => {
-  const search = createSearch({ lat: 0, lon: 0, bearing: parseBearing("SSE"), distanceNm: 140, boatId: "vanilla/dhow", boatCorner: "ne", showBoat: false });
+  const search = createSearch({ lat: 0, lon: 0, bearing: parseBearing("SSE"), distanceNm: 140, boatIds: ["vanilla/dhow"] });
   const extent = searchExtent(search);
   assert.equal(extent.nearNm, 126);
   assert.ok(Math.abs(extent.farNm - 154) < 1e-9);
@@ -176,9 +178,7 @@ test("a search area covers its compass point and distance margin", () => {
   assert.ok(!insideSearch(search, destinationPoint(search, 157.5, 120)), "too close");
   const [restored] = sanitizeWorkspace({ charts: [{ ...createChart(), searches: [search, { ...search, distanceNm: 0 }] }] }).charts[0].searches;
   assert.deepEqual(restored, search, "saved searches survive reload; zero-distance ones are dropped");
-  assert.equal(assignedBoat(restored).name, "Dhow");
-  assert.equal(restored.boatCorner, "se");
-  assert.equal(restored.showBoat, true);
+  assert.deepEqual(assignedBoats(restored).map((boat) => boat.name), ["Dhow"]);
 });
 
 test("removes stacked fill outside the common solution for matching search areas", () => {
@@ -435,16 +435,56 @@ test("uses recognizable sail and structure features instead of ambiguous open br
   assert.ok(happyBay.structures?.length, "the Happy Bay deckhouse is a closed silhouette");
 });
 
-test("migrates assigned boats to the one visible lower-right presentation", () => {
+test("a place keeps several boats, and older single boats carry over", () => {
   const chart = createChart();
   chart.features.push({ id: "port", lat: 3, lon: 4, name: "Port", boatId: "old-chronian/aelasyl", boatCorner: "nw", showBoat: false });
-  chart.features.push({ id: "fallback", lat: 4, lon: 5, name: "Fallback", boatId: "vanilla/dhow", boatCorner: "middle" });
+  chart.features.push({ id: "harbour", lat: 4, lon: 5, name: "Harbour", boatIds: ["vanilla/dhow", "vanilla/cog", "vanilla/dhow", ""] });
   const restored = sanitizeWorkspace({ activeChartId: chart.id, charts: [chart] }).charts[0].features;
-  assert.equal(assignedBoat(restored[0]).name, "Aelasyl");
-  assert.equal(restored[0].boatCorner, "se");
-  assert.equal(restored[0].showBoat, true);
-  assert.equal(visibleBoat(restored[0]).name, "Aelasyl");
-  assert.equal(restored[1].boatCorner, "se");
+  assert.deepEqual(restored[0].boatIds, ["old-chronian/aelasyl"]);
+  assert.equal(restored[0].boatId, undefined);
+  assert.equal(restored[0].boatCorner, undefined);
+  assert.deepEqual(assignedBoats(restored[1]).map((boat) => boat.name), ["Dhow", "Cog"], "duplicates and blanks are dropped");
+});
+
+test("a circumnavigation route crosses the chart edge the short way", () => {
+  const route = [{ lat: 20, lon: 178 }, { lat: 20, lon: -178 }, { lat: 22, lon: -176 }];
+  const flat = routeSummary(route);
+  assert.ok(Math.abs(flat.legs[0].nm - 356 * 140) < 1e-6, "a flat chart goes the long way");
+  const round = routeSummary(route, true);
+  const [across, onward] = round.legs;
+  assert.ok(Math.abs(across.nm - 4 * 140) < 1e-6);
+  assert.ok(Math.abs(across.bearing - 90) < 1e-9, "heading east across the edge");
+  assert.deepEqual(across.end, { lat: 20, lon: 182 });
+  assert.deepEqual(across.mid, { lat: 20, lon: 180 });
+  assert.deepEqual(legPieces(across), [[route[0], { lat: 20, lon: 180 }], [{ lat: 20, lon: -180 }, route[1]]], "drawn out to the edge and in from the other");
+  const [out, back] = legPieces(routeSummary([{ lat: 0, lon: 170 }, { lat: 10, lon: -170 }], true).legs[0]);
+  assert.deepEqual([out[1], back[0]], [{ lat: 5, lon: 180 }, { lat: 5, lon: -180 }], "both sides cross at the same latitude");
+  assert.equal(onward.end, route[2], "a leg within the chart is unchanged");
+  assert.deepEqual(legPieces(onward), [[route[1], route[2]]]);
+  const west = routeSummary([{ lat: 0, lon: -170 }, { lat: 0, lon: 170 }], true).legs[0];
+  assert.ok(Math.abs(west.nm - 20 * 140) < 1e-6);
+  assert.ok(Math.abs(west.bearing - 270) < 1e-9, "heading west across the edge");
+  assert.equal(sanitizeWorkspace({ charts: [{ ...createChart(), circumnavigation: true }] }).charts[0].circumnavigation, true);
+  assert.equal(createChart().circumnavigation, false);
+});
+
+test("locked items stay in place until unlocked", () => {
+  const chart = createChart();
+  const free = createRoutePoint({ lat: 1, lon: 1 });
+  const held = createRoutePoint({ lat: 2, lon: 2 });
+  chart.route.push(free, held);
+  chart.winds.push(createWind({ lat: 3, lon: 3, bearing: 90 }));
+  const refs = [{ kind: "route", id: free.id }, { kind: "route", id: held.id }];
+  setLocked(chart, [refs[1], { kind: "wind", id: chart.winds[0].id }], true);
+  translateChartItems(chart, [...refs, { kind: "wind", id: chart.winds[0].id }], { lat: 1, lon: 1 });
+  assert.deepEqual([free.lat, held.lat, chart.winds[0].lat], [2, 2, 3]);
+  assert.ok(isLocked(chart, refs[1]) && !isLocked(chart, refs[0]));
+  const [restored] = sanitizeWorkspace({ charts: [chart] }).charts;
+  assert.equal(restored.route[1].locked, true, "the lock is saved");
+  assert.equal(restored.route[0].locked, undefined);
+  setLocked(chart, refs, false);
+  translateChartItems(chart, refs, { lat: 1, lon: 0 });
+  assert.deepEqual([free.lat, held.lat], [3, 3]);
 });
 
 test("imports island placements from the empty-sea legacy format", () => {
@@ -568,7 +608,7 @@ test("imports a single-chart export written by Chartroom 0.4.15", async () => {
   assert.equal(chart.seed, "4815");
   assert.deepEqual(chart.features.map((feature) => feature.name), ["Dead Cove", ""]);
   assert.equal(chart.features[1].rangeNm, 25);
-  assert.equal(chart.features[1].boatId, "vanilla/dhow");
+  assert.deepEqual(chart.features[1].boatIds, ["vanilla/dhow"]);
   assert.equal(chart.savedRoutes[0].points[1].notes, "Avoid shoal");
   assert.equal(chart.savedRoutes[0].hidden, false);
   assert.equal(chart.route[0].name, "Next leg");
@@ -588,7 +628,9 @@ test("opens a 0.4.15 workspace file unchanged apart from new defaults", async ()
   const workspace = sanitizeWorkspace(saved);
   assert.equal(workspace.activeChartId, saved.activeChartId);
   assert.equal(workspace.layout.leftWidth, 300);
-  assert.deepEqual(workspace.charts[0].features, saved.charts[0].features);
+  // A single boat becomes the first of a location's boats.
+  const expected = saved.charts[0].features.map(({ boatId, boatCorner, showBoat, ...feature }) => boatId ? { ...feature, boatIds: [boatId] } : feature);
+  assert.deepEqual(workspace.charts[0].features, expected);
 });
 
 test("labelled exports round-trip every chart item", async () => {

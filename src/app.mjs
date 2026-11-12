@@ -7,7 +7,7 @@ import { activeChart, clearSelection, commit, initState, persist, redo, replaceS
 import { eventPoint, screenToWorld } from "./viewport.mjs";
 import { drawChart, fitData, resizeCanvas, setOverlay } from "./render.mjs";
 import { findHit } from "./hits.mjs";
-import { addLocation, deleteSelected, updateSavedRouteFromForm, updateSelectedFromForm } from "./edits.mjs";
+import { addLocation, deleteSelected, lockSelected, updateSavedRouteFromForm, updateSelectedFromForm } from "./edits.mjs";
 import { beginResolution, drawToolPreview, endPointer, extendSavedRoute, mode, movePointer, pointerState, setMode, setSpacePressed, startPointer, stopEdgePan, zoomAt } from "./interaction.mjs";
 import { LAYER_CONTROLS, renderEverything, renderFeatureList, renderInspector, renderRouteSummary } from "./panels.mjs";
 import { applyLayout, endPanelResize, movePanelResize, resizePanelFromKeyboard, startPanelResize, togglePanel } from "./layout.mjs";
@@ -95,6 +95,11 @@ elements["copy-sailmaster"].addEventListener("click", () => {
     () => showToast("The route could not be copied.", true)
   );
 });
+elements["route-circumnavigation"].addEventListener("change", (event) => {
+  commit((chart) => {
+    chart.circumnavigation = event.target.checked;
+  });
+});
 elements["route-speed"].addEventListener("change", (event) => {
   const speed = event.target.valueAsNumber;
   if (!Number.isFinite(speed)) { renderRouteSummary(); return; }
@@ -115,6 +120,12 @@ for (const kind of ["feature", "route", "search", "wind", "track"]) {
 for (const id of ["delete-feature", "delete-route-point", "delete-saved-route", "delete-measure", "delete-search", "delete-wind", "delete-track", "delete-map-island"]) {
   elements[id].addEventListener("click", deleteSelected);
 }
+// The padlock follows the item whose inspector is shown, and applies to the whole selection.
+for (const button of document.querySelectorAll("[data-lock]")) {
+  button.addEventListener("click", () => lockSelected(button.getAttribute("aria-pressed") !== "true"));
+}
+elements["lock-selected"].addEventListener("click", () => lockSelected(true));
+elements["unlock-selected"].addEventListener("click", () => lockSelected(false));
 elements["saved-route-form"].addEventListener("change", updateSavedRouteFromForm);
 elements["line-form"].addEventListener("submit", (event) => event.preventDefault());
 elements["map-island-form"].addEventListener("submit", (event) => event.preventDefault());
@@ -175,11 +186,9 @@ elements["boat-search"].addEventListener("input", renderBoatLibrary);
 elements["boat-provider"].addEventListener("change", renderBoatLibrary);
 elements["remove-boat"].addEventListener("click", () => {
   const owner = selectedBoatOwner();
-  if (!owner?.boatId) return;
+  if (!owner?.boatIds) return;
   commit(() => {
-    delete owner.boatId;
-    delete owner.boatCorner;
-    delete owner.showBoat;
+    delete owner.boatIds;
   });
   elements["boat-dialog"].close();
 });

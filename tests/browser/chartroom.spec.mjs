@@ -606,3 +606,68 @@ test("a Coordinate Viewer position can be selected, edited and deleted", async (
   await chartroom.press("Delete");
   expect((await chartroom.chart()).track).toHaveLength(1);
 });
+
+const seaWith = (items) => ({ activeChartId: "sea", charts: [{ id: "sea", name: "Sea", view: { lat: 20, lon: 0, zoom: 2.5 }, ...items }] });
+
+test("a circumnavigation chart routes across the edge the short way", async ({ chartroom, page }) => {
+  await chartroom.open(seaWith({ route: [{ id: "a", lat: 20, lon: 170 }, { id: "b", lat: 20, lon: -170 }, { id: "c", lat: 10, lon: -160 }] }));
+  await expect(page.locator("#route-distance")).toContainText("49,580");
+  await page.locator("#route-circumnavigation").check();
+  await expect.poll(async () => (await chartroom.chart()).circumnavigation).toBe(true);
+  // 20° east across the edge, then 10° south and 10° east.
+  await expect(page.locator("#route-distance")).toHaveText(`${Math.round(20 * 140 + Math.hypot(10, 10) * 140).toLocaleString()} nm`);
+  await expect(page.locator("#route-bearing")).toContainText("090°");
+  await page.locator("#route-circumnavigation").uncheck();
+  await expect(page.locator("#route-distance")).toContainText("49,580");
+});
+
+test("locked items stay put until unlocked from the inspector or the Edit menu", async ({ chartroom, page }) => {
+  await chartroom.open(seaWith({ view: { lat: 0, lon: 0, zoom: 20 }, features: [{ id: "rock", lat: 0, lon: 0, name: "Rock" }] }));
+  await chartroom.items().first().click();
+  const lock = page.locator("#feature-inspector [data-lock]");
+  await lock.click();
+  await expect(lock).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#feature-lat")).toBeDisabled();
+  await expect(chartroom.items().first()).toContainText("Locked");
+  const box = await chartroom.canvas.boundingBox();
+  const centre = { x: box.width / 2, y: box.height / 2 };
+  await chartroom.dragChart(centre, { x: centre.x + 80, y: centre.y + 40 });
+  const [rock] = (await chartroom.chart()).features;
+  expect([rock.lat, rock.lon, rock.locked]).toEqual([0, 0, true]);
+  await page.locator("[data-menu=edit] summary").click();
+  await page.locator("#unlock-selected").click();
+  await expect.poll(async () => (await chartroom.chart()).features[0].locked).toBeUndefined();
+  await expect(page.locator("#feature-lat")).toBeEnabled();
+});
+
+test("a location keeps several boats chosen from the library", async ({ chartroom, page }) => {
+  await chartroom.open(seaWith({ features: [{ id: "port", lat: 0, lon: 0, name: "Port", boatId: "vanilla/dhow" }] }));
+  await chartroom.items().first().click();
+  await expect(page.locator("#feature-boat-status")).toContainText("Dhow");
+  await page.locator("#choose-feature-boat").click();
+  await page.locator(".boat-row", { hasText: "Cog" }).click();
+  await expect(page.locator("#boat-dialog")).toBeVisible();
+  await expect.poll(async () => (await chartroom.chart()).features[0].boatIds).toEqual(["vanilla/dhow", "vanilla/cog"]);
+  await page.locator(".boat-row", { hasText: "Dhow" }).first().click();
+  await expect.poll(async () => (await chartroom.chart()).features[0].boatIds).toEqual(["vanilla/cog"]);
+  await page.locator("#boat-dialog [data-close]").click();
+  await expect(page.locator("#feature-boat-status")).toContainText("Cog");
+});
+
+test("zooms in far enough for a small island to fill the chart", async ({ chartroom, page }) => {
+  await chartroom.open(seaWith({ view: { lat: 0, lon: 0, zoom: 500 } }));
+  const box = await chartroom.canvas.boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  for (let step = 0; step < 30; step += 1) await page.mouse.wheel(0, -300);
+  await expect.poll(async () => (await chartroom.chart()).view.zoom).toBeGreaterThan(50000);
+});
+
+test("renaming a precisely placed location leaves it where it is", async ({ chartroom, page }) => {
+  await chartroom.open(seaWith({ view: { lat: 0.123456, lon: 0.654321, zoom: 90000 }, features: [{ id: "buoy", lat: 0.123456, lon: 0.654321, name: "Buoy" }] }));
+  await chartroom.items().first().click();
+  await page.locator("#feature-name").fill("Bell buoy");
+  await page.locator("#feature-name").press("Enter");
+  await expect.poll(async () => (await chartroom.chart()).features[0].name).toBe("Bell buoy");
+  const [buoy] = (await chartroom.chart()).features;
+  expect([buoy.lat, buoy.lon]).toEqual([0.123456, 0.654321]);
+});

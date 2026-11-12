@@ -58,22 +58,14 @@ export const BOAT_CATALOG = Object.freeze([
 ]);
 
 const BY_ID = new Map(BOAT_CATALOG.map((entry) => [entry.id, entry]));
-export const BOAT_CORNERS = Object.freeze(["nw", "ne", "sw", "se"]);
 
 export function boatById(id) {
   return BY_ID.get(String(id ?? "")) ?? null;
 }
 
-export function assignedBoat(feature) {
-  return boatById(feature?.boatId);
-}
-
-export function visibleBoat(feature) {
-  return assignedBoat(feature);
-}
-
-export function normalizeBoatCorner(value) {
-  return BOAT_CORNERS.includes(value) ? value : "se";
+// The boats at a location or search area, in the order they were added.
+export function assignedBoats(item) {
+  return (item?.boatIds ?? []).map(boatById).filter(Boolean);
 }
 
 export function boatMarkerSize(entry) {

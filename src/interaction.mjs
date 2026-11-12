@@ -1,11 +1,11 @@
 // Tool modes and pointer handling on the chart canvas, including the previews tools draw while active.
-import { COMPASS_STEP_DEG, ITEM_KINDS, MAX_RANGE_NM, MAX_ZOOM, MIN_ZOOM, WORLD_BOUNDS, bearingDegrees, chartItemFocusPoint, createFeature, createMeasure, createRoutePoint, createSearch, createWind, distanceNm, formatCoordinate, itemForRef, revealLayer, searchExtent, searchesAnsweredBy, shownItems, translateChartItems } from "./model.mjs";
+import { COMPASS_STEP_DEG, ITEM_KINDS, MAX_RANGE_NM, MAX_ZOOM, MIN_ZOOM, WORLD_BOUNDS, bearingDegrees, chartItemFocusPoint, createFeature, createMeasure, createRoutePoint, createSearch, createWind, distanceNm, formatCoordinate, isLocked, itemForRef, revealLayer, searchExtent, searchesAnsweredBy, shownItems, translateChartItems } from "./model.mjs";
 import { assignedIsland, islandById, searchIsland } from "./islands.mjs";
-import { drawBoatSilhouette, visibleBoat } from "./boats.mjs";
+import { assignedBoats, drawBoatSilhouette } from "./boats.mjs";
 import { clamp, formatDirection, formatNm } from "./format.mjs";
 import { canvas, context, elements } from "./dom.mjs";
 import { activeChart, commit, host, isSelected, persist, pushUndo, refreshSelection, replaceSelectionState, selectItem, selectedItem, selectedKeys, selectedRefs, selection, selectionKey, setPrimarySelection } from "./state.mjs";
-import { boatIconBoundsAt, coordinatePrecision, eventPoint, screenToWorld, worldToScreen } from "./viewport.mjs";
+import { boatRowAt, coordinatePrecision, eventPoint, screenToWorld, worldToScreen } from "./viewport.mjs";
 import { boatColours, drawAreaCircle, drawChart, drawIslandSilhouette, drawLine, drawMeasureLine, drawSearchWedge, drawWindIndicator, labelPill, magnetRing } from "./render.mjs";
 import { findHit, resetHitCycle, nearestTrackPoint, onSelectedAreaEdge, selectedLineEnd, snapAlongRay, snapPoint } from "./hits.mjs";
 import { addLocation, addSearch, addWind, setAnchor } from "./edits.mjs";
@@ -168,12 +168,12 @@ export function drawPlacementDraft(palette) {
   if (!hoverTarget) return;
   const island = islandPlacement ? islandById(islandPlacement) : resolutionIsland();
   const source = resolutionDraft ? itemForRef(activeChart(), resolutionDraft) : null;
-  const boat = activeChart().layers.boats ? visibleBoat(source) : null;
-  if (!island && !boat) return;
+  const boats = activeChart().layers.boats ? assignedBoats(source) : [];
+  if (!island && !boats.length) return;
   context.save();
   context.globalAlpha = .72;
   if (island) drawIslandSilhouette(hoverTarget, island, true, palette);
-  if (boat) drawBoatSilhouette(context, boat, boatIconBoundsAt(hoverTarget, island, 1, boat), {
+  for (const { boat, bounds } of boatRowAt(hoverTarget, island, 1, boats)) drawBoatSilhouette(context, boat, bounds, {
     ...boatColours(palette, true),
     lineWidth: 1.7,
     detail: "marker"
@@ -363,6 +363,8 @@ export function startPointer(event) {
       setPrimarySelection(hit);
       refreshSelection();
     }
+    // A locked item stays put, so pressing it pans the chart instead.
+    if (isLocked(activeChart(), hit)) return startPan(event, screen);
     pointerState = { type: "move-items", pointerId: event.pointerId, start: screen, last: screen, moved: false };
     canvas.classList.add("dragging");
   } else if (event.shiftKey) {
@@ -564,7 +566,7 @@ function resolveToLocation(point) {
         lat: point.lat,
         lon: point.lon,
         name: source.label || "Resolved location",
-        boatId: source.boatId,
+        boatIds: source.boatIds,
         islandId: source.islandId,
         showIsland: source.showIsland !== false,
         notes: `Resolved from a ${formatDirection(source.bearing)} search, ${formatNm(extent.nearNm)}–${formatNm(extent.farNm)} nm from ${formatCoordinate(source.lat, "lat", 3)}, ${formatCoordinate(source.lon, "lon", 3)}.`

@@ -1,7 +1,7 @@
 // Converts between chart coordinates and canvas pixels for the active chart's view.
 import { WORLD_BOUNDS, islandsShown } from "./model.mjs";
 import { searchIsland, visibleIsland } from "./islands.mjs";
-import { boatMarkerSize, visibleBoat } from "./boats.mjs";
+import { assignedBoats, boatMarkerSize } from "./boats.mjs";
 import { clamp } from "./format.mjs";
 import { canvas } from "./dom.mjs";
 import { activeChart } from "./state.mjs";
@@ -31,7 +31,7 @@ export function eventPoint(event) {
 
 export function coordinatePrecision() {
   const zoom = activeChart().view.zoom;
-  return zoom >= 600 ? 4 : zoom >= 60 ? 3 : 2;
+  return zoom >= 6000 ? 5 : zoom >= 600 ? 4 : zoom >= 60 ? 3 : 2;
 }
 
 export function islandPixelSpan(island) {
@@ -47,8 +47,8 @@ export function chartSearchIsland(search) {
   return islandsShown(activeChart(), "search", search) ? searchIsland(search) : null;
 }
 
-export function boatIconBounds(feature) {
-  return boatIconBoundsAt(feature, chartIsland(feature), 1, visibleBoat(feature));
+export function featureBoats(feature) {
+  return boatRowAt(feature, chartIsland(feature), 1, assignedBoats(feature));
 }
 
 // One size rule for every chart symbol. Each is `full` pixels at SYMBOL_FULL_SIZE_ZOOM and grows and
@@ -68,15 +68,26 @@ export function symbolSize(name) {
   return clamp(full * Math.sqrt(activeChart().view.zoom / SYMBOL_FULL_SIZE_ZOOM), min, max);
 }
 
-// A boat sits just right of its mark or island, resting above the name label drawn below the centre.
+// Boats sit in a row just right of their mark or island, resting above the name label drawn below the
+// centre. Each is { boat, bounds }, the bounds centred on the boat.
 const BOAT_BASELINE_PX = 6;
+const BOAT_GAP_PX = 3;
 
-export function boatIconBoundsAt(point, island, islandScale = 1, boat = null) {
+export function boatRowAt(point, island, islandScale, boats) {
   const screen = worldToScreen(point);
-  const marker = boatMarkerSize(boat);
   const halfWidth = island ? (island.bounds.maxLon - island.bounds.minLon) * activeChart().view.zoom * islandScale / 2 : symbolSize("mark");
   const scale = symbolSize("boat");
-  const width = marker.width * scale;
-  const height = marker.height * scale;
-  return { x: screen.x + halfWidth + width / 2 + 4, y: screen.y + BOAT_BASELINE_PX - height / 2, width, height };
+  let left = screen.x + halfWidth + 4;
+  return boats.map((boat) => {
+    const marker = boatMarkerSize(boat);
+    const width = marker.width * scale;
+    const height = marker.height * scale;
+    const bounds = { x: left + width / 2, y: screen.y + BOAT_BASELINE_PX - height / 2, width, height };
+    left += width + BOAT_GAP_PX;
+    return { boat, bounds };
+  });
+}
+
+export function insideBounds(bounds, x, y) {
+  return Math.abs(x - bounds.x) <= bounds.width / 2 && Math.abs(y - bounds.y) <= bounds.height / 2;
 }

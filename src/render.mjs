@@ -1,13 +1,13 @@
 // Draws the chart canvas and moves its view. Tool previews are drawn by interaction.mjs through setOverlay().
 import { mapPalette, paperTile } from "./theme.mjs";
-import { MAX_ZOOM, MIN_ZOOM, NM_PER_DEGREE, WORLD_BOUNDS, bearingDegrees, clusteredLabelIds, destinationPoint, distanceNm, formatDuration, searchChartLabel, searchEvidenceOpacity, searchExtent, searchIconAnchors, searchNameLabelIds, searchOverlapGroups, shownItems, summarizeRoute, tradeWindAt } from "./model.mjs";
+import { MAX_ZOOM, MIN_ZOOM, NM_PER_DEGREE, WORLD_BOUNDS, bearingDegrees, clusteredLabelIds, destinationPoint, distanceNm, formatDuration, legPieces, searchChartLabel, searchEvidenceOpacity, searchExtent, searchIconAnchors, searchNameLabelIds, searchOverlapGroups, shownItems, summarizeRoute, tradeWindAt } from "./model.mjs";
 import { islandWorldBounds } from "./islands.mjs";
 import { VANILLA_MAP, importedMapIslands } from "./scrambled-seas.mjs";
-import { boatMarkerSize, drawBoatSilhouette, visibleBoat } from "./boats.mjs";
+import { assignedBoats, boatMarkerSize, drawBoatSilhouette } from "./boats.mjs";
 import { clamp, formatBearing, formatDirection, formatNm, isNightTime, nearlyMultiple, shortCoordinate } from "./format.mjs";
 import { canvas, context, elements } from "./dom.mjs";
 import { activeChart, isSelected, persist } from "./state.mjs";
-import { boatIconBounds, boatIconBoundsAt, chartIsland, chartSearchIsland, islandPixelSpan, screenToWorld, symbolSize, worldToScreen } from "./viewport.mjs";
+import { boatRowAt, chartIsland, chartSearchIsland, featureBoats, islandPixelSpan, screenToWorld, symbolSize, worldToScreen } from "./viewport.mjs";
 
 let visibleChartLabels = new Set();
 
@@ -53,13 +53,13 @@ function chartLabelCandidates() {
   for (const route of shownItems(chart, "saved-route")) {
     const active = isSelected("saved-route", route.id) || route.points.some((point) => isSelected("saved-point", point.id));
     for (const point of route.points) add("saved-point", point.id, point.name, point, isSelected("saved-point", point.id), 35);
-    if (active && chart.layers.routeDistances) summarizeRoute(route.points).legs.forEach((leg, index) => {
-      add("saved-leg", `${route.id}:${index}`, "Route distance", { lat: (leg.from.lat + leg.to.lat) / 2, lon: (leg.from.lon + leg.to.lon) / 2 }, false, 40);
+    if (active && chart.layers.routeDistances) summarizeRoute(route.points, chart.circumnavigation).legs.forEach((leg, index) => {
+      add("saved-leg", `${route.id}:${index}`, "Route distance", leg.mid, false, 40);
     });
   }
-  summarizeRoute(shownItems(chart, "route")).legs.forEach((leg, index) => {
+  summarizeRoute(shownItems(chart, "route"), chart.circumnavigation).legs.forEach((leg, index) => {
     if (!chart.layers.routeDistances) return;
-    add("route-leg", index, "Route distance", { lat: (leg.from.lat + leg.to.lat) / 2, lon: (leg.from.lon + leg.to.lon) / 2 }, false, 40);
+    add("route-leg", index, "Route distance", leg.mid, false, 40);
   });
   if (chart.layers.winds) for (const wind of chart.winds) add("wind", wind.id, wind.label, wind, isSelected("wind", wind.id));
   if (chart.layers.track && chart.track.length) add("track", "last", "Last fix", chart.track.at(-1));
@@ -136,7 +136,7 @@ export function drawChart() {
 
 function drawGrid(width, height, palette) {
   const zoom = activeChart().view.zoom;
-  const candidates = [.01, .02, .05, .1, .25, .5, 1, 2, 5, 10, 20, 30, 45];
+  const candidates = [.0005, .001, .002, .005, .01, .02, .05, .1, .25, .5, 1, 2, 5, 10, 20, 30, 45];
   const step = candidates.find((candidate) => candidate * zoom >= 64) ?? 45;
   const fineStep = step / (step === .25 ? 5 : step === 30 || step === 45 ? 3 : 2);
   const topLeft = screenToWorld(0, 0);
@@ -189,8 +189,7 @@ function drawWorldBorder(palette) {
   context.save();
   context.strokeStyle = palette.faded;
   context.lineWidth = 2;
-  context.setLineDash([8, 7]);
-  context.strokeRect(northwest.x, northwest.y, southeast.x - northwest.x, southeast.y - northwest.y);
+  strokeDashed([northwest, { x: southeast.x, y: northwest.y }, southeast, { x: northwest.x, y: southeast.y }, northwest], [8, 7]);
   context.restore();
 }
 
@@ -222,9 +221,7 @@ function drawTrack(palette) {
   context.save();
   context.strokeStyle = palette.track;
   context.lineWidth = 1.5;
-  context.setLineDash([3, 5]);
-  drawPolyline(track);
-  context.setLineDash([]);
+  strokeDashed(track.map(worldToScreen), [3, 5]);
   for (const point of track) {
     const screen = worldToScreen(point);
     context.fillStyle = isNightTime(point.time) ? palette.night : palette.track;
@@ -263,9 +260,7 @@ export function drawAreaCircle(center, rangeNm, selected, palette) {
   context.fill();
   context.strokeStyle = selected ? palette.select : palette.accent;
   context.lineWidth = selected ? 2 : 1.4;
-  context.setLineDash([6, 4]);
-  context.stroke();
-  context.setLineDash([]);
+  strokeDashedCircle(screen, rangeNm / NM_PER_DEGREE * activeChart().view.zoom, [6, 4]);
 }
 
 function drawSearches(palette) {
@@ -328,11 +323,9 @@ export function drawSearchWedge(search, selected, palette, evidenceOpacity = .12
   context.stroke();
   // The line from where the search was heard, ending at the point it was heard from.
   if (showLine) {
-    context.setLineDash([4, 6]);
     context.lineWidth = 1;
     context.strokeStyle = palette.faded;
-    drawLine(origin, far);
-    context.setLineDash([]);
+    strokeDashed([origin, far], [4, 6]);
     context.fillStyle = palette.bearing;
     // The point the search was heard from: a small dot that grows a little when zoomed in.
     context.beginPath(); context.arc(origin.x, origin.y, symbolSize("dot"), 0, Math.PI * 2); context.fill();
@@ -350,10 +343,9 @@ export function drawSearchWedge(search, selected, palette, evidenceOpacity = .12
     context.restore();
   }
   let labelOffset = Math.max(14, previewHeight / 2 + 11);
-  const boat = activeChart().layers.boats ? visibleBoat(search) : null;
-  if (boat) {
-    // The boat stays at its own search's centre, beside the island only when the island is there too.
-    const bounds = boatIconBoundsAt(centre, shared ? null : previewIsland, previewScale, boat);
+  // The boats stay at their own search's centre, beside the island only when the island is there too.
+  const boats = activeChart().layers.boats ? boatRowAt(centre, shared ? null : previewIsland, previewScale, assignedBoats(search)) : [];
+  for (const { boat, bounds } of boats) {
     drawBoatSilhouette(context, boat, bounds, {
       ...boatColours(palette, selected),
       lineWidth: selected ? 1.7 : 1.25,
@@ -424,9 +416,7 @@ export function drawMeasureLine(from, to, selected, palette) {
   context.globalAlpha = 1;
   context.strokeStyle = palette.select;
   context.lineWidth = selected ? 2.5 : 1.75;
-  context.setLineDash([7, 5]);
-  drawLine(a, b);
-  context.setLineDash([]);
+  strokeDashed([a, b], [7, 5]);
   for (const end of [a, b]) {
     context.fillStyle = palette.paperA;
     context.beginPath(); context.arc(end.x, end.y, selected ? 5 : 4, 0, Math.PI * 2); context.fill(); context.stroke();
@@ -464,13 +454,13 @@ function drawSavedRoutes(palette) {
     context.fillStyle = palette.route;
     context.lineWidth = routeSelected ? 2.5 : 2;
     context.lineJoin = "round";
-    drawPolyline(route.points);
-    summarizeRoute(route.points).legs.forEach((leg, index) => {
-      const from = worldToScreen(leg.from);
-      const to = worldToScreen(leg.to);
-      if (active) drawArrow(from, to, palette.route);
+    const { legs } = summarizeRoute(route.points, activeChart().circumnavigation);
+    drawRouteLine(legs);
+    legs.forEach((leg, index) => {
+      if (active) drawLegArrow(leg, palette.route);
       if (active && activeChart().layers.routeDistances && labelVisible("saved-leg", `${route.id}:${index}`)) {
-        labelPill(`${formatNm(leg.nm)} nm · ${Math.round(leg.bearing)}°`, (from.x + to.x) / 2, (from.y + to.y) / 2 - 12, palette);
+        const mid = worldToScreen(leg.mid);
+        labelPill(`${formatNm(leg.nm)} nm · ${Math.round(leg.bearing)}°`, mid.x, mid.y - 12, palette);
       }
     });
     for (const point of route.points) {
@@ -493,20 +483,16 @@ function drawRoute(palette) {
   context.fillStyle = palette.route;
   context.lineWidth = 2.5;
   context.lineJoin = "round";
-  drawPolyline(route);
+  const summary = summarizeRoute(route, activeChart().circumnavigation);
+  drawRouteLine(summary.legs);
   context.font = "bold 10px ui-sans-serif, system-ui";
   context.textAlign = "center";
   context.textBaseline = "middle";
-  const summary = summarizeRoute(route);
   summary.legs.forEach((leg, index) => {
-    const from = worldToScreen(leg.from);
-    const to = worldToScreen(leg.to);
-    drawArrow(from, to, palette.route);
+    drawLegArrow(leg, palette.route);
     if (activeChart().layers.routeDistances && labelVisible("route-leg", index)) {
-      const x = (from.x + to.x) / 2;
-      const y = (from.y + to.y) / 2;
-      const label = `${formatNm(leg.nm)} nm · ${Math.round(leg.bearing)}°`;
-      labelPill(label, x, y - 12, palette);
+      const mid = worldToScreen(leg.mid);
+      labelPill(`${formatNm(leg.nm)} nm · ${Math.round(leg.bearing)}°`, mid.x, mid.y - 12, palette);
     }
   });
   route.forEach((point, index) => {
@@ -629,9 +615,7 @@ function drawFeatures(palette) {
       context.fill();
       context.stroke();
     }
-    const boat = activeChart().layers.boats ? visibleBoat(feature) : null;
-    if (boat) {
-      const bounds = boatIconBounds(feature);
+    for (const { boat, bounds } of activeChart().layers.boats ? featureBoats(feature) : []) {
       // Outlines thicken as a boat grows with its island, so a large boat still reads clearly.
       const weight = clamp(bounds.width / boatMarkerSize(boat).width, 1, 3);
       drawBoatSilhouette(context, boat, bounds, {
@@ -683,15 +667,107 @@ function drawCompassRose(x, y, palette) {
   context.restore();
 }
 
-function drawPolyline(points) {
-  if (points.length < 2) return;
+// A route's line. On a circumnavigation chart a leg across the edge leaves on one side and comes back
+// on the other.
+function drawRouteLine(legs) {
+  if (!legs.length) return;
   context.beginPath();
-  points.forEach((point, index) => {
-    const screen = worldToScreen(point);
-    if (index === 0) context.moveTo(screen.x, screen.y);
-    else context.lineTo(screen.x, screen.y);
-  });
+  for (const leg of legs) {
+    legPieces(leg).forEach(([a, b], piece) => {
+      const start = worldToScreen(a);
+      const end = worldToScreen(b);
+      if (piece || leg.index === 1) context.moveTo(start.x, start.y);
+      context.lineTo(end.x, end.y);
+    });
+  }
   context.stroke();
+}
+
+// The arrow sits on whichever stretch of the leg holds its middle.
+function drawLegArrow(leg, color) {
+  const pieces = legPieces(leg);
+  const [a, b] = pieces.find(([from, to]) => leg.mid.lon >= Math.min(from.lon, to.lon) && leg.mid.lon <= Math.max(from.lon, to.lon)) ?? pieces[0];
+  drawArrow(worldToScreen(a), worldToScreen(b), color);
+}
+
+// A dash costs the browser for every pixel of its line, on screen or off, and deep in the chart lines
+// run for millions of pixels. So dashed lines are stroked only where they cross the canvas, each part
+// starting its pattern where the whole line's pattern would be, so the dashes hold still as you pan.
+const DASH_MARGIN_PX = 16;
+
+function strokeDashed(points, dash) {
+  const { width, height } = canvas.getBoundingClientRect();
+  context.save();
+  context.setLineDash(dash);
+  let along = 0;
+  // Segments wholly on screen continue one stroke, which carries the pattern on by itself.
+  let open = false;
+  for (let index = 1; index < points.length; index += 1) {
+    const a = points[index - 1];
+    const b = points[index];
+    const length = Math.hypot(b.x - a.x, b.y - a.y);
+    const span = visibleSpan(a, b, width, height);
+    if (span && !(open && span[0] === 0)) {
+      if (open) context.stroke();
+      const [x, y] = [a.x + (b.x - a.x) * span[0], a.y + (b.y - a.y) * span[0]];
+      context.lineDashOffset = along + span[0] * length;
+      context.beginPath();
+      context.moveTo(x, y);
+    }
+    if (span) context.lineTo(a.x + (b.x - a.x) * span[1], a.y + (b.y - a.y) * span[1]);
+    if (open && !span) context.stroke();
+    open = Boolean(span) && span[1] === 1;
+    if (span && !open) context.stroke();
+    along += length;
+  }
+  if (open) context.stroke();
+  context.restore();
+}
+
+// The part of a segment inside the canvas and its margin, as fractions along it, or null.
+function visibleSpan(a, b, width, height) {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  let start = 0;
+  let end = 1;
+  for (const [p, q] of [[-dx, a.x + DASH_MARGIN_PX], [dx, width + DASH_MARGIN_PX - a.x], [-dy, a.y + DASH_MARGIN_PX], [dy, height + DASH_MARGIN_PX - a.y]]) {
+    if (p === 0) {
+      if (q < 0) return null;
+      continue;
+    }
+    const t = q / p;
+    if (p < 0) start = Math.max(start, t);
+    else end = Math.min(end, t);
+    if (start > end) return null;
+  }
+  return [start, end];
+}
+
+// A dashed circle, of which only the arc crossing the canvas is stroked once the circle is large.
+function strokeDashedCircle(centre, radius, dash) {
+  const { width, height } = canvas.getBoundingClientRect();
+  const reach = Math.hypot(width, height) / 2 + DASH_MARGIN_PX;
+  const view = { x: width / 2, y: height / 2 };
+  const distance = Math.hypot(view.x - centre.x, view.y - centre.y);
+  let from = 0;
+  let to = Math.PI * 2;
+  if (radius > reach) {
+    // The canvas lies wholly inside or outside the circle, so none of its edge shows.
+    if (distance <= radius - reach || distance >= radius + reach) return;
+    // The arc within reach of the canvas centre lies either side of the direction toward it.
+    const cosine = (radius * radius + distance * distance - reach * reach) / (2 * radius * distance);
+    const half = Math.acos(Math.max(-1, Math.min(1, cosine)));
+    const toward = Math.atan2(view.y - centre.y, view.x - centre.x);
+    from = ((toward - half) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
+    to = from + half * 2;
+  }
+  context.save();
+  context.setLineDash(dash);
+  context.lineDashOffset = from * radius;
+  context.beginPath();
+  context.arc(centre.x, centre.y, radius, from, to);
+  context.stroke();
+  context.restore();
 }
 
 export function drawLine(a, b) {
@@ -758,7 +834,8 @@ function roundedRect(x, y, width, height, radius) {
 
 function updateZoomLabel() {
   const nmPerHundredPixels = 100 / activeChart().view.zoom * NM_PER_DEGREE;
-  elements["zoom-label"].textContent = `${nmPerHundredPixels >= 10 ? Math.round(nmPerHundredPixels) : nmPerHundredPixels.toFixed(1)} nm / 100 px`;
+  const digits = nmPerHundredPixels >= 10 ? 0 : nmPerHundredPixels >= 1 ? 1 : 2;
+  elements["zoom-label"].textContent = `${nmPerHundredPixels.toFixed(digits)} nm / 100 px`;
 }
 
 export function fitData() {

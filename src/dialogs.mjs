@@ -1,9 +1,9 @@
 // The chart details, island library and boat library dialogs.
 import { boatColours } from "./render.mjs";
 import { mapPalette } from "./theme.mjs";
-import { createChart } from "./model.mjs";
+import { MAX_BOATS, createChart } from "./model.mjs";
 import { ISLAND_CATALOG, ISLAND_GROUPS, islandGroup, searchIsland, visibleIsland } from "./islands.mjs";
-import { BOAT_CATALOG, assignedBoat, boatMarkerSize, drawBoatSilhouette } from "./boats.mjs";
+import { BOAT_CATALOG, assignedBoats, boatMarkerSize, drawBoatSilhouette } from "./boats.mjs";
 import { elements, showToast } from "./dom.mjs";
 import { activeChart, commit, host, persist, pushUndo, resetHistory, selectedItem, selection, workspace } from "./state.mjs";
 import { placeIsland } from "./interaction.mjs";
@@ -166,13 +166,13 @@ function drawIslandPreview(canvasElement, island) {
 export function openBoatLibrary() {
   const owner = selectedBoatOwner();
   if (!owner) {
-    showToast("Select a location or search area before assigning a boat.", true);
+    showToast("Select a location or search area before choosing boats.", true);
     return;
   }
   const name = selection.kind === "search" ? owner.label || "this search area" : owner.name;
   elements["boat-dialog-hint"].textContent = selection.kind === "search"
-    ? `Mark the boat expected near “${name}”. It appears at the search centre and carries into the resolved location.`
-    : `Mark the boat currently at “${name}”. The location and island outline stay unchanged.`;
+    ? `Mark the boats expected near “${name}”. Click a boat to add or remove it. They appear at the search centre and carry into the resolved location.`
+    : `Mark the boats currently at “${name}”. Click a boat to add or remove it.`;
   if (elements["boat-provider"].options.length === 1) {
     const providers = [...new Set(BOAT_CATALOG.map((boat) => boat.provider))]
       .sort((a, b) => a === "Vanilla" ? -1 : b === "Vanilla" ? 1 : a.localeCompare(b));
@@ -194,14 +194,15 @@ export function renderBoatLibrary() {
   const query = elements["boat-search"].value.trim().toLowerCase();
   const provider = elements["boat-provider"].value;
   const owner = selectedBoatOwner();
-  const current = assignedBoat(owner);
+  const current = new Set(owner?.boatIds ?? []);
   const boats = BOAT_CATALOG.filter((boat) => (provider === "all" || boat.provider === provider)
     && `${boat.name} ${boat.provider} ${boat.size}`.toLowerCase().includes(query));
-  elements["remove-boat"].disabled = !current;
+  elements["remove-boat"].disabled = !current.size;
   elements["boat-list"].replaceChildren(...boats.map((boat) => {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = `boat-row${current?.id === boat.id ? " active" : ""}`;
+    button.className = `boat-row${current.has(boat.id) ? " active" : ""}`;
+    button.setAttribute("aria-pressed", String(current.has(boat.id)));
     const preview = document.createElement("canvas");
     preview.width = 132;
     preview.height = 72;
@@ -216,12 +217,18 @@ export function renderBoatLibrary() {
     button.addEventListener("click", () => {
       const selectedOwner = selectedBoatOwner();
       if (!selectedOwner) return;
+      // Several boats can share a place, so the library stays open to pick more.
+      const ids = selectedOwner.boatIds ?? [];
+      if (!ids.includes(boat.id) && ids.length >= MAX_BOATS) {
+        showToast(`A place can hold up to ${MAX_BOATS} boats.`, true);
+        return;
+      }
       commit(() => {
-        selectedOwner.boatId = boat.id;
-        selectedOwner.boatCorner = "se";
-        selectedOwner.showBoat = true;
+        const next = ids.includes(boat.id) ? ids.filter((id) => id !== boat.id) : [...ids, boat.id];
+        if (next.length) selectedOwner.boatIds = next;
+        else delete selectedOwner.boatIds;
       });
-      elements["boat-dialog"].close();
+      renderBoatLibrary();
     });
     return button;
   }));

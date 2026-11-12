@@ -40,6 +40,9 @@
         <div class="menu-popover menu-compact" role="menu">
           <button id="undo" type="button">Undo <kbd>Ctrl Z</kbd></button>
           <button id="redo" type="button">Redo <kbd>Ctrl Y</kbd></button>
+          <hr>
+          <button id="lock-selected" type="button">Lock selected</button>
+          <button id="unlock-selected" type="button">Unlock selected</button>
         </div>
       </details>
       <details class="app-menu" data-menu="view">
@@ -141,6 +144,7 @@
         <div><span>Next bearing</span><strong id="route-bearing">—</strong></div>
         <div><label for="route-speed">Speed kn</label><input id="route-speed" type="number" max="30" step="0.5"></div>
         <div><span>Passage</span><strong id="route-eta">—</strong></div>
+        <div title="Routes on this chart take the short way around the world, across its east and west edges."><label for="route-circumnavigation">Circumnavigation</label><input id="route-circumnavigation" type="checkbox"></div>
         <div id="route-actions" class="route-actions">
           <button id="save-route" type="button">Save route</button>
           <button id="clear-route" type="button">Clear route</button>
@@ -161,7 +165,7 @@
       <section id="feature-inspector" class="panel-section inspector" hidden>
         <div class="section-heading">
           <div><div id="feature-kind" class="eyebrow">Selected location</div><h2 id="feature-title">Edit location</h2></div>
-          <button id="delete-feature" class="danger icon-button" type="button" title="Delete location" aria-label="Delete location">×</button>
+          <div class="heading-actions"><button class="icon-button lock-button" type="button" data-lock title="Lock in place" aria-label="Lock in place" aria-pressed="false"><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" focusable="false"><rect x="5" y="10.5" width="14" height="10" rx="2" fill="currentColor" fill-opacity=".18" stroke="currentColor" stroke-width="1.6"/><path d="M8.5 10.5V7.8a3.5 3.5 0 0 1 7 0v2.7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button><button id="delete-feature" class="danger icon-button" type="button" title="Delete location" aria-label="Delete location">×</button></div>
         </div>
         <p id="feature-selection-note" class="selection-note" hidden></p>
         <form id="feature-form" class="stack-form">
@@ -187,8 +191,8 @@
             <button id="choose-feature-island" type="button">Choose island</button>
           </div>
           <div class="island-controls boat-controls">
-            <div><span>Boat at this location</span><strong id="feature-boat-status">None</strong></div>
-            <button id="choose-feature-boat" type="button">Choose boat</button>
+            <div><span>Boats at this location</span><strong id="feature-boat-status">None</strong></div>
+            <button id="choose-feature-boat" type="button">Choose boats</button>
           </div>
           <label>Notes <textarea id="feature-notes" rows="4" maxlength="1000" placeholder="Approach, landmarks, shoals, dock side…"></textarea></label>
         </form>
@@ -199,7 +203,7 @@
       <section id="route-inspector" class="panel-section inspector" hidden>
         <div class="section-heading">
           <div><div id="route-point-kind" class="eyebrow">Selected waypoint</div><h2>Edit route point</h2></div>
-          <button id="delete-route-point" class="danger icon-button" type="button" title="Delete route point" aria-label="Delete route point">×</button>
+          <div class="heading-actions"><button class="icon-button lock-button" type="button" data-lock title="Lock in place" aria-label="Lock in place" aria-pressed="false"><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" focusable="false"><rect x="5" y="10.5" width="14" height="10" rx="2" fill="currentColor" fill-opacity=".18" stroke="currentColor" stroke-width="1.6"/><path d="M8.5 10.5V7.8a3.5 3.5 0 0 1 7 0v2.7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button><button id="delete-route-point" class="danger icon-button" type="button" title="Delete route point" aria-label="Delete route point">×</button></div>
         </div>
         <form id="route-form" class="stack-form">
           <label>Label <input id="route-name" maxlength="100" placeholder="Optional"></label>
@@ -220,7 +224,7 @@
       <section id="saved-route-inspector" class="panel-section inspector" hidden>
         <div class="section-heading">
           <div><div class="eyebrow">Saved route</div><h2>Edit saved route</h2></div>
-          <button id="delete-saved-route" class="danger icon-button" type="button" title="Delete saved route" aria-label="Delete saved route">×</button>
+          <div class="heading-actions"><button class="icon-button lock-button" type="button" data-lock title="Lock in place" aria-label="Lock in place" aria-pressed="false"><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" focusable="false"><rect x="5" y="10.5" width="14" height="10" rx="2" fill="currentColor" fill-opacity=".18" stroke="currentColor" stroke-width="1.6"/><path d="M8.5 10.5V7.8a3.5 3.5 0 0 1 7 0v2.7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button><button id="delete-saved-route" class="danger icon-button" type="button" title="Delete saved route" aria-label="Delete saved route">×</button></div>
         </div>
         <form id="saved-route-form" class="stack-form">
           <label>Name <input id="saved-route-name" maxlength="100"></label>
@@ -234,7 +238,7 @@
       <section id="measure-inspector" class="panel-section inspector" hidden>
         <div class="section-heading">
           <div><div id="measure-kind" class="eyebrow">Measure line</div><h2>Measured distance</h2></div>
-          <button id="delete-measure" class="danger icon-button" type="button" title="Delete line" aria-label="Delete line">×</button>
+          <div class="heading-actions"><button class="icon-button lock-button" type="button" data-lock title="Lock in place" aria-label="Lock in place" aria-pressed="false"><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" focusable="false"><rect x="5" y="10.5" width="14" height="10" rx="2" fill="currentColor" fill-opacity=".18" stroke="currentColor" stroke-width="1.6"/><path d="M8.5 10.5V7.8a3.5 3.5 0 0 1 7 0v2.7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button><button id="delete-measure" class="danger icon-button" type="button" title="Delete line" aria-label="Delete line">×</button></div>
         </div>
         <div id="measure-detail" class="leg-detail"></div>
         <form id="line-form" class="stack-form">
@@ -247,7 +251,7 @@
       <section id="search-inspector" class="panel-section inspector" hidden>
         <div class="section-heading">
           <div><div class="eyebrow">Selected search area</div><h2>Edit search area</h2></div>
-          <button id="delete-search" class="danger icon-button" type="button" title="Delete search area" aria-label="Delete search area">×</button>
+          <div class="heading-actions"><button class="icon-button lock-button" type="button" data-lock title="Lock in place" aria-label="Lock in place" aria-pressed="false"><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" focusable="false"><rect x="5" y="10.5" width="14" height="10" rx="2" fill="currentColor" fill-opacity=".18" stroke="currentColor" stroke-width="1.6"/><path d="M8.5 10.5V7.8a3.5 3.5 0 0 1 7 0v2.7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button><button id="delete-search" class="danger icon-button" type="button" title="Delete search area" aria-label="Delete search area">×</button></div>
         </div>
         <form id="search-form" class="stack-form">
           <label>Looking for <input id="search-label" maxlength="100" placeholder="Mission destination"></label>
@@ -268,8 +272,8 @@
             <button id="choose-search-island" type="button">Choose island</button>
           </div>
           <div class="island-controls boat-controls">
-            <div><span>Boat at the search centre</span><strong id="search-boat-status">None</strong></div>
-            <button id="choose-search-boat" type="button">Choose boat</button>
+            <div><span>Boats at the search centre</span><strong id="search-boat-status">None</strong></div>
+            <button id="choose-search-boat" type="button">Choose boats</button>
           </div>
         </form>
         <div id="search-summary" class="leg-detail"></div>
@@ -291,7 +295,7 @@
       <section id="track-inspector" class="panel-section inspector" hidden>
         <div class="section-heading">
           <div><div class="eyebrow">Coordinate Viewer</div><h2>Edit track position</h2></div>
-          <button id="delete-track" class="danger icon-button" type="button" title="Delete track position" aria-label="Delete track position">×</button>
+          <div class="heading-actions"><button class="icon-button lock-button" type="button" data-lock title="Lock in place" aria-label="Lock in place" aria-pressed="false"><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" focusable="false"><rect x="5" y="10.5" width="14" height="10" rx="2" fill="currentColor" fill-opacity=".18" stroke="currentColor" stroke-width="1.6"/><path d="M8.5 10.5V7.8a3.5 3.5 0 0 1 7 0v2.7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button><button id="delete-track" class="danger icon-button" type="button" title="Delete track position" aria-label="Delete track position">×</button></div>
         </div>
         <form id="track-form" class="stack-form">
           <label>Label <input id="track-name" maxlength="100" placeholder="Optional"></label>
@@ -310,7 +314,7 @@
       <section id="wind-inspector" class="panel-section inspector" hidden>
         <div class="section-heading">
           <div><div class="eyebrow">Selected wind</div><h2>Edit wind indicator</h2></div>
-          <button id="delete-wind" class="danger icon-button" type="button" title="Delete wind indicator" aria-label="Delete wind indicator">×</button>
+          <div class="heading-actions"><button class="icon-button lock-button" type="button" data-lock title="Lock in place" aria-label="Lock in place" aria-pressed="false"><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" focusable="false"><rect x="5" y="10.5" width="14" height="10" rx="2" fill="currentColor" fill-opacity=".18" stroke="currentColor" stroke-width="1.6"/><path d="M8.5 10.5V7.8a3.5 3.5 0 0 1 7 0v2.7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button><button id="delete-wind" class="danger icon-button" type="button" title="Delete wind indicator" aria-label="Delete wind indicator">×</button></div>
         </div>
         <form id="wind-form" class="stack-form">
           <label>Label <input id="wind-label" maxlength="100"></label>
@@ -382,9 +386,10 @@
         <div><kbd>Ctrl</kbd><span>Hold to place freely. Otherwise drawing tools pull gently onto nearby marks, lines and crossings, shown by a ring.</span></div>
         <div><kbd>Shift</kbd><span>Add or remove items from the selection. Shift-drag empty water to select an area.</span></div>
         <div><kbd>I</kbd><span>Open the island library. A location named for an island displays its outline automatically.</span></div>
-        <div><kbd>Boat</kbd><span>Select a location or search area, then choose a boat for its cyan lower-right icon. Search-area boats carry into the resolved location.</span></div>
+        <div><kbd>Boat</kbd><span>Select a location or search area, then choose boats for its cyan icons beside it. Search-area boats carry into the resolved location.</span></div>
         <div><kbd data-shortcut="wind">W</kbd><span>Add a regional wind indicator: drag in the direction the wind is blowing toward.</span></div>
         <div><kbd>Delete</kbd><span>Remove the selected chart items</span></div>
+        <div><kbd>Lock</kbd><span>The padlock beside a selected item, or Lock selected in the Edit menu, keeps it in place until you unlock it.</span></div>
         <div><kbd>Ctrl Z</kbd><span>Undo the last chart edit</span></div>
         <div><kbd>F</kbd><span>Fit locations, route and track in view</span></div>
       </div>
@@ -456,16 +461,16 @@
   <dialog id="boat-dialog">
     <article class="dialog-card boat-dialog-card">
       <div class="eyebrow">Boat library</div>
-      <h2>Mark a boat at this location</h2>
-      <p id="boat-dialog-hint">Select a location first, then choose the boat that is there.</p>
+      <h2>Mark boats at this location</h2>
+      <p id="boat-dialog-hint">Select a location first, then choose the boats that are there.</p>
       <div class="boat-filters">
         <input id="boat-search" type="search" placeholder="Search boats" aria-label="Search boats">
         <select id="boat-provider" aria-label="Filter boats by source"><option value="all">All sources</option></select>
       </div>
       <div id="boat-list" class="boat-list"></div>
       <div class="dialog-actions">
-        <button id="remove-boat" class="danger-text" type="button">Remove boat marker</button>
-        <button type="button" data-close>Close</button>
+        <button id="remove-boat" class="danger-text" type="button">Remove all boats</button>
+        <button type="button" data-close>Done</button>
       </div>
     </article>
   </dialog>

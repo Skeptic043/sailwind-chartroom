@@ -10,7 +10,8 @@ export const NM_PER_DEGREE = 140;
 // Longitude reaches all the way round, so Scrambled Seas worlds as wide as the globe fit on a chart.
 export const WORLD_BOUNDS = Object.freeze({ minLat: -90, maxLat: 90, minLon: -180, maxLon: 180 });
 export const MIN_ZOOM = 1.5;
-export const MAX_ZOOM = 600;
+// Close enough in for the smallest island to fill the chart.
+export const MAX_ZOOM = 100000;
 export const MAX_RANGE_NM = 500;
 
 export function makeId(prefix = "id") {
@@ -28,6 +29,8 @@ export function createChart({ name = "Uncharted Sea", seed = "" } = {}) {
     updatedAt: now,
     view: { lat: 10, lon: 0, zoom: 5 },
     layers: defaultLayers(),
+    // A circumnavigation chart's routes take the short way round, across the east and west edges.
+    circumnavigation: false,
     speedKn: 6,
     features: [],
     route: [],
@@ -200,6 +203,7 @@ export function sanitizeChart(value) {
     zoom: clampNumber(view.zoom, MIN_ZOOM, MAX_ZOOM, base.view.zoom)
   };
   base.layers = Object.fromEntries(Object.entries(LAYER_DEFAULTS).map(([key, shown]) => [key, shown ? value.layers?.[key] !== false : value.layers?.[key] === true]));
+  base.circumnavigation = value.circumnavigation === true;
   base.speedKn = clampNumber(value.speedKn, 0.1, 30, base.speedKn);
   base.features = arrayOf(value.features, sanitizeFeature);
   base.route = arrayOf(value.route, sanitizeRoutePoint);
@@ -235,8 +239,8 @@ function sanitizeLayout(value) {
   };
 }
 
-export function createFeature({ lat, lon, name = "New location", notes = "", day = "", time = "", rangeNm = 0, islandId = "", showIsland = true, boatId = "", boatCorner = "se", showBoat = true }) {
-  return sanitizeFeature({ id: makeId("feature"), lat, lon, name, notes, day, time, rangeNm, islandId, showIsland, boatId, boatCorner, showBoat });
+export function createFeature({ lat, lon, name = "New location", notes = "", day = "", time = "", rangeNm = 0, islandId = "", showIsland = true, boatIds = [] }) {
+  return sanitizeFeature({ id: makeId("feature"), lat, lon, name, notes, day, time, rangeNm, islandId, showIsland, boatIds });
 }
 
 export function locationRangeForType(type, rangeNm) {
@@ -299,8 +303,8 @@ export function savedRouteForPoint(chart, pointId) {
 export const DEFAULT_SPREAD_DEG = 11.25;
 export const DEFAULT_TOLERANCE_PCT = 10;
 
-export function createSearch({ lat, lon, bearing, distanceNm, spreadDeg = DEFAULT_SPREAD_DEG, tolerancePct = DEFAULT_TOLERANCE_PCT, label = "", anchor = null, boatId = "", boatCorner = "se", showBoat = true }) {
-  return sanitizeSearch({ id: makeId("search"), lat, lon, bearing, distanceNm, spreadDeg, tolerancePct, label, anchor, boatId, boatCorner, showBoat });
+export function createSearch({ lat, lon, bearing, distanceNm, spreadDeg = DEFAULT_SPREAD_DEG, tolerancePct = DEFAULT_TOLERANCE_PCT, label = "", anchor = null, boatIds = [] }) {
+  return sanitizeSearch({ id: makeId("search"), lat, lon, bearing, distanceNm, spreadDeg, tolerancePct, label, anchor, boatIds });
 }
 
 // A search drawn from a mark or waypoint stays locked to it: its origin follows that item when it moves,
@@ -313,7 +317,7 @@ export function anchorTarget(chart, anchor) {
 
 export function followAnchors(chart) {
   for (const search of chart.searches) {
-    if (!search.anchor) continue;
+    if (!search.anchor || search.locked) continue;
     const target = anchorTarget(chart, search.anchor);
     if (target) {
       search.lat = target.lat;
@@ -363,12 +367,28 @@ export function removeChartItems(chart, refs) {
   followAnchors(chart);
 }
 
+// Every kind but an imported map's islands, which never move, can be locked. A saved route is locked
+// when all of its waypoints are.
+export function isLocked(chart, ref) {
+  const refs = pointRefs(chart, [ref]).filter((point) => point.kind !== "map-island");
+  return refs.length > 0 && refs.every((point) => itemForRef(chart, point)?.locked === true);
+}
+
+export function setLocked(chart, refs, locked) {
+  for (const ref of pointRefs(chart, refs)) {
+    const item = ref.kind === "map-island" ? null : itemForRef(chart, ref);
+    if (!item) continue;
+    if (locked) item.locked = true;
+    else delete item.locked;
+  }
+}
+
 export function translateChartItems(chart, refs, delta, { strict = false } = {}) {
   const unique = new Map();
   for (const ref of pointRefs(chart, refs)) {
     if (ref.kind === "map-island") continue;
     const item = itemForRef(chart, ref);
-    if (item) unique.set(`${ref.kind}:${ref.id}`, { ref, item });
+    if (item && !item.locked) unique.set(`${ref.kind}:${ref.id}`, { ref, item });
   }
   const selected = new Set(unique.keys());
   const moving = [...unique.values()].filter(({ ref, item }) => {
@@ -413,7 +433,7 @@ function sanitizeSearch(value) {
   const distance = clampNumber(value.distanceNm, 0, MAX_SEARCH_NM, 0);
   if (!distance) return null;
   const anchor = sanitizeAnchor(value.anchor);
-  const boatId = cleanText(value.boatId, 120);
+  const boatIds = sanitizeBoatIds(value);
   const islandId = cleanText(value.islandId, 120);
   return {
     ...bearing,
@@ -423,7 +443,8 @@ function sanitizeSearch(value) {
     spreadDeg: clampNumber(value.spreadDeg, 0, 90, DEFAULT_SPREAD_DEG),
     tolerancePct: clampNumber(value.tolerancePct, 0, 90, DEFAULT_TOLERANCE_PCT),
     ...(anchor && { anchor }),
-    ...(boatId && { boatId, boatCorner: "se", showBoat: true })
+    ...(boatIds.length && { boatIds }),
+    ...lockedFlag(value)
   };
 }
 
@@ -689,7 +710,7 @@ export function searchChartLabel(search, showName = true) {
 function sanitizeFeature(value) {
   if (!value || !isFiniteCoordinate(value.lat, value.lon)) return null;
   const islandId = cleanText(value.islandId, 120);
-  const boatId = cleanText(value.boatId, 120);
+  const boatIds = sanitizeBoatIds(value);
   return {
     id: cleanText(value.id, 120) || makeId("feature"),
     lat: Number(value.lat),
@@ -702,8 +723,23 @@ function sanitizeFeature(value) {
     ...(islandId && { islandId }),
     showIsland: value.showIsland !== false,
     ...(value.showName === false && { showName: false }),
-    ...(boatId && { boatId, boatCorner: "se", showBoat: true })
+    ...(boatIds.length && { boatIds }),
+    ...lockedFlag(value)
   };
+}
+
+// The boats at a location or search area, in the order they were added. Charts from before 0.6.14
+// held one boat as boatId.
+export const MAX_BOATS = 12;
+
+function sanitizeBoatIds(value) {
+  const ids = Array.isArray(value?.boatIds) ? value.boatIds : [value?.boatId];
+  return [...new Set(ids.map((id) => cleanText(id, 120)).filter(Boolean))].slice(0, MAX_BOATS);
+}
+
+// A locked item stays where it is until it is unlocked.
+function lockedFlag(value) {
+  return value?.locked === true ? { locked: true } : {};
 }
 
 function sanitizeBearing(value) {
@@ -721,7 +757,7 @@ function sanitizeBearing(value) {
 function sanitizeMeasure(value) {
   const point = sanitizePoint(value, "measure");
   if (!point || !isFiniteCoordinate(value.end?.lat, value.end?.lon)) return null;
-  return { id: point.id, lat: point.lat, lon: point.lon, end: { lat: Number(value.end.lat), lon: Number(value.end.lon) } };
+  return { id: point.id, lat: point.lat, lon: point.lon, end: { lat: Number(value.end.lat), lon: Number(value.end.lon) }, ...lockedFlag(value) };
 }
 
 function sanitizeWind(value) {
@@ -735,7 +771,8 @@ function sanitizeWind(value) {
     bearing: wind.bearing,
     label: label.toLowerCase() === "trade wind" ? "" : label,
     day: cleanText(value.day, 30),
-    time: cleanText(value.time, 30)
+    time: cleanText(value.time, 30),
+    ...lockedFlag(value)
   };
 }
 
@@ -751,7 +788,7 @@ function sanitizePoint(value, prefix) {
 
 function sanitizeRoutePoint(value) {
   const point = sanitizePoint(value, "route");
-  return point ? { ...point, notes: cleanText(value.notes, 1000), day: cleanText(value.day, 30), time: cleanText(value.time, 30) } : null;
+  return point ? { ...point, notes: cleanText(value.notes, 1000), day: cleanText(value.day, 30), time: cleanText(value.time, 30), ...lockedFlag(value) } : null;
 }
 
 function sanitizeSavedRoute(value) {
@@ -773,7 +810,8 @@ function sanitizeTrackPoint(value) {
     ...point,
     day: cleanText(value.day, 30),
     time: cleanText(value.time, 30),
-    wind: cleanText(value.wind, 30)
+    wind: cleanText(value.wind, 30),
+    ...lockedFlag(value)
   };
 }
 
@@ -789,7 +827,8 @@ function sanitizeSegment(value) {
     lat: Number(start.lat),
     lon: Number(start.lon),
     end: { lat: Number(end.lat), lon: Number(end.lon) },
-    color: LINE_COLOURS.find((name) => colour.includes(name)) ?? LINE_COLOURS[0]
+    color: LINE_COLOURS.find((name) => colour.includes(name)) ?? LINE_COLOURS[0],
+    ...lockedFlag(value)
   };
 }
 
@@ -870,16 +909,41 @@ export function compassPoint(degrees) {
   return COMPASS_POINTS[Math.round(((degrees % 360) + 360) % 360 / COMPASS_STEP_DEG) % COMPASS_POINTS.length];
 }
 
-export function summarizeRoute(route) {
+const WORLD_WIDTH = WORLD_BOUNDS.maxLon - WORLD_BOUNDS.minLon;
+
+// Where a leg from one point heads for the other. Around the world, a leg more than half the chart
+// wide goes the other way instead, out past one edge to a copy of its end beyond it.
+export function legEnd(from, to, wrap = false) {
+  const lon = Number(to.lon) - Number(from.lon);
+  if (!wrap || Math.abs(lon) <= WORLD_WIDTH / 2) return to;
+  return { lat: to.lat, lon: to.lon - Math.sign(lon) * WORLD_WIDTH };
+}
+
+function wrapLon(lon) {
+  return lon > WORLD_BOUNDS.maxLon ? lon - WORLD_WIDTH : lon < WORLD_BOUNDS.minLon ? lon + WORLD_WIDTH : lon;
+}
+
+// The stretches a leg draws as: one, or for a leg across the edge, one out to the edge it crosses
+// and one in from the opposite edge.
+export function legPieces(leg) {
+  if (leg.end === leg.to) return [[leg.from, leg.to]];
+  const edge = leg.end.lon > leg.from.lon ? WORLD_BOUNDS.maxLon : WORLD_BOUNDS.minLon;
+  const lat = leg.from.lat + (leg.end.lat - leg.from.lat) * (edge - leg.from.lon) / (leg.end.lon - leg.from.lon);
+  return [[leg.from, { lat, lon: edge }], [{ lat, lon: edge + leg.to.lon - leg.end.lon }, leg.to]];
+}
+
+export function summarizeRoute(route, wrap = false) {
   const legs = [];
   let totalNm = 0;
   for (let index = 1; index < route.length; index += 1) {
     const from = route[index - 1];
     const to = route[index];
-    const nm = distanceNm(from, to);
-    const bearing = bearingDegrees(from, to);
+    const end = legEnd(from, to, wrap);
+    const nm = distanceNm(from, end);
+    const bearing = bearingDegrees(from, end);
     totalNm += nm;
-    legs.push({ index, from, to, nm, bearing, compass: compassPoint(bearing) });
+    const mid = { lat: (from.lat + end.lat) / 2, lon: wrapLon((from.lon + end.lon) / 2) };
+    legs.push({ index, from, to, end, mid, nm, bearing, compass: compassPoint(bearing) });
   }
   return { legs, totalNm };
 }
@@ -1018,7 +1082,7 @@ export function importLegacyMap(value, name = "Imported legacy map") {
 }
 
 export function featuresToCsv(features) {
-  const header = ["name", "latitude", "longitude", "day", "time", "range_nm", "island_id", "show_island", "boat_id", "notes"];
+  const header = ["name", "latitude", "longitude", "day", "time", "range_nm", "island_id", "show_island", "boat_ids", "notes"];
   const rows = features.map((feature) => [
     feature.name,
     feature.lat,
@@ -1028,7 +1092,7 @@ export function featuresToCsv(features) {
     feature.rangeNm || "",
     feature.islandId || "",
     feature.showIsland !== false,
-    feature.boatId || "",
+    (feature.boatIds ?? []).join(" "),
     feature.notes
   ]);
   return [header, ...rows].map((row) => row.map(csvCell).join(",")).join("\r\n");
