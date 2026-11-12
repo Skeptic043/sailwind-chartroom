@@ -1,5 +1,6 @@
 // Imports from files the player chooses, and exports written through the host's save dialog.
-import { exportFile, featuresToCsv, importChartData, parseCoordinateViewer } from "./model.mjs";
+import { exportFile, featuresToCsv, importChartData, importScrambledSeas, parseCoordinateViewer } from "./model.mjs";
+import { parseScrambledSeasXml } from "./scrambled-seas.mjs";
 import { showToast } from "./dom.mjs";
 import { activeChart, commit, host, persist, resetHistory, workspace } from "./state.mjs";
 import { fitData } from "./render.mjs";
@@ -16,8 +17,12 @@ export async function importTrackFile(file) {
   importTrackText(await readFile(file));
 }
 
+// Chartroom files, web map exports and Scrambled Seas worlds, which are XML.
 export async function importChartFile(file) {
-  const imported = importChartData(JSON.parse(await readFile(file)), file?.name?.replace(/\.json$/i, ""));
+  const text = await readFile(file);
+  const imported = text.trimStart().startsWith("<")
+    ? [importScrambledSeas(parseScrambledSeasXml(text))]
+    : importChartData(JSON.parse(text), file?.name?.replace(/\.json$/i, ""));
   workspace.charts.push(...imported);
   workspace.activeChartId = imported[0].id;
   resetHistory();

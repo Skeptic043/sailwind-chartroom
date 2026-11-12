@@ -9,6 +9,10 @@ final class HostMessageTests: XCTestCase {
         XCTAssertEqual(HostMessage.parse(#"{"type":"open-releases"}"#), .openReleases)
         XCTAssertEqual(HostMessage.parse(#"{"type":"check-updates","background":true}"#), .checkUpdates(background: true))
         XCTAssertEqual(HostMessage.parse(#"{"type":"check-updates"}"#), .checkUpdates(background: false))
+        XCTAssertEqual(HostMessage.parse(#"{"type":"follow-track","chartId":"chart-1"}"#), .followTrack(chartId: "chart-1"))
+        XCTAssertNil(HostMessage.parse(#"{"type":"follow-track"}"#))
+        XCTAssertEqual(HostMessage.parse(#"{"type":"stop-track"}"#), .stopTrack)
+        XCTAssertEqual(HostMessage.parse(#"{"type":"copy-text","text":"route"}"#), .copyText("route"))
     }
 
     func testSaveCarriesTheWorkspaceTextUnchanged() {

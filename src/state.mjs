@@ -73,6 +73,15 @@ export function commit(mutator, { history = true, render = true } = {}) {
   if (render) views.everything();
 }
 
+// Adds items that are not an edit, such as live positions. They join every snapshot of the chart as
+// well, so undoing or redoing an edit never takes them away.
+export function appendOutsideHistory(chart, key, items) {
+  chart[key].push(...items);
+  for (const snapshot of [...undoStack, ...redoStack]) {
+    if (snapshot.id === chart.id) snapshot[key].push(...structuredClone(items));
+  }
+}
+
 export const undo = () => restoreFrom(undoStack, redoStack);
 export const redo = () => restoreFrom(redoStack, undoStack);
 

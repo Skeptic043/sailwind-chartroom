@@ -2,13 +2,18 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   bearingDegrees,
-  bearingFixes,
-  bearingIntersection,
   archiveActiveRoute,
   chartItemFocusPoint,
   clusteredLabelIds,
   compassPoint,
   createChart,
+  createLine,
+  createMeasure,
+  importScrambledSeas,
+  islandsShown,
+  itemShown,
+  revealLayer,
+  shownItems,
   createRoutePoint,
   commonSearchOverlap,
   createSearch,
@@ -44,7 +49,9 @@ import {
   tradeWindAt,
   translateChartItems
 } from "../src/model.mjs";
-import { ISLAND_CATALOG, VANILLA_ISLANDS, assignedIsland, islandById, islandByName, normalizeIslandName, searchIsland, visibleIsland } from "../src/islands.mjs";
+import { ISLAND_CATALOG, ISLAND_GROUPS, VANILLA_ISLANDS, assignedIsland, islandGroup, islandById, islandByName, normalizeIslandName, searchIsland, visibleIsland } from "../src/islands.mjs";
+import { importedMapIslands, parseScrambledSeasXml } from "../src/scrambled-seas.mjs";
+import { readFileSync } from "node:fs";
 import { BOAT_CATALOG, assignedBoat, boatById, boatMarkerSize, visibleBoat } from "../src/boats.mjs";
 
 test("parses decimal and degree-minute-second coordinates", () => {
@@ -117,7 +124,7 @@ test("sanitizes malformed workspace data into a usable chart", () => {
   assert.equal(workspace.charts.length, 1);
   assert.equal(workspace.activeChartId, chart.id);
   assert.deepEqual(workspace.charts[0].features, []);
-  assert.deepEqual(workspace.charts[0].winds, [{ id: "wind", lat: 2, lon: 3, bearing: 90, label: "North sea" }]);
+  assert.deepEqual(workspace.charts[0].winds, [{ id: "wind", lat: 2, lon: 3, bearing: 90, label: "North sea", day: "", time: "" }]);
   assert.deepEqual(workspace.layout, { leftWidth: 190, rightWidth: 480, leftOpen: false, rightOpen: true });
 });
 
@@ -143,16 +150,19 @@ test("plots a position from course and distance on the flat chart", () => {
   assert.ok(Math.abs(back.lat + 1) < 1e-9 && Math.abs(back.lon + 1) < 1e-9);
 });
 
-test("fixes a position where two forward bearings cross", () => {
-  const fromWest = { id: "a", lat: 0, lon: 0, bearing: 45 };
-  const fromEast = { id: "b", lat: 0, lon: 2, bearing: 315 };
-  const fix = bearingIntersection(fromWest, fromEast);
-  assert.ok(Math.abs(fix.lat - 1) < 1e-9 && Math.abs(fix.lon - 1) < 1e-9);
-  assert.equal(bearingIntersection(fromWest, { ...fromEast, bearing: 135 }), null, "lines meeting behind an observer are not a fix");
-  assert.equal(bearingIntersection(fromWest, { ...fromEast, bearing: 45 }), null, "parallel lines never cross");
-  const [only] = bearingFixes([fromWest, fromEast]);
-  assert.deepEqual(only.ids, ["a", "b"]);
-  assert.equal(only.cut, 90);
+test("a chart keeps one measure line that moves and deletes as a whole", () => {
+  const chart = createChart();
+  const older = createMeasure({ lat: 0, lon: 0 }, { lat: 1, lon: 1 });
+  const line = createMeasure({ lat: 2, lon: 3 }, { lat: 4, lon: 7 });
+  chart.measures = [older, line, { id: "broken", lat: 1, lon: 1 }];
+  const [restored] = sanitizeWorkspace({ activeChartId: chart.id, charts: [chart] }).charts;
+  assert.deepEqual(restored.measures, [line]);
+  assert.deepEqual(chartItemFocusPoint("measure", line), { lat: 3, lon: 5 });
+  translateChartItems(restored, [{ kind: "measure", id: line.id }], { lat: 1, lon: -1 }, { strict: true });
+  assert.deepEqual([restored.measures[0].lat, restored.measures[0].lon, restored.measures[0].end], [3, 2, { lat: 5, lon: 6 }]);
+  assert.throws(() => translateChartItems(restored, [{ kind: "measure", id: line.id }], { lat: 86, lon: 0 }, { strict: true }), /outside/, "the far end counts too");
+  removeChartItems(restored, [{ kind: "measure", id: line.id }]);
+  assert.deepEqual(restored.measures, []);
 });
 
 test("a search area covers its compass point and distance margin", () => {
@@ -222,7 +232,7 @@ test("Fire Fish Lagoon islands carry only their own town and rocks", () => {
   }
   assert.equal(lagoon.filter((island) => island.partOf === "firefish/fire_fish_islands").length, 9);
   assert.ok(islandById("firefish/fire_fish_islands"), "charts that placed the whole lagoon keep their outline");
-  assert.equal(VANILLA_ISLANDS.length, ISLAND_CATALOG.length - 1, "the vanilla map draws the lagoon from its pieces, once");
+  assert.equal(VANILLA_ISLANDS.length, ISLAND_CATALOG.filter((island) => !island.provider).length - 1, "the vanilla map draws the lagoon from its pieces, once");
   // The source map saved Sen'na by the centre of every lagoon rock; the import moves it onto the island.
   const senna = importLegacyMap({ islands: { "firefish/senna": { x: 2.9504, y: 28.1807 } } }).features[0];
   assert.ok(Math.abs(senna.lon - 2.78) < 0.01 && Math.abs(senna.lat - 28.19) < 0.01);
@@ -231,10 +241,12 @@ test("Fire Fish Lagoon islands carry only their own town and rocks", () => {
 test("vanilla map layers start off and trade winds follow the game's zones", () => {
   const layers = createChart().layers;
   assert.deepEqual([layers.vanillaMap, layers.secretIslands, layers.tradeWinds], [false, false, false]);
+  assert.deepEqual([layers.measure, layers.islands], [true, true]);
   const chart = createChart();
-  chart.layers = { grid: true, vanillaMap: true, tradeWinds: true };
+  chart.layers = { grid: true, vanillaMap: true, tradeWinds: true, measure: false, islands: false };
   const restored = sanitizeWorkspace({ activeChartId: chart.id, charts: [chart] }).charts[0].layers;
   assert.deepEqual([restored.vanillaMap, restored.secretIslands, restored.tradeWinds], [true, false, true]);
+  assert.deepEqual([restored.measure, restored.islands], [false, false]);
   assert.deepEqual(tradeWindAt(40, 0), { zone: "aestrin", east: 1, north: 0.5 });
   assert.deepEqual(tradeWindAt(31, -10), { zone: "alankh", east: 0.75, north: 0.75 });
   assert.deepEqual(tradeWindAt(31, 5), { zone: "emerald", east: -1, north: -0.5 });
@@ -320,6 +332,35 @@ test("wind markers have no distracting default label", () => {
   assert.equal(restored.label, "");
 });
 
+test("the island library lists islands by group, small islands and mod islands last", () => {
+  const groups = ISLAND_CATALOG.map(islandGroup);
+  assert.deepEqual([...new Set(groups)], ISLAND_GROUPS, "each group appears once, in menu order");
+  const smallIslands = ISLAND_CATALOG.filter((island) => islandGroup(island) === "Small Islands").map((island) => island.name);
+  assert.deepEqual(smallIslands, ["Chronos", "Happy Bay", "Mirage Mountain", "Oasis", "Saffron", "Eleann Island", "Rock of Despair"], "ports first, then islands without one");
+  assert.equal(islandGroup(islandByName("Oracle")), "Aestrin");
+  assert.equal(islandGroup(islandByName("Bone Isle")), "Aestrin");
+  assert.equal(islandGroup(islandByName("Isle of Clear Mind")), "Al’Ankh");
+  assert.equal(islandByName("Rock of Despair").secret, false);
+  const aestrin = ISLAND_CATALOG.filter((island) => islandGroup(island) === "Aestrin").map((island) => island.name);
+  assert.deepEqual(aestrin.slice(-2), ["Bone Isle", "Oracle"], "islands without a port follow the ports");
+  const bottleneck = islandByName("Bottleneck Isle");
+  assert.equal(islandGroup(bottleneck), "Mod Islands");
+  assert.equal(VANILLA_ISLANDS.includes(bottleneck), false, "the vanilla map does not draw mod islands");
+  assert.equal(islandById("firefish/fire_fish_islands/west_islet"), ISLAND_CATALOG[ISLAND_CATALOG.indexOf(islandById("firefish/fire_fish_islands")) + 1], "lagoon pieces follow the lagoon");
+});
+
+test("the boat library lists stock boats by region, then each mod together, small to large", () => {
+  const names = BOAT_CATALOG.map((boat) => boat.name);
+  assert.deepEqual(names.slice(0, 8), ["Dhow", "Sanbuq", "Baghlah (Bigbuq)", "Kakam", "Junk", "Jong", "Cog", "Brig"]);
+  const providers = BOAT_CATALOG.slice(8).map((boat) => boat.provider);
+  assert.deepEqual(providers.filter((provider, index) => provider !== providers[index - 1]), [...new Set(providers)], "a mod's boats stay together");
+  const rank = { Small: 0, Medium: 1, Large: 2 };
+  for (const provider of new Set(providers)) {
+    const sizes = BOAT_CATALOG.filter((boat) => boat.provider === provider).map((boat) => rank[boat.size]);
+    assert.deepEqual(sizes, [...sizes].sort(), `${provider} runs small to large`);
+  }
+});
+
 test("formats passage times", () => {
   assert.equal(formatDuration(0.5), "30m");
   assert.equal(formatDuration(2.25), "2h 15m");
@@ -328,8 +369,8 @@ test("formats passage times", () => {
 });
 
 test("bundles the licensed island catalog and matches location names exactly", () => {
-  assert.equal(ISLAND_CATALOG.length, 49);
-  assert.equal(new Set(ISLAND_CATALOG.map((island) => island.id)).size, 49);
+  assert.equal(ISLAND_CATALOG.length, 50);
+  assert.equal(new Set(ISLAND_CATALOG.map((island) => island.id)).size, 50);
   assert.equal(islandByName("Chronos").region, "Aestrin");
   assert.equal(islandByName("  dead COVE ").id, "emerald/dead_cove");
   assert.equal(normalizeIslandName("Al’Nilem"), normalizeIslandName("Al'Nilem"));
@@ -554,7 +595,7 @@ test("labelled exports round-trip every chart item", async () => {
   const [original] = importChartData(await fixture("chartroom-0.4.15-chart.json"));
   const file = JSON.parse(JSON.stringify(exportFile([original])));
   assert.equal(file.format, "sailwind-chartroom");
-  assert.equal(file.version, 1);
+  assert.ok(Number.isInteger(file.version));
   const [copy] = importChartData(file);
   const { id, name, ...rest } = copy;
   const { id: originalId, name: originalName, ...originalRest } = original;
@@ -563,7 +604,7 @@ test("labelled exports round-trip every chart item", async () => {
 });
 
 test("refuses files from a newer Chartroom instead of dropping what it cannot read", () => {
-  assert.throws(() => importChartData({ format: "sailwind-chartroom", version: 2, charts: [createChart()] }), /newer version of Chartroom/);
+  assert.throws(() => importChartData({ format: "sailwind-chartroom", version: 3, charts: [createChart()] }), /newer version of Chartroom/);
   assert.throws(() => importChartData({ format: "sailwind-chartroom", version: 1, charts: [] }), /no charts/);
 });
 
@@ -599,4 +640,119 @@ test("release notes become plain heading, bullet and text lines", async () => {
     { kind: "bullet", text: "Tides from the wiki (https://example.com/x)" },
     { kind: "text", text: "Plain code" }
   ]);
+});
+
+test("View layers hide each kind of chart item, and adding one shows its layer again", () => {
+  const chart = createChart();
+  chart.features.push({ id: "spot", lat: 0, lon: 0, rangeNm: 0 }, { id: "area", lat: 0, lon: 0, rangeNm: 5 });
+  chart.layers.locations = false;
+  assert.deepEqual(shownItems(chart, "feature").map((item) => item.id), ["area"]);
+  chart.layers.locationIslands = false;
+  assert.equal(islandsShown(chart, "feature", chart.features[0]), false);
+  assert.equal(islandsShown(chart, "feature", chart.features[1]), true, "rough areas have their own island setting");
+  chart.layers.islands = false;
+  assert.equal(islandsShown(chart, "search", {}), false, "Island outlines hides every island");
+  chart.layers.routes = false;
+  chart.savedRoutes.push({ id: "trip", name: "Trip", hidden: false, points: [{ id: "p", lat: 0, lon: 0 }] });
+  assert.deepEqual([shownItems(chart, "saved-route"), shownItems(chart, "saved-point")], [[], []]);
+  chart.layers.routes = true;
+  chart.layers.savedRoutes = false;
+  assert.deepEqual(shownItems(chart, "saved-route"), [], "old routes hide on their own");
+  revealLayer(chart, "saved-point", {});
+  assert.equal(chart.layers.savedRoutes, true);
+  chart.layers.routes = false;
+  chart.layers.measure = false;
+  assert.equal(itemShown(chart, "line", { color: "red" }), false, "kept lines sit under the measure line");
+  chart.layers.measure = true;
+  chart.layers.blueLines = false;
+  assert.deepEqual([itemShown(chart, "line", { color: "red" }), itemShown(chart, "line", { color: "blue" })], [true, false], "each colour hides on its own");
+  revealLayer(chart, "line", { color: "blue" });
+  assert.equal(chart.layers.blueLines, true);
+  revealLayer(chart, "feature", chart.features[0]);
+  revealLayer(chart, "route", {});
+  assert.deepEqual([chart.layers.locations, chart.layers.routes, chart.layers.areas], [true, true, true]);
+});
+
+test("kept lines read web map and older Chartroom lines, in three colours", () => {
+  const chart = createChart();
+  chart.segments = [
+    { id: "old", a: { lat: 1, lon: 2 }, b: { lat: 3, lon: 4 }, color: "ink" },
+    { id: "map", lat: 0, lon: 0, end: { lat: 1, lon: 1 }, color: "greenline" }
+  ];
+  const [restored] = sanitizeWorkspace({ activeChartId: chart.id, charts: [chart] }).charts;
+  assert.deepEqual(restored.segments, [
+    { id: "old", lat: 1, lon: 2, end: { lat: 3, lon: 4 }, color: "red" },
+    { id: "map", lat: 0, lon: 0, end: { lat: 1, lon: 1 }, color: "green" }
+  ]);
+  const kept = createLine(createMeasure({ lat: 0, lon: 0 }, { lat: 2, lon: 2 }), "blue");
+  assert.deepEqual([kept.end, kept.color], [{ lat: 2, lon: 2 }, "blue"]);
+  translateChartItems(restored, [{ kind: "line", id: "old" }], { lat: 1, lon: 0 });
+  assert.deepEqual([restored.segments[0].lat, restored.segments[0].end.lat], [2, 4]);
+});
+
+test("waypoints and winds keep a day and time", () => {
+  const chart = createChart();
+  chart.route.push({ id: "r", lat: 0, lon: 0, day: "3", time: "14:00" });
+  chart.winds.push({ id: "w", lat: 0, lon: 0, bearing: 90, day: "4", time: "06:30" });
+  const [restored] = sanitizeWorkspace({ activeChartId: chart.id, charts: [chart] }).charts;
+  assert.deepEqual([restored.route[0].day, restored.route[0].time, restored.winds[0].day, restored.winds[0].time], ["3", "14:00", "4", "06:30"]);
+});
+
+// A scramble file as Scrambled Seas' XmlSerializer writes it: island N moved N degrees east and one south.
+function scrambleXml(count) {
+  const vectors = Array.from({ length: count }, (_, index) => `    <Vector3>
+      <x>${(index + 1) * 9000}</x>
+      <y>0</y>
+      <z>-9000</z>
+    </Vector3>`).join("\r\n");
+  return ['<?xml version="1.0" encoding="utf-8"?>', '<ScrambledSeasSaveContainer xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">',
+    "  <version>60</version>", "  <worldScramblerSeed>-42</worldScramblerSeed>", "  <borderExpander>1</borderExpander>",
+    "  <archOffsets />", "  <islandOffsets>", vectors, "  </islandOffsets>", "</ScrambledSeasSaveContainer>"].join("\r\n");
+}
+
+test("a Scrambled Seas save moves each island by its own offset", () => {
+  const chart = importScrambledSeas(parseScrambledSeasXml(scrambleXml(43)));
+  assert.equal(chart.seed, "-42");
+  assert.equal(chart.layers.importedMap, true);
+  assert.equal(chart.layers.expandedWinds, true, "the save says Border Expander was installed");
+  const goldRock = islandById("alankh/gold_rock_city").sourceCenter;
+  const moved = (id) => chart.scramble.islands.find((island) => island.id === id);
+  assert.deepEqual(moved("alankh/gold_rock_city"), { id: "alankh/gold_rock_city", notes: "", lat: Math.round((goldRock.lat - 1) * 1e5) / 1e5, lon: Math.round((goldRock.lon + 1) * 1e5) / 1e5 });
+  const fireFish = islandById("firefish/fire_fish_town").sourceCenter;
+  assert.ok(Math.abs(moved("firefish/fire_fish_town").lon - (fireFish.lon + 26)) < 1e-4, "island 26 is Fire Fish Town");
+  const map = importedMapIslands(chart);
+  assert.ok(map.some(({ island }) => island.id === "better-ports/bottleneck"), "island 43 is Better Ports' Bottleneck Isle");
+  const restored = sanitizeWorkspace({ activeChartId: chart.id, charts: [chart] }).charts[0];
+  assert.deepEqual(restored.scramble, chart.scramble);
+  const old = sanitizeWorkspace({ charts: [{ ...createChart(), scramble: { islands: { "alankh/oasis": { lat: 1, lon: 2 } } } }] }).charts[0];
+  assert.deepEqual(old.scramble.islands, [{ id: "alankh/oasis", lat: 1, lon: 2, notes: "" }], "0.6.10 charts keep their world");
+  const shown = sanitizeWorkspace({ charts: [{ ...createChart(), layers: { vanillaMap: true }, scramble: { islands: { "alankh/oasis": { lat: 1, lon: 2 } } } }] }).charts[0].layers;
+  assert.deepEqual([shown.importedMap, shown.vanillaMap], [true, false], "and show it as the imported map");
+});
+
+test("an imported map's islands take notes and can be removed, but stay where the world put them", () => {
+  const chart = importScrambledSeas(parseScrambledSeasXml(scrambleXml(43)));
+  const oasis = itemForRef(chart, { kind: "map-island", id: "alankh/oasis" });
+  const before = { lat: oasis.lat, lon: oasis.lon };
+  translateChartItems(chart, [{ kind: "map-island", id: oasis.id }], { lat: 1, lon: 1 });
+  assert.deepEqual({ lat: oasis.lat, lon: oasis.lon }, before);
+  chart.layers.importedMap = false;
+  assert.equal(itemShown(chart, "map-island", oasis), false);
+  removeChartItems(chart, [{ kind: "map-island", id: oasis.id }]);
+  assert.equal(itemForRef(chart, { kind: "map-island", id: oasis.id }), null);
+});
+
+test("a Scrambled Seas preset without island positions explains what to import instead", () => {
+  const preset = parseScrambledSeasXml(readFileSync(new URL("./fixtures/scrambled-seas-preset.xml", import.meta.url), "utf8"));
+  assert.deepEqual([preset.seed, preset.offsets], [123456789, []]);
+  assert.throws(() => importScrambledSeas(preset), /ExternalSave/);
+  assert.throws(() => parseScrambledSeasXml("<other />"), /not a Scrambled Seas world/);
+});
+
+test("Border Expander adds southern trade winds to a scrambled world", () => {
+  assert.equal(tradeWindAt(28, 3), null, "the game has no trade wind south of 30°N");
+  assert.equal(tradeWindAt(-10, 0, true).zone, "southEasterly");
+  assert.equal(tradeWindAt(-40, 0, true).zone, "southWesterly");
+  assert.equal(tradeWindAt(20, 0, true), null);
+  assert.equal(tradeWindAt(31, 5, true).zone, "emerald");
 });

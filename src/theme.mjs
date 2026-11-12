@@ -73,6 +73,7 @@ function readPalette(style) {
     boat: value("boat"), boatFill: value("boat-fill"), boatSail: value("boat-sail"),
     boatSelected: value("boat-selected"), boatSelectedFill: value("boat-selected-fill"), boatSelectedSail: value("boat-selected-sail"),
     islandFills: [value("land"), value("town"), value("rock")], islandDot: value("island-dot"),
+    lines: { red: value("line-red"), blue: value("line-blue"), green: value("line-green") },
     preview: value("preview"), previewLine: value("preview-line"), texture: Number(value("texture")) || 0
   });
 }

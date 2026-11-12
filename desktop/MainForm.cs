@@ -33,6 +33,9 @@ internal sealed class MainForm : Form
     private IReadOnlyList<GitHubRelease>? newerReleases;
     private CancellationTokenSource? updateCancel;
     private SettingsForm? openSettings;
+    private TrackFollower? follower;
+    // The chart the followed positions go to, kept here so a reloaded page sends them to the same one.
+    private string followedChartId = "";
 
     public MainForm()
     {
@@ -55,6 +58,7 @@ internal sealed class MainForm : Form
         Load += async (_, _) => await InitializeWebAsync();
         FormClosing += (_, _) =>
         {
+            follower?.Dispose();
             FlushSave();
             SaveWindow();
         };
@@ -163,8 +167,10 @@ internal sealed class MainForm : Form
                 // Sent on every page load, so a reload always receives the latest charts.
                 using (var workspace = currentWorkspace is null ? null : JsonDocument.Parse(currentWorkspace))
                 {
-                    Post(new { type = "init", workspace = workspace?.RootElement, dataFolder = store.Folder, version = AppVersion, textScale = WindowsTextScale() });
+                    Post(new { type = "init", workspace = workspace?.RootElement, dataFolder = store.Folder, version = AppVersion, textScale = WindowsTextScale(), liveTrack = true });
                 }
+                // A reloaded page learns that a file is still being followed.
+                if (follower is not null) Post(new { type = "track-following", name = follower.FileName, chartId = followedChartId, resumed = true });
                 break;
             case HostMessage.Save save:
                 currentWorkspace = save.Workspace;
@@ -201,6 +207,16 @@ internal sealed class MainForm : Form
             case HostMessage.ExportFile export:
                 // Shown after this handler returns, so the dialog never runs inside a WebView2 event.
                 BeginInvoke(() => SaveExport(export));
+                break;
+            case HostMessage.FollowTrack follow:
+                // Shown after this handler returns, so the dialog never runs inside a WebView2 event.
+                BeginInvoke(() => ChooseTrackFile(follow.ChartId));
+                break;
+            case HostMessage.StopTrack:
+                StopFollowing();
+                break;
+            case HostMessage.CopyText copy:
+                Clipboard.SetText(copy.Contents);
                 break;
             case HostMessage.SetAppearance appearance:
                 SettingsForm.UseDarkTitleBar(Handle, appearance.Dark);
@@ -331,6 +347,56 @@ internal sealed class MainForm : Form
             Post(new { type = "saved", ok = false, error = error.Message });
             return false;
         }
+    }
+
+    // The player picks the coords_<slot>.txt file Coordinate Viewer writes beside itself while recording.
+    private void ChooseTrackFile(string chartId)
+    {
+        using var dialog = new OpenFileDialog
+        {
+            Title = "Follow a Coordinate Viewer file",
+            Filter = "Coordinate Viewer files|coords_*.txt|Text files|*.txt|All files|*.*"
+        };
+        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        StopFollowing();
+        try
+        {
+            // New lines arrive on a worker thread and are posted from the window's thread.
+            TrackFollower? created = null;
+            created = new TrackFollower(dialog.FileName, text => PostFromFollower(() => created, text));
+            follower = created;
+            followedChartId = chartId;
+            Post(new { type = "track-following", name = follower.FileName, chartId, resumed = false });
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            MessageBox.Show(this, $"Chartroom could not follow that file:\n{error.Message}", "Sailwind Chartroom", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+    }
+
+    // Lines from a follower that has since been stopped or replaced, or that arrive while the window
+    // closes, are dropped.
+    private void PostFromFollower(Func<TrackFollower?> source, string text)
+    {
+        if (IsDisposed || !IsHandleCreated) return;
+        try
+        {
+            BeginInvoke(() =>
+            {
+                if (source() is { } sender && ReferenceEquals(sender, follower)) Post(new { type = "track-lines", text });
+            });
+        }
+        catch (InvalidOperationException)
+        {
+        }
+    }
+
+    private void StopFollowing()
+    {
+        if (follower is null) return;
+        follower.Dispose();
+        follower = null;
+        Post(new { type = "track-stopped" });
     }
 
     // The page supplies the file; the player chooses where it goes.

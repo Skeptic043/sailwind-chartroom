@@ -2,7 +2,7 @@
 import { boatColours } from "./render.mjs";
 import { mapPalette } from "./theme.mjs";
 import { createChart } from "./model.mjs";
-import { ISLAND_CATALOG, searchIsland, visibleIsland } from "./islands.mjs";
+import { ISLAND_CATALOG, ISLAND_GROUPS, islandGroup, searchIsland, visibleIsland } from "./islands.mjs";
 import { BOAT_CATALOG, assignedBoat, boatMarkerSize, drawBoatSilhouette } from "./boats.mjs";
 import { elements, showToast } from "./dom.mjs";
 import { activeChart, commit, host, persist, pushUndo, resetHistory, selectedItem, selection, workspace } from "./state.mjs";
@@ -69,8 +69,7 @@ export function openIslandLibrary() {
       ? `Show the island “${owner.label || "this search area"}” is looking for. It appears at the search centre and carries into the resolved location.`
       : `Apply an outline to “${owner.name || "this location"}”. Its coordinates and notes will stay unchanged.`;
   if (elements["island-region"].options.length === 1) {
-    const regions = [...new Set(ISLAND_CATALOG.map((island) => island.region))].sort();
-    elements["island-region"].append(...regions.map((region) => {
+    elements["island-region"].append(...ISLAND_GROUPS.map((region) => {
       const option = document.createElement("option");
       option.value = region;
       option.textContent = region;
@@ -93,8 +92,8 @@ export function renderIslandLibrary() {
   elements["remove-island"].hidden = !owner;
   elements["remove-island"].disabled = !current;
   const islands = ISLAND_CATALOG.filter((island) => (showSecrets || !island.secret)
-    && (region === "all" || island.region === region)
-    && `${island.name} ${island.region}`.toLowerCase().includes(query));
+    && (region === "all" || islandGroup(island) === region)
+    && `${island.name} ${islandGroup(island)} ${island.region}`.toLowerCase().includes(query));
   elements["island-list"].replaceChildren(...islands.map((island) => {
     const button = document.createElement("button");
     button.type = "button";
@@ -106,7 +105,7 @@ export function renderIslandLibrary() {
     const name = document.createElement("strong");
     const detail = document.createElement("small");
     name.textContent = island.name;
-    detail.textContent = `${island.region}${island.secret ? " · secret" : ""}`;
+    detail.textContent = `${island.provider ?? islandGroup(island)}${island.secret ? " · secret" : ""}`;
     if (island.secret) detail.className = "secret";
     text.append(name, detail);
     button.append(preview, text);

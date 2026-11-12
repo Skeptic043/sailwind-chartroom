@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrambledSeasSaveContainer xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <version>60</version>
+  <worldScramblerSeed>123456789</worldScramblerSeed>
+  <islandSpread>5000</islandSpread>
+  <minArchipelagoSeparation>30000</minArchipelagoSeparation>
+  <minIslandSeparation>1500</minIslandSeparation>
+  <worldLonMin>-180</worldLonMin>
+  <worldLonMax>180</worldLonMax>
+  <worldLatMin>-70</worldLatMin>
+  <worldLatMax>70</worldLatMax>
+  <borderExpander>1</borderExpander>
+  <archOffsets />
+  <islandOffsets />
+</ScrambledSeasSaveContainer>

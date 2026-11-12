@@ -8,6 +8,8 @@ function closeAppMenus({ restoreFocus = false } = {}) {
     menu.open = false;
     menu.querySelector("summary").setAttribute("aria-expanded", "false");
   }
+  // Submenus start folded the next time their menu opens.
+  for (const submenu of document.querySelectorAll(".menu-sub")) submenu.open = false;
   if (restoreFocus) openMenu?.querySelector("summary").focus();
 }
 
@@ -54,7 +56,8 @@ for (const menu of appMenus) {
     closeAppMenus({ restoreFocus: true });
   });
   menu.querySelectorAll("button").forEach((button) => button.addEventListener("click", () => closeAppMenus()));
-  menu.querySelectorAll("select, input[type=checkbox]").forEach((control) => control.addEventListener("change", () => closeAppMenus()));
+  // Checkboxes leave the menu open, so several layers can be switched in one visit.
+  menu.querySelectorAll("select").forEach((control) => control.addEventListener("change", () => closeAppMenus()));
 }
 document.addEventListener("pointerdown", (event) => {
   if (event.target.closest(".app-menu")) return;

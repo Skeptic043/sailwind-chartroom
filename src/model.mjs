@@ -1,11 +1,14 @@
 import { islandById } from "./islands.mjs";
+import { scrambledIslands } from "./scrambled-seas.mjs";
 
 // Exported files are { format, version, exportedAt, charts }. The version counts changes to the saved
 // shape of a chart; when it increases, upgrade older files in importChartData before they are sanitized.
 export const FILE_FORMAT = "sailwind-chartroom";
-export const SCHEMA_VERSION = 1;
+// 2: lines run from lat and lon to end, like the measure line, instead of from a to b.
+export const SCHEMA_VERSION = 2;
 export const NM_PER_DEGREE = 140;
-export const WORLD_BOUNDS = Object.freeze({ minLat: -90, maxLat: 90, minLon: -90, maxLon: 90 });
+// Longitude reaches all the way round, so Scrambled Seas worlds as wide as the globe fit on a chart.
+export const WORLD_BOUNDS = Object.freeze({ minLat: -90, maxLat: 90, minLon: -180, maxLon: 180 });
 export const MIN_ZOOM = 1.5;
 export const MAX_ZOOM = 600;
 export const MAX_RANGE_NM = 500;
@@ -24,17 +27,76 @@ export function createChart({ name = "Uncharted Sea", seed = "" } = {}) {
     createdAt: now,
     updatedAt: now,
     view: { lat: 10, lon: 0, zoom: 5 },
-    layers: { grid: true, labels: true, track: true, routeDistances: true, bearings: true, winds: true, boats: true, vanillaMap: false, secretIslands: false, tradeWinds: false },
+    layers: defaultLayers(),
     speedKn: 6,
     features: [],
     route: [],
     savedRoutes: [],
     track: [],
-    bearings: [],
+    measures: [],
     winds: [],
     searches: [],
     segments: []
   };
+}
+
+// The View menu's layers. The first group follows the chart tools, each with its own parts beneath it;
+// the vanilla map and the trade winds start hidden. The imported map shows on charts that have one.
+const LAYER_DEFAULTS = Object.freeze({
+  locations: true, locationIslands: true,
+  routes: true, routeDistances: true, savedRoutes: true,
+  measure: true, redLines: true, blueLines: true, greenLines: true,
+  areas: true, areaIslands: true,
+  searches: true, searchLines: true, searchIslands: true,
+  winds: true,
+  grid: true, labels: true, boats: true, islands: true, track: true,
+  vanillaMap: false, importedMap: true, secretIslands: false, tradeWinds: false, expandedWinds: false
+});
+
+function defaultLayers() {
+  return { ...LAYER_DEFAULTS };
+}
+
+// Whether a chart item is drawn, clickable and a magnet. Hidden items stay listed under Chart items.
+export function itemShown(chart, kind, item) {
+  const layers = chart.layers;
+  if (kind === "feature") return item.rangeNm ? layers.areas : layers.locations;
+  if (kind === "route") return layers.routes;
+  if (kind === "saved-point" || kind === "saved-route") return layers.routes && layers.savedRoutes;
+  if (kind === "search") return layers.searches;
+  if (kind === "wind") return layers.winds;
+  if (kind === "measure") return layers.measure;
+  if (kind === "line") return layers.measure && layers[`${item.color}Lines`];
+  if (kind === "track") return layers.track;
+  if (kind === "map-island") return layers.importedMap && (layers.secretIslands || !islandById(item.id)?.secret);
+  return true;
+}
+
+// The items of one kind the chart draws. A saved route also hides on its own.
+export function shownItems(chart, kind) {
+  if (kind === "saved-route") return itemShown(chart, kind) ? visibleSavedRoutes(chart) : [];
+  if (kind === "saved-point") return shownItems(chart, "saved-route").flatMap((route) => route.points);
+  return chartItems(chart, kind).filter((item) => itemShown(chart, kind, item));
+}
+
+// Whether island outlines show for a location, rough area or search area.
+export function islandsShown(chart, kind, item) {
+  const layers = chart.layers;
+  if (!layers.islands) return false;
+  if (kind === "search") return layers.searchIslands;
+  return item?.rangeNm ? layers.areaIslands : layers.locationIslands;
+}
+
+// Adding to a hidden layer shows it again, so new work never lands out of sight.
+export function revealLayer(chart, kind, item) {
+  const layers = chart.layers;
+  if (kind === "feature") layers[item.rangeNm ? "areas" : "locations"] = true;
+  if (kind === "route" || kind === "saved-point") layers.routes = true;
+  if (kind === "saved-point") layers.savedRoutes = true;
+  if (kind === "search") layers.searches = true;
+  if (kind === "wind") layers.winds = true;
+  if (kind === "measure") layers.measure = true;
+  if (kind === "line") layers.measure = layers[`${item.color}Lines`] = true;
 }
 
 export function createWorkspace() {
@@ -137,27 +199,24 @@ export function sanitizeChart(value) {
     lon: clampNumber(view.lon, WORLD_BOUNDS.minLon, WORLD_BOUNDS.maxLon, base.view.lon),
     zoom: clampNumber(view.zoom, MIN_ZOOM, MAX_ZOOM, base.view.zoom)
   };
-  base.layers = {
-    grid: value.layers?.grid !== false,
-    labels: value.layers?.labels !== false,
-    track: value.layers?.track !== false,
-    routeDistances: value.layers?.routeDistances !== false,
-    bearings: value.layers?.bearings !== false,
-    winds: value.layers?.winds !== false,
-    boats: value.layers?.boats !== false,
-    vanillaMap: value.layers?.vanillaMap === true,
-    secretIslands: value.layers?.secretIslands === true,
-    tradeWinds: value.layers?.tradeWinds === true
-  };
+  base.layers = Object.fromEntries(Object.entries(LAYER_DEFAULTS).map(([key, shown]) => [key, shown ? value.layers?.[key] !== false : value.layers?.[key] === true]));
   base.speedKn = clampNumber(value.speedKn, 0.1, 30, base.speedKn);
   base.features = arrayOf(value.features, sanitizeFeature);
   base.route = arrayOf(value.route, sanitizeRoutePoint);
   base.savedRoutes = arrayOf(value.savedRoutes, sanitizeSavedRoute);
   base.track = arrayOf(value.track, (point) => sanitizeTrackPoint(point));
-  base.bearings = arrayOf(value.bearings, sanitizeBearing);
+  // A chart keeps one measure line; a new measurement replaces it.
+  base.measures = arrayOf(value.measures, sanitizeMeasure).slice(-1);
   base.winds = arrayOf(value.winds, sanitizeWind);
   base.searches = arrayOf(value.searches, sanitizeSearch);
   base.segments = arrayOf(value.segments, sanitizeSegment);
+  const scramble = sanitizeScramble(value.scramble);
+  if (scramble) base.scramble = scramble;
+  // In 0.6.10 an imported world showed under Vanilla map; it now has its own layer.
+  if (scramble && value.layers?.importedMap === undefined) {
+    base.layers.importedMap = value.layers?.vanillaMap === true;
+    base.layers.vanillaMap = false;
+  }
   followAnchors(base);
   return base;
 }
@@ -186,16 +245,24 @@ export function locationRangeForType(type, rangeNm) {
   return Number.isFinite(value) && value > 0 ? clampNumber(value, 0.1, MAX_RANGE_NM, 10) : 10;
 }
 
-export function createBearing({ lat, lon, bearing, label = "" }) {
-  return sanitizeBearing({ id: makeId("bearing"), lat, lon, bearing, label });
+// Kept lines come in the three colours the Sailwind web map draws with.
+export const LINE_COLOURS = Object.freeze(["red", "blue", "green"]);
+
+// A measure line kept on the chart as a line of its own.
+export function createLine(measure, color = LINE_COLOURS[0]) {
+  return sanitizeSegment({ id: makeId("line"), lat: measure.lat, lon: measure.lon, end: measure.end, color });
 }
 
-export function createWind({ lat, lon, bearing, label = "" }) {
-  return sanitizeWind({ id: makeId("wind"), lat, lon, bearing, label });
+export function createMeasure(from, to) {
+  return sanitizeMeasure({ id: makeId("measure"), lat: from.lat, lon: from.lon, end: { lat: to.lat, lon: to.lon } });
 }
 
-export function createRoutePoint({ lat, lon, name = "", notes = "" }) {
-  return sanitizeRoutePoint({ id: makeId("route"), lat, lon, name, notes });
+export function createWind({ lat, lon, bearing, label = "", day = "", time = "" }) {
+  return sanitizeWind({ id: makeId("wind"), lat, lon, bearing, label, day, time });
+}
+
+export function createRoutePoint({ lat, lon, name = "", notes = "", day = "", time = "" }) {
+  return sanitizeRoutePoint({ id: makeId("route"), lat, lon, name, notes, day, time });
 }
 
 // Saving moves the active route's waypoints, ids and all, into a separate route that stays editable.
@@ -259,12 +326,14 @@ export function followAnchors(chart) {
 }
 
 // Every kind of item a selection can hold. A saved route owns its waypoints, which can also be selected alone.
-const ITEM_LISTS = { feature: "features", route: "route", bearing: "bearings", wind: "winds", search: "searches" };
-export const ITEM_KINDS = Object.freeze([...Object.keys(ITEM_LISTS), "saved-route", "saved-point"]);
+const ITEM_LISTS = { feature: "features", route: "route", measure: "measures", line: "segments", wind: "winds", search: "searches", track: "track" };
+// An imported Scrambled Seas map's islands can be selected, noted and deleted, but never moved.
+export const ITEM_KINDS = Object.freeze([...Object.keys(ITEM_LISTS), "saved-route", "saved-point", "map-island"]);
 
 export function chartItems(chart, kind) {
   if (kind === "saved-route") return chart.savedRoutes;
   if (kind === "saved-point") return chart.savedRoutes.flatMap((route) => route.points);
+  if (kind === "map-island") return chart.scramble?.islands ?? [];
   return chart[ITEM_LISTS[kind]] ?? [];
 }
 
@@ -285,6 +354,8 @@ export function removeChartItems(chart, refs) {
     const ids = idsOf(kind);
     if (ids.size) chart[key] = chart[key].filter((item) => !ids.has(item.id));
   }
+  const mapIslands = idsOf("map-island");
+  if (mapIslands.size && chart.scramble) chart.scramble.islands = chart.scramble.islands.filter((island) => !mapIslands.has(island.id));
   const routes = idsOf("saved-route");
   const points = idsOf("saved-point");
   for (const route of chart.savedRoutes) route.points = route.points.filter((point) => !points.has(point.id));
@@ -295,6 +366,7 @@ export function removeChartItems(chart, refs) {
 export function translateChartItems(chart, refs, delta, { strict = false } = {}) {
   const unique = new Map();
   for (const ref of pointRefs(chart, refs)) {
+    if (ref.kind === "map-island") continue;
     const item = itemForRef(chart, ref);
     if (item) unique.set(`${ref.kind}:${ref.id}`, { ref, item });
   }
@@ -305,11 +377,12 @@ export function translateChartItems(chart, refs, delta, { strict = false } = {})
   });
   let lat = Number(delta?.lat) || 0;
   let lon = Number(delta?.lon) || 0;
-  const limits = moving.reduce((result, { item }) => ({
-    minLat: Math.max(result.minLat, WORLD_BOUNDS.minLat - item.lat),
-    maxLat: Math.min(result.maxLat, WORLD_BOUNDS.maxLat - item.lat),
-    minLon: Math.max(result.minLon, WORLD_BOUNDS.minLon - item.lon),
-    maxLon: Math.min(result.maxLon, WORLD_BOUNDS.maxLon - item.lon)
+  // A measure line moves both of its ends.
+  const limits = moving.flatMap(({ item }) => item.end ? [item, item.end] : [item]).reduce((result, point) => ({
+    minLat: Math.max(result.minLat, WORLD_BOUNDS.minLat - point.lat),
+    maxLat: Math.min(result.maxLat, WORLD_BOUNDS.maxLat - point.lat),
+    minLon: Math.max(result.minLon, WORLD_BOUNDS.minLon - point.lon),
+    maxLon: Math.min(result.maxLon, WORLD_BOUNDS.maxLon - point.lon)
   }), { minLat: -Infinity, maxLat: Infinity, minLon: -Infinity, maxLon: Infinity });
   if (strict && (lat < limits.minLat || lat > limits.maxLat || lon < limits.minLon || lon > limits.maxLon)) {
     throw new Error("That move would put part of the selection outside the chart.");
@@ -319,6 +392,10 @@ export function translateChartItems(chart, refs, delta, { strict = false } = {})
   for (const { ref, item } of moving) {
     item.lat += lat;
     item.lon += lon;
+    if (item.end) {
+      item.end.lat += lat;
+      item.end.lon += lon;
+    }
     if (ref.kind === "search" && item.anchor) delete item.anchor;
   }
   followAnchors(chart);
@@ -504,6 +581,7 @@ export function searchEvidenceOpacity(hasOverlap) {
 
 export function chartItemFocusPoint(kind, item) {
   if (kind === "search") return searchExtent(item).centre;
+  if (kind === "measure" || kind === "line") return { lat: (item.lat + item.end.lat) / 2, lon: (item.lon + item.end.lon) / 2 };
   if (kind === "saved-route") {
     const lats = item.points.map((point) => point.lat);
     const lons = item.points.map((point) => point.lon);
@@ -519,9 +597,24 @@ const LANDMARK_LABEL_PRIORITY = new Map([
   ["fort aestrin", 3]
 ]);
 
-// The game's permanent trade wind at a position: which of its three wind zones this is, and the east
-// and north parts of the direction the wind blows toward. Null where there is none.
-export function tradeWindAt(lat, lon) {
+// Border Expander's trade winds: the game's three, and two more in the south. Where they overlap,
+// the smallest wins, as in Border Expander.
+const BORDER_EXPANDER_WINDS = Object.freeze([
+  { zone: "aestrin", minLon: -200, maxLon: 200, minLat: 33, maxLat: 90, east: 1, north: 0.5 },
+  { zone: "alankh", minLon: -200, maxLon: -2, minLat: 30, maxLat: 33, east: 0.75, north: 0.75 },
+  { zone: "emerald", minLon: -2, maxLon: 200, minLat: 30, maxLat: 32, east: -1, north: -0.5 },
+  { zone: "southEasterly", minLon: -200, maxLon: 200, minLat: -30, maxLat: 15, east: -1, north: 0.5 },
+  { zone: "southWesterly", minLon: -200, maxLon: 200, minLat: -60, maxLat: -33, east: 1, north: -0.5 }
+].sort((a, b) => (a.maxLon - a.minLon) * (a.maxLat - a.minLat) - (b.maxLon - b.minLon) * (b.maxLat - b.minLat)));
+
+// The game's permanent trade wind at a position: which of its wind zones this is, and the east and
+// north parts of the direction the wind blows toward. Null where there is none: the game has no trade
+// wind south of 30°N, and Border Expander adds its own bands.
+export function tradeWindAt(lat, lon, borderExpander = false) {
+  if (borderExpander) {
+    const band = BORDER_EXPANDER_WINDS.find((wind) => lon >= wind.minLon && lon < wind.maxLon && lat >= wind.minLat && lat < wind.maxLat);
+    return band ? { zone: band.zone, east: band.east, north: band.north } : null;
+  }
   if (lat < 30) return null;
   if (lat > 33) return { zone: "aestrin", east: 1, north: 0.5 };
   if (lon < -2) return { zone: "alankh", east: 0.75, north: 0.75 };
@@ -625,6 +718,12 @@ function sanitizeBearing(value) {
   };
 }
 
+function sanitizeMeasure(value) {
+  const point = sanitizePoint(value, "measure");
+  if (!point || !isFiniteCoordinate(value.end?.lat, value.end?.lon)) return null;
+  return { id: point.id, lat: point.lat, lon: point.lon, end: { lat: Number(value.end.lat), lon: Number(value.end.lon) } };
+}
+
 function sanitizeWind(value) {
   const wind = sanitizeBearing(value);
   if (!wind) return null;
@@ -634,7 +733,9 @@ function sanitizeWind(value) {
     lat: wind.lat,
     lon: wind.lon,
     bearing: wind.bearing,
-    label: label.toLowerCase() === "trade wind" ? "" : label
+    label: label.toLowerCase() === "trade wind" ? "" : label,
+    day: cleanText(value.day, 30),
+    time: cleanText(value.time, 30)
   };
 }
 
@@ -650,7 +751,7 @@ function sanitizePoint(value, prefix) {
 
 function sanitizeRoutePoint(value) {
   const point = sanitizePoint(value, "route");
-  return point ? { ...point, notes: cleanText(value.notes, 1000) } : null;
+  return point ? { ...point, notes: cleanText(value.notes, 1000), day: cleanText(value.day, 30), time: cleanText(value.time, 30) } : null;
 }
 
 function sanitizeSavedRoute(value) {
@@ -676,13 +777,19 @@ function sanitizeTrackPoint(value) {
   };
 }
 
+// Lines share the measure line's shape. Lines from older charts and web map files ran from a to b, and
+// web map colours are names such as "redline"; anything else becomes the first colour.
 function sanitizeSegment(value) {
-  if (!value || !isFiniteCoordinate(value.a?.lat, value.a?.lon) || !isFiniteCoordinate(value.b?.lat, value.b?.lon)) return null;
+  const start = value?.a ?? value;
+  const end = value?.b ?? value?.end;
+  if (!value || !isFiniteCoordinate(start?.lat, start?.lon) || !isFiniteCoordinate(end?.lat, end?.lon)) return null;
+  const colour = String(value.color ?? "").toLowerCase();
   return {
-    id: cleanText(value.id, 120) || makeId("segment"),
-    a: { lat: Number(value.a.lat), lon: Number(value.a.lon) },
-    b: { lat: Number(value.b.lat), lon: Number(value.b.lon) },
-    color: cleanText(value.color, 30) || "ink"
+    id: cleanText(value.id, 120) || makeId("line"),
+    lat: Number(start.lat),
+    lon: Number(start.lon),
+    end: { lat: Number(end.lat), lon: Number(end.lon) },
+    color: LINE_COLOURS.find((name) => colour.includes(name)) ?? LINE_COLOURS[0]
   };
 }
 
@@ -733,39 +840,6 @@ export function destinationPoint(origin, bearing, nm) {
     lat: Number(origin.lat) + Math.cos(radians) * degrees,
     lon: Number(origin.lon) + Math.sin(radians) * degrees
   };
-}
-
-// Where two bearing lines cross on the flat chart, or null when they are parallel or meet behind either observer.
-export function bearingIntersection(a, b) {
-  const da = direction(a.bearing);
-  const db = direction(b.bearing);
-  const cross = da.x * db.y - da.y * db.x;
-  if (Math.abs(cross) < 1e-9) return null;
-  const ox = Number(b.lon) - Number(a.lon);
-  const oy = Number(b.lat) - Number(a.lat);
-  const t = (ox * db.y - oy * db.x) / cross;
-  const s = (ox * da.y - oy * da.x) / cross;
-  if (t < 0 || s < 0) return null;
-  const point = { lat: Number(a.lat) + da.y * t, lon: Number(a.lon) + da.x * t };
-  return isFiniteCoordinate(point.lat, point.lon) ? point : null;
-}
-
-export function bearingFixes(bearings) {
-  const fixes = [];
-  for (let i = 0; i < bearings.length; i += 1) {
-    for (let j = i + 1; j < bearings.length; j += 1) {
-      const point = bearingIntersection(bearings[i], bearings[j]);
-      if (!point) continue;
-      const spread = Math.abs(((bearings[i].bearing - bearings[j].bearing + 540) % 360) - 180);
-      fixes.push({ ...point, ids: [bearings[i].id, bearings[j].id], cut: Math.min(spread, 180 - spread) });
-    }
-  }
-  return fixes;
-}
-
-function direction(bearing) {
-  const radians = Number(bearing) * Math.PI / 180;
-  return { x: Math.sin(radians), y: Math.cos(radians) };
 }
 
 export function parseBearing(input) {
@@ -871,6 +945,39 @@ export function importChartData(value, suggestedName = "Imported chart") {
   throw new Error("This file is not a Chartroom or Sailwind Interactive Map export.");
 }
 
+// A new chart for a Scrambled Seas world, with the game map on to show where its islands went.
+export function importScrambledSeas(world) {
+  const seed = Number.isInteger(world.seed) ? String(world.seed) : "";
+  const chart = createChart({ name: uniqueImportedName(seed ? `Scrambled Seas ${seed}` : "Scrambled Seas"), seed });
+  chart.scramble = sanitizeScramble({ islands: scrambledIslands(world) });
+  chart.layers.importedMap = true;
+  // Scrambled Seas records whether Border Expander was installed, and so whether its trade winds blow.
+  chart.layers.expandedWinds = world.borderExpander === true;
+  return chart;
+}
+
+// A Scrambled Seas world's islands, each where that world put it and with the player's notes.
+// 0.6.10 kept them as an object of positions by island id.
+function sanitizeScramble(value) {
+  const entries = Array.isArray(value?.islands) ? value.islands
+    : value?.islands && typeof value.islands === "object" ? Object.entries(value.islands).map(([id, point]) => ({ ...point, id })) : [];
+  const islands = entries
+    .filter((entry) => islandById(entry?.id) && isFiniteCoordinate(entry.lat, entry.lon))
+    .map((entry) => ({ id: entry.id, lat: Number(entry.lat), lon: Number(entry.lon), notes: cleanText(entry.notes, 1000) }));
+  return islands.length ? { islands } : null;
+}
+
+// A route as a Sailwind Interactive Map export, which SailMaster's autopilot takes pasted into its
+// route box: its waypoints are path entries coloured orangepoint, at [longitude, latitude].
+export function sailMasterRoute(points) {
+  return JSON.stringify({
+    lines: [],
+    path: points.map((point) => ({ description: point.name ?? "", pos: [point.lon, point.lat], colour: "orangepoint", day: 0, time: 0, winddir: "" })),
+    points: [],
+    goals: []
+  });
+}
+
 export function importLegacyMap(value, name = "Imported legacy map") {
   const chart = createChart({ name: uniqueImportedName(name) });
   const legacyPoints = [...(value.points ?? []), ...(value.goals ?? [])];
@@ -888,7 +995,7 @@ export function importLegacyMap(value, name = "Imported legacy map") {
   }).filter(Boolean);
   chart.route = (value.path ?? []).map((point) => {
     const [lon, lat] = point.pos ?? [];
-    return isFiniteCoordinate(lat, lon) ? createRoutePoint({ lat, lon, name: point.description }) : null;
+    return isFiniteCoordinate(lat, lon) ? createRoutePoint({ lat, lon, name: point.description, day: point.day, time: point.time }) : null;
   }).filter(Boolean);
   chart.segments = (value.lines ?? []).map((line) => {
     const a = line.p0 ?? line.a;
@@ -935,8 +1042,8 @@ export function isFiniteCoordinate(lat, lon) {
 
 function validateAxis(value, axis) {
   if (!Number.isFinite(value)) throw new Error(`${axisLabel(axis)} must be a number.`);
-  const limit = 90;
-  if (value < -limit || value > limit) throw new Error(`${axisLabel(axis)} must be between -90° and 90°.`);
+  const limit = axis === "lat" ? WORLD_BOUNDS.maxLat : WORLD_BOUNDS.maxLon;
+  if (value < -limit || value > limit) throw new Error(`${axisLabel(axis)} must be between -${limit}° and ${limit}°.`);
   return value;
 }
 

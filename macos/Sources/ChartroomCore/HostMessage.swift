@@ -14,6 +14,10 @@ public enum HostMessage: Equatable {
     case setZoom(Double)
     case setAppearance(dark: Bool, followsSystem: Bool)
     case exportFile(name: String, contents: String)
+    /// Follow a Coordinate Viewer file into the chart with this id.
+    case followTrack(chartId: String)
+    case stopTrack
+    case copyText(String)
 
     // src/host.mjs sends a save as JSON.stringify({ type: "save", workspace }), so the workspace's own
     // text is everything between this prefix and the closing brace.
@@ -28,6 +32,13 @@ public enum HostMessage: Equatable {
         case "pin": return .pin
         case "open-folder": return .openFolder
         case "open-releases": return .openReleases
+        case "stop-track": return .stopTrack
+        case "follow-track":
+            guard let chartId = root["chartId"] as? String, !chartId.isEmpty else { return nil }
+            return .followTrack(chartId: chartId)
+        case "copy-text":
+            guard let text = root["text"] as? String, !text.isEmpty else { return nil }
+            return .copyText(text)
         case "check-updates": return .checkUpdates(background: JSONValue.bool(root["background"]) ?? false)
         case "open-settings":
             guard let settings = AppSettings.parse(root["settings"]),

@@ -1,10 +1,10 @@
 // Finds what is under the pointer and where drawing clicks snap to.
-import { NM_PER_DEGREE, bearingFixes, destinationPoint, insideSearch, searchExtent, searchIconAnchors, summarizeRoute, visibleSavedRoutes } from "./model.mjs";
-import { islandContains, searchIsland, visibleIsland } from "./islands.mjs";
+import { NM_PER_DEGREE, destinationPoint, insideSearch, searchExtent, searchIconAnchors, itemShown, shownItems, summarizeRoute } from "./model.mjs";
+import { islandById, islandContains } from "./islands.mjs";
 import { visibleBoat } from "./boats.mjs";
 import { clamp } from "./format.mjs";
 import { activeChart, selectedItem, selection } from "./state.mjs";
-import { BEARING_REACH_NM, boatIconBounds, boatIconBoundsAt, islandPixelSpan, screenToWorld, symbolSize, worldToScreen } from "./viewport.mjs";
+import { boatIconBounds, boatIconBoundsAt, chartIsland, chartSearchIsland, islandPixelSpan, screenToWorld, symbolSize, worldToScreen } from "./viewport.mjs";
 
 const POINT_MAGNET_PX = 11;
 
@@ -13,6 +13,8 @@ const LINE_MAGNET_PX = 7;
 // Repeated clicks on one spot step through the items stacked there.
 let hitCycle = null;
 const SAVED_ROUTE_LINE_PX = 5;
+const MEASURE_LINE_PX = 6;
+const MEASURE_END_PX = 9;
 
 export function resetHitCycle() {
   hitCycle = null;
@@ -22,34 +24,36 @@ function findHits(x, y) {
   const chart = activeChart();
   const world = screenToWorld(x, y);
   const candidates = [];
-  const consider = (kind, id, point, fix = false, distanceOverride = null, passive = false) => {
+  const consider = (kind, id, point, distanceOverride = null, passive = false) => {
     const screen = worldToScreen(point);
-    candidates.push({ kind, id, fix, passive, distance: distanceOverride ?? Math.hypot(screen.x - x, screen.y - y) });
+    candidates.push({ kind, id, passive, distance: distanceOverride ?? Math.hypot(screen.x - x, screen.y - y) });
   };
-  for (const feature of chart.features) {
-    const island = visibleIsland(feature);
+  // Only what the chart shows can be clicked; hidden items are still listed under Chart items.
+  for (const feature of shownItems(chart, "feature")) {
+    const island = chartIsland(feature);
     const inside = island && islandPixelSpan(island) >= 14 && islandContains(island, feature, world);
     const boatBounds = chart.layers.boats && visibleBoat(feature) ? boatIconBounds(feature) : null;
     const insideBoat = boatBounds && x >= boatBounds.x - boatBounds.width / 2 && x <= boatBounds.x + boatBounds.width / 2
       && y >= boatBounds.y - boatBounds.height / 2 && y <= boatBounds.y + boatBounds.height / 2;
-    consider("feature", feature.id, feature, false, inside || insideBoat ? 0 : null);
+    consider("feature", feature.id, feature, inside || insideBoat ? 0 : null);
   }
-  for (const point of chart.route) consider("route", point.id, point);
-  for (const route of visibleSavedRoutes(chart)) {
+  for (const point of shownItems(chart, "route")) consider("route", point.id, point);
+  for (const route of shownItems(chart, "saved-route")) {
     for (const point of route.points) consider("saved-point", point.id, point);
     // Clicking a saved route's line picks the whole route; its waypoints win when they are as close.
     for (const leg of summarizeRoute(route.points).legs) {
       const line = { a: worldToScreen(leg.from), b: worldToScreen(leg.to) };
       const near = closestOnSegment(line, { x, y });
       const distance = Math.hypot(near.x - x, near.y - y);
-      if (distance <= SAVED_ROUTE_LINE_PX) consider("saved-route", route.id, leg.from, false, distance + 3);
+      if (distance <= SAVED_ROUTE_LINE_PX) consider("saved-route", route.id, leg.from, distance + 3);
     }
   }
-  const iconAnchors = searchIconAnchors(chart.searches);
-  for (const search of chart.searches) {
+  const searches = shownItems(chart, "search");
+  const iconAnchors = searchIconAnchors(searches);
+  for (const search of searches) {
     let insideBoat = false;
     if (chart.layers.boats && visibleBoat(search)) {
-      const island = iconAnchors.has(search.id) ? null : searchIsland(search);
+      const island = iconAnchors.has(search.id) ? null : chartSearchIsland(search);
       const scale = island ? clamp(28 / Math.max(1, islandPixelSpan(island)), 1, 8) : 1;
       const boat = visibleBoat(search);
       const bounds = boatIconBoundsAt(searchExtent(search).centre, island, scale, boat);
@@ -58,21 +62,37 @@ function findHits(x, y) {
     }
     const searchOrigin = worldToScreen(search);
     const originDistance = Math.hypot(searchOrigin.x - x, searchOrigin.y - y);
-    if (insideBoat || originDistance <= 13) consider("search", search.id, search, false, insideBoat ? 0 : originDistance);
-    else if (insideSearch(search, world)) consider("search", search.id, search, false, 12, true);
+    if (insideBoat || (chart.layers.searchLines && originDistance <= 13)) consider("search", search.id, search, insideBoat ? 0 : originDistance);
+    else if (insideSearch(search, world)) consider("search", search.id, search, 12, true);
   }
   // A wind arrow is clickable along its whole drawn length.
-  if (chart.layers.winds) for (const wind of chart.winds) {
+  for (const wind of shownItems(chart, "wind")) {
     const start = worldToScreen(wind);
     const radians = wind.bearing * Math.PI / 180;
     const length = symbolSize("wind");
     const end = { x: start.x + Math.sin(radians) * length, y: start.y - Math.cos(radians) * length };
     const near = closestOnSegment({ a: start, b: end }, { x, y });
-    consider("wind", wind.id, wind, false, Math.hypot(near.x - x, near.y - y));
+    consider("wind", wind.id, wind, Math.hypot(near.x - x, near.y - y));
   }
-  if (chart.layers.bearings) {
-    for (const bearing of chart.bearings) consider("bearing", bearing.id, bearing);
-    for (const fix of bearingFixes(chart.bearings)) consider("bearing", fix.ids[0], fix, true);
+  // A Scrambled Seas map's islands. Pressing one selects it and pans the chart, as it cannot be moved.
+  for (const item of shownItems(chart, "map-island")) {
+    const island = islandById(item.id);
+    const centre = worldToScreen(item);
+    const distance = Math.hypot(centre.x - x, centre.y - y);
+    const inside = islandPixelSpan(island) >= 14 && islandContains(island, item, world);
+    if (inside || distance <= 8) consider("map-island", item.id, item, inside ? 12 : distance + 4, true);
+  }
+  // Coordinate Viewer positions; anything else at the same spot wins.
+  for (const point of shownItems(chart, "track")) {
+    const screen = worldToScreen(point);
+    const distance = Math.hypot(screen.x - x, screen.y - y);
+    if (distance <= 8) consider("track", point.id, point, distance + 2);
+  }
+  // The measure line and kept lines are clickable along their length; marks at their ends win when they are as close.
+  for (const kind of ["measure", "line"]) for (const line of shownItems(chart, kind)) {
+    const near = closestOnSegment({ a: worldToScreen(line), b: worldToScreen(line.end) }, { x, y });
+    const distance = Math.hypot(near.x - x, near.y - y);
+    if (distance <= MEASURE_LINE_PX) consider(kind, line.id, line, distance + 3);
   }
   candidates.sort((a, b) => a.distance - b.distance);
   return candidates.filter((candidate) => candidate.distance <= 13);
@@ -85,7 +105,7 @@ export function findHit(x, y, { cycle = false } = {}) {
     hitCycle = null;
     return null;
   }
-  const signature = hits.map((hit) => `${hit.kind}:${hit.id}:${hit.fix ? 1 : 0}:${hit.passive ? 1 : 0}`).join("|");
+  const signature = hits.map((hit) => `${hit.kind}:${hit.id}:${hit.passive ? 1 : 0}`).join("|");
   const continuing = hitCycle
     && hitCycle.signature === signature
     && Math.hypot(hitCycle.x - x, hitCycle.y - y) <= 6;
@@ -94,9 +114,23 @@ export function findHit(x, y, { cycle = false } = {}) {
   return hits[index];
 }
 
+// Which end of the selected measure line or kept line is under the pointer, so it can be dragged on its own.
+export function selectedLineEnd(screen) {
+  const kind = selection?.kind;
+  const item = (kind === "measure" || kind === "line") && itemShown(activeChart(), kind, selectedItem() ?? {}) ? selectedItem() : null;
+  if (!item) return null;
+  const distanceTo = (point) => {
+    const projected = worldToScreen(point);
+    return Math.hypot(projected.x - screen.x, projected.y - screen.y);
+  };
+  const [start, end] = [distanceTo(item), distanceTo(item.end)];
+  if (Math.min(start, end) > MEASURE_END_PX) return null;
+  return start <= end ? "start" : "end";
+}
+
 export function onSelectedAreaEdge(screen) {
   const item = selection?.kind === "feature" ? selectedItem() : null;
-  if (!item?.rangeNm) return false;
+  if (!item?.rangeNm || !itemShown(activeChart(), "feature", item)) return false;
   const center = worldToScreen(item);
   const radius = item.rangeNm / NM_PER_DEGREE * activeChart().view.zoom;
   return Math.abs(Math.hypot(screen.x - center.x, screen.y - center.y) - radius) <= 6;
@@ -125,38 +159,36 @@ export function snapPoint(screen, free = false) {
   return target ? { ...screenToWorld(target.x, target.y), snapped: true } : raw;
 }
 
-// Marks and waypoints can carry things drawn from them; other magnets (track, fixes, centres) cannot.
+// Marks and waypoints can carry things drawn from them; other magnets (track, centres) cannot.
 function anchorOf(point) {
   const chart = activeChart();
   if (chart.features.includes(point)) return { kind: "feature", id: point.id };
   if (chart.route.includes(point)) return { kind: "route", id: point.id };
-  if (visibleSavedRoutes(chart).some((route) => route.points.includes(point))) return { kind: "saved-point", id: point.id };
+  if (shownItems(chart, "saved-point").includes(point)) return { kind: "saved-point", id: point.id };
   return null;
 }
 
 function magnetPoints() {
   const chart = activeChart();
   return [
-    ...chart.features,
-    ...chart.route,
-    ...visibleSavedRoutes(chart).flatMap((route) => route.points),
+    ...shownItems(chart, "feature"),
+    ...shownItems(chart, "route"),
+    ...shownItems(chart, "saved-point"),
     ...(chart.layers.track ? chart.track : []),
-    ...chart.searches.map((search) => searchExtent(search).centre),
-    ...(chart.layers.bearings ? bearingFixes(chart.bearings) : [])
+    ...shownItems(chart, "search").map((search) => searchExtent(search).centre)
   ];
 }
 
-// Charted lines in screen space: bearing lines, search centre lines, route legs and imported lines.
+// Charted lines in screen space: search centre lines, route legs and kept lines.
 function magnetLines() {
   const chart = activeChart();
   const lines = [];
   const add = (a, b) => lines.push({ a: worldToScreen(a), b: worldToScreen(b) });
-  if (chart.layers.bearings) for (const bearing of chart.bearings) add(bearing, destinationPoint(bearing, bearing.bearing, BEARING_REACH_NM));
-  for (const search of chart.searches) add(search, destinationPoint(search, search.bearing, searchExtent(search).farNm));
-  for (const points of [chart.route, ...visibleSavedRoutes(chart).map((route) => route.points)]) {
+  if (chart.layers.searchLines) for (const search of shownItems(chart, "search")) add(search, destinationPoint(search, search.bearing, searchExtent(search).farNm));
+  for (const points of [shownItems(chart, "route"), ...shownItems(chart, "saved-route").map((route) => route.points)]) {
     for (const leg of summarizeRoute(points).legs) add(leg.from, leg.to);
   }
-  for (const segment of chart.segments) add(segment.a, segment.b);
+  for (const line of shownItems(chart, "line")) add(line, line.end);
   return lines;
 }
 

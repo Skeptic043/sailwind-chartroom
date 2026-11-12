@@ -24,7 +24,7 @@ function fakeHost({ seed, updates, platform }) {
       postMessage(message) {
         const data = JSON.parse(JSON.stringify(message));
         host.messages.push(data.type);
-        if (data.type === "ready") dispatch({ type: "init", workspace: host.workspace, dataFolder: "D:/Charts", version: "9.9.9", platform });
+        if (data.type === "ready") dispatch({ type: "init", workspace: host.workspace, dataFolder: "D:/Charts", version: "9.9.9", platform, liveTrack: true });
         if (data.type === "save") {
           sessionStorage.setItem(key, JSON.stringify(data.workspace));
           host.saves += 1;
@@ -32,6 +32,14 @@ function fakeHost({ seed, updates, platform }) {
         }
         if (data.type === "export-file") host.exports.push(data);
         if (data.type === "pin") dispatch({ type: "pinned", value: true });
+        // Following answers with the newest position, then one more as if the game had written it.
+        if (data.type === "follow-track") {
+          dispatch({ type: "track-following", name: "coords_0.txt", chartId: data.chartId, resumed: false });
+          dispatch({ type: "track-lines", text: "Day: 3\n40.1 0.5 9.5 90\n" });
+          setTimeout(() => dispatch({ type: "track-lines", text: "Day: 3\n40.2 0.6 10 92\n" }), 50);
+        }
+        if (data.type === "stop-track") dispatch({ type: "track-stopped" });
+        if (data.type === "copy-text") host.copied = data.text;
         if (data.type === "set-zoom") host.zooms.push(data.factor);
         if (data.type === "set-appearance") host.appearance = data.dark ? "dark" : "light";
         if (data.type === "open-settings") {

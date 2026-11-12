@@ -17,6 +17,10 @@ internal abstract record HostMessage
     public sealed record SetZoom(double Factor) : HostMessage;
     public sealed record SetAppearance(bool Dark) : HostMessage;
     public sealed record ExportFile(string Name, string Contents) : HostMessage;
+    /// <summary>Follow a Coordinate Viewer file into the chart with this id.</summary>
+    public sealed record FollowTrack(string ChartId) : HostMessage;
+    public sealed record StopTrack : HostMessage;
+    public sealed record CopyText(string Contents) : HostMessage;
 
     public static HostMessage? Parse(string json)
     {
@@ -36,6 +40,9 @@ internal abstract record HostMessage
                 "install-update" => new InstallUpdate(),
                 "cancel-update" => new CancelUpdate(),
                 "open-releases" => new OpenReleases(),
+                "follow-track" when Text(root, "chartId") is { Length: > 0 } chartId => new FollowTrack(chartId),
+                "stop-track" => new StopTrack(),
+                "copy-text" when Text(root, "text") is { Length: > 0 } text => new CopyText(text),
                 "open-settings" when root.TryGetProperty("settings", out var settings) && AppSettings.Parse(settings) is { } parsed
                     && root.TryGetProperty("defaults", out var defaults) && AppSettings.Parse(JsonSerializer.SerializeToElement(new { tools = defaults })) is { } fallback
                     => new OpenSettings(parsed, fallback.Tools),
