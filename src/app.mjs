@@ -1,15 +1,15 @@
 // Entry point: connects to the host, loads the workspace and wires the page's controls.
-import { archiveActiveRoute, savedRouteForPoint } from "./model.mjs";
+import { archiveActiveRoute, createLine, revealLayer, savedRouteForPoint } from "./model.mjs";
 import { connectHost } from "./host.mjs";
 import { clamp } from "./format.mjs";
 import { canvas, elements, showToast } from "./dom.mjs";
-import { activeChart, clearSelection, commit, initState, persist, redo, resetHistory, selectItem, selectedItem, selection, setSaveStatus, undo, workspace } from "./state.mjs";
+import { activeChart, clearSelection, commit, initState, persist, redo, replaceSelectionState, resetHistory, selectItem, selectedItem, selection, setSaveStatus, undo, workspace } from "./state.mjs";
 import { eventPoint, screenToWorld } from "./viewport.mjs";
 import { drawChart, fitData, resizeCanvas, setOverlay } from "./render.mjs";
 import { findHit } from "./hits.mjs";
 import { addLocation, deleteSelected, updateSavedRouteFromForm, updateSelectedFromForm } from "./edits.mjs";
-import { beginResolution, drawToolPreview, endPointer, mode, movePointer, pointerState, setMode, setSpacePressed, startPointer, stopEdgePan, zoomAt } from "./interaction.mjs";
-import { renderEverything, renderFeatureList, renderInspector, renderRouteSummary } from "./panels.mjs";
+import { beginResolution, drawToolPreview, endPointer, extendSavedRoute, mode, movePointer, pointerState, setMode, setSpacePressed, startPointer, stopEdgePan, zoomAt } from "./interaction.mjs";
+import { LAYER_CONTROLS, renderEverything, renderFeatureList, renderInspector, renderRouteSummary } from "./panels.mjs";
 import { applyLayout, endPanelResize, movePanelResize, resizePanelFromKeyboard, startPanelResize, togglePanel } from "./layout.mjs";
 import { deleteChart, openAbout, openBoatLibrary, openChartDialog, openIslandLibrary, renderBoatLibrary, renderIslandLibrary, saveChartDialog, selectedBoatOwner, selectedIslandOwner } from "./dialogs.mjs";
 import { exportActiveChart, exportLocationsCsv, exportWorkspace, importChartFile, importTrackFile, importTrackText } from "./files.mjs";
@@ -90,7 +90,7 @@ elements["route-speed"].addEventListener("change", (event) => {
 });
 
 // Layers
-for (const [elementId, key] of [["layer-grid", "grid"], ["layer-labels", "labels"], ["layer-track", "track"], ["layer-distances", "routeDistances"], ["layer-measure", "measure"], ["layer-winds", "winds"], ["layer-boats", "boats"], ["layer-islands", "islands"], ["layer-vanilla", "vanillaMap"], ["layer-secrets", "secretIslands"], ["layer-trade-winds", "tradeWinds"]]) {
+for (const [elementId, key] of LAYER_CONTROLS) {
   elements[elementId].addEventListener("change", (event) => commit((chart) => { chart.layers[key] = event.target.checked; }, { history: false }));
 }
 
@@ -103,7 +103,32 @@ for (const id of ["delete-feature", "delete-route-point", "delete-saved-route", 
   elements[id].addEventListener("click", deleteSelected);
 }
 elements["saved-route-form"].addEventListener("change", updateSavedRouteFromForm);
+elements["line-form"].addEventListener("submit", (event) => event.preventDefault());
+elements["line-colour"].addEventListener("change", (event) => {
+  const line = selection?.kind === "line" ? selectedItem() : null;
+  // A line moved to a hidden colour shows that colour again, so it does not vanish while selected.
+  if (line) commit((chart) => {
+    line.color = event.target.value;
+    revealLayer(chart, "line", line);
+  });
+});
+// Keeping the measure line turns it into a chart line, so the next measurement no longer replaces it.
+elements["keep-measure"].addEventListener("click", () => {
+  const measure = selection?.kind === "measure" ? selectedItem() : null;
+  if (!measure) return;
+  commit((chart) => {
+    const line = createLine(measure);
+    chart.measures = chart.measures.filter((item) => item !== measure);
+    chart.segments.push(line);
+    revealLayer(chart, "line", line);
+    replaceSelectionState("line", line.id);
+  });
+});
 elements["saved-route-form"].addEventListener("submit", (event) => event.preventDefault());
+elements["extend-saved-route"].addEventListener("click", () => {
+  const route = selection?.kind === "saved-route" ? selectedItem() : null;
+  if (route) extendSavedRoute(route);
+});
 elements["select-saved-route"].addEventListener("click", () => {
   const route = selection?.kind === "saved-point" ? savedRouteForPoint(activeChart(), selection.id) : null;
   if (route) selectItem("saved-route", route.id);

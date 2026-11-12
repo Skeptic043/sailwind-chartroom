@@ -1,5 +1,5 @@
 // Chart edits started from panels, dialogs and tools.
-import { createFeature, createSearch, createWind, destinationPoint, locationRangeForType, parseBearing, parseCoordinate, removeChartItems, searchExtent, translateChartItems } from "./model.mjs";
+import { createFeature, createSearch, createWind, destinationPoint, locationRangeForType, parseBearing, parseCoordinate, removeChartItems, revealLayer, searchExtent, translateChartItems } from "./model.mjs";
 import { clamp, positiveNumber } from "./format.mjs";
 import { elements, showToast } from "./dom.mjs";
 import { clearSelection, commit, refreshSelection, replaceSelectionState, selectedItem, selectedRefs, selection } from "./state.mjs";
@@ -9,6 +9,7 @@ export function addLocation(point, name = "New location", details = {}) {
   commit((chart) => {
     const feature = createFeature({ ...details, lat: point.lat, lon: point.lon, name });
     chart.features.push(feature);
+    revealLayer(chart, "feature", feature);
     replaceSelectionState("feature", feature.id);
   });
 }
@@ -22,6 +23,7 @@ export function addSearch(values, { fit = false } = {}) {
   const search = createSearch(values);
   commit((chart) => {
     chart.searches.push(search);
+    revealLayer(chart, "search", search);
     replaceSelectionState("search", search.id);
   });
   if (fit) {
@@ -35,6 +37,7 @@ export function addWind(values) {
   if (!wind) return;
   commit((chart) => {
     chart.winds.push(wind);
+    revealLayer(chart, "wind", wind);
     replaceSelectionState("wind", wind.id);
   });
 }
@@ -53,11 +56,15 @@ export function updateSelectedFromForm(kind) {
     const updates = {};
     if (kind === "route") Object.assign(updates, {
       name: elements["route-name"].value.trim(),
-      notes: elements["route-notes"].value.trim()
+      notes: elements["route-notes"].value.trim(),
+      day: elements["route-day"].value.trim(),
+      time: elements["route-time"].value.trim()
     });
     if (kind === "wind") Object.assign(updates, {
       label: elements["wind-label"].value.trim(),
-      bearing: parseBearing(elements["wind-direction"].value)
+      bearing: parseBearing(elements["wind-direction"].value),
+      day: elements["wind-day"].value.trim(),
+      time: elements["wind-time"].value.trim()
     });
     if (kind === "search") Object.assign(updates, {
       label: elements["search-label"].value.trim(),

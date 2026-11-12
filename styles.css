@@ -33,6 +33,9 @@
   --map-ink: #d8d2b8;
   --map-faded: rgba(216, 210, 184, .58);
   --map-route: #f07c58;
+  --map-line-red: #ef6b6b;
+  --map-line-blue: #6fa8ff;
+  --map-line-green: #7bd389;
   --map-track: #6cb9ba;
   --map-night: #8f9cf0;
   --map-bearing: #c99ae8;
@@ -92,6 +95,13 @@ button { cursor: pointer; }
 .menu-popover button:hover { background: var(--panel-3); }
 .menu-popover button kbd { margin-left: auto; color: var(--faint); border: 0; background: transparent; }
 .menu-popover hr { width: 100%; margin: 4px 0; border: 0; border-top: 1px solid var(--line); }
+/* A submenu opens in place beneath its name. */
+.menu-sub > summary { display: flex; justify-content: space-between; align-items: center; padding: 8px 9px; border-radius: 6px; font-size: 12.5px; cursor: pointer; list-style: none; }
+.menu-sub > summary::-webkit-details-marker { display: none; }
+.menu-sub > summary::after { content: "›"; color: var(--faint); transition: transform .15s; }
+.menu-sub[open] > summary::after { transform: rotate(90deg); }
+.menu-sub > summary:hover { background: var(--panel-3); }
+.menu-sub-items { display: grid; gap: 3px; padding-left: 12px; }
 .menu-field { display: grid; gap: 5px; padding: 5px 7px 8px; color: var(--muted); font-size: 12px; font-weight: 700; }
 .menu-field select { width: 100%; min-width: 0; background: var(--panel-2); font-size: 12.5px; }
 .menu-check { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; color: var(--muted); font-size: 12.5px; cursor: pointer; }
@@ -212,7 +222,7 @@ body.resizing-panels { cursor: col-resize; user-select: none; }
 .route-actions[hidden] { display: none !important; }
 #route-summary-title { max-width: 10em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .route-actions button:first-child { border-color: color-mix(in srgb, var(--accent) 45%, var(--line-strong)); color: var(--accent-strong); }
-.toast { position: absolute; z-index: 12; left: 50%; bottom: 22px; transform: translate(-50%, 15px); opacity: 0; pointer-events: none; background: var(--toast-bg); color: var(--toast-ink); border: 1px solid var(--toast-line); border-radius: 999px; padding: 9px 14px; box-shadow: var(--shadow); transition: .2s ease; font-size: 13px; }
+.toast { position: absolute; z-index: 12; left: 50%; bottom: 22px; transform: translate(-50%, 15px); opacity: 0; pointer-events: none; background: var(--toast-bg); color: var(--toast-ink); border: 1px solid var(--toast-line); border-radius: 18px; padding: 9px 14px; box-shadow: var(--shadow); transition: .2s ease; font-size: 13px; width: max-content; max-width: min(520px, 90%); text-align: center; line-height: 1.4; }
 .toast.visible { opacity: 1; transform: translate(-50%, 0); }
 .toast.error { border-color: var(--danger); }
 
@@ -356,7 +366,7 @@ body.update-bar-shown .route-summary { margin-top: 42px; }
   --toast-bg: #1f3036; --toast-ink: #f3f6f4; --toast-line: rgba(255, 255, 255, .2);
   --route: #c4502c; --search: #7a46a8; --bearing: #5b48b0; --wind: #23807a; --boat: #11798a; --boat-strong: #0b5c69; --backdrop: rgba(20, 35, 40, .35);
   --map-paper-a: #f2f6f4; --map-paper-b: #dfe8e5; --map-grid: rgba(31, 58, 64, .22); --map-fine: rgba(31, 58, 64, .08);
-  --map-ink: #1f3036; --map-faded: rgba(31, 48, 54, .55); --map-route: #c4502c; --map-track: #23807a; --map-night: #4a55b8;
+  --map-ink: #1f3036; --map-faded: rgba(31, 48, 54, .55); --map-route: #c4502c; --map-line-red: #c62f2f; --map-line-blue: #2a5fbf; --map-line-green: #2f8a43; --map-track: #23807a; --map-night: #4a55b8;
   --map-bearing: #7a46a8; --map-search-rgb: 122, 70, 168; --map-accent: #9a6410; --map-select: #c2410c; --map-area-fill: rgba(154, 100, 16, .10);
   --map-boat: #11798a; --map-boat-fill: rgba(17, 121, 138, .22); --map-boat-sail: rgba(17, 121, 138, .10);
   --map-boat-selected: #0b5c69; --map-boat-selected-fill: rgba(17, 121, 138, .40); --map-boat-selected-sail: rgba(17, 121, 138, .18);
@@ -394,7 +404,7 @@ body.update-bar-shown .route-summary { margin-top: 42px; }
   --toast-bg: #3a2a18; --toast-ink: #f3e6c6; --toast-line: rgba(255, 240, 210, .2);
   --route: #9e3222; --search: #6e3f86; --bearing: #5a3d8a; --wind: #2e6b66; --boat: #1f5a7a; --boat-strong: #173f57; --backdrop: rgba(50, 35, 15, .35);
   --map-paper-a: #efe2c2; --map-paper-b: #d9c49a; --map-grid: rgba(90, 62, 28, .28); --map-fine: rgba(90, 62, 28, .10);
-  --map-ink: #3a2a18; --map-faded: rgba(58, 42, 24, .55); --map-route: #9e3222; --map-track: #2e6b66; --map-night: #3d4a8f;
+  --map-ink: #3a2a18; --map-faded: rgba(58, 42, 24, .55); --map-route: #9e3222; --map-line-red: #a32b20; --map-line-blue: #2f4f8f; --map-line-green: #3f7330; --map-track: #2e6b66; --map-night: #3d4a8f;
   --map-bearing: #6e3f86; --map-search-rgb: 110, 63, 134; --map-accent: #8a4f12; --map-select: #b23a12; --map-area-fill: rgba(138, 79, 18, .10);
   --map-boat: #1f5a7a; --map-boat-fill: rgba(31, 90, 122, .22); --map-boat-sail: rgba(31, 90, 122, .10);
   --map-boat-selected: #12384d; --map-boat-selected-fill: rgba(31, 90, 122, .40); --map-boat-selected-sail: rgba(31, 90, 122, .18);
@@ -410,7 +420,7 @@ body.update-bar-shown .route-summary { margin-top: 42px; }
   --on-accent: #2a1a08; --ok: #8fbf6a; --chart-bg: #241c12; --toast-bg: #15100a; --toast-ink: #f3e6c6;
   --route: #e3825e; --search: #c9a2de; --bearing: #b8a4ef; --wind: #8cc7bd; --boat: #7fd0d8; --boat-strong: #a6e3e8; --backdrop: rgba(10, 6, 2, .7);
   --map-paper-a: #33281b; --map-paper-b: #211a11; --map-grid: rgba(234, 219, 184, .18); --map-fine: rgba(234, 219, 184, .07);
-  --map-ink: #eadbb8; --map-faded: rgba(234, 219, 184, .55); --map-route: #e3825e; --map-track: #8cc7bd; --map-night: #a3aef2;
+  --map-ink: #eadbb8; --map-faded: rgba(234, 219, 184, .55); --map-route: #e3825e; --map-line-red: #e47a6a; --map-line-blue: #8fb0ea; --map-line-green: #9ccc8a; --map-track: #8cc7bd; --map-night: #a3aef2;
   --map-bearing: #c9a2de; --map-search-rgb: 201, 162, 222; --map-accent: #e0b062; --map-select: #fff0c4; --map-area-fill: rgba(224, 176, 98, .08);
   --map-boat: #7fd0d8; --map-boat-fill: rgba(70, 160, 170, .32); --map-boat-sail: rgba(127, 208, 216, .13);
   --map-boat-selected: #c4f2f5; --map-boat-selected-fill: rgba(127, 208, 216, .48); --map-boat-selected-sail: rgba(196, 242, 245, .2);

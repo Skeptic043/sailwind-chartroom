@@ -21,7 +21,7 @@
           <hr>
           <button id="import-track" type="button">Import Coordinate Viewer file</button>
           <button id="paste-track" type="button">Paste Coordinate Viewer positions</button>
-          <button id="import-json" type="button">Import chart or legacy map</button>
+          <button id="import-json" type="button">Import chart, map or Scrambled Seas world</button>
           <button id="export-json" type="button">Export this chart</button>
           <button id="export-csv" type="button">Export locations as CSV</button>
           <button id="export-all" type="button">Back up all charts</button>
@@ -43,22 +43,32 @@
       <details class="app-menu" data-menu="view">
         <summary role="menuitem" aria-haspopup="true" aria-expanded="false">View</summary>
         <div class="menu-popover" role="menu">
+          <label class="menu-check"><input id="layer-locations" type="checkbox" checked><span>Locations</span></label>
+          <label class="menu-check menu-check-sub"><input id="layer-location-islands" type="checkbox" checked><span>Islands</span></label>
+          <label class="menu-check"><input id="layer-routes" type="checkbox" checked><span>Routes</span></label>
+          <label class="menu-check menu-check-sub"><input id="layer-distances" type="checkbox" checked><span>Route distances</span></label>
+          <label class="menu-check menu-check-sub"><input id="layer-saved-routes" type="checkbox" checked><span>Saved routes</span></label>
+          <label class="menu-check"><input id="layer-measure" type="checkbox" checked><span>Measure line</span></label>
+          <label class="menu-check menu-check-sub"><input id="layer-red-lines" type="checkbox" checked><span>Red lines</span></label>
+          <label class="menu-check menu-check-sub"><input id="layer-blue-lines" type="checkbox" checked><span>Blue lines</span></label>
+          <label class="menu-check menu-check-sub"><input id="layer-green-lines" type="checkbox" checked><span>Green lines</span></label>
+          <label class="menu-check"><input id="layer-areas" type="checkbox" checked><span>Rough areas</span></label>
+          <label class="menu-check menu-check-sub"><input id="layer-area-islands" type="checkbox" checked><span>Islands</span></label>
+          <label class="menu-check"><input id="layer-searches" type="checkbox" checked><span>Search areas</span></label>
+          <label class="menu-check menu-check-sub"><input id="layer-search-lines" type="checkbox" checked><span>Search lines</span></label>
+          <label class="menu-check menu-check-sub"><input id="layer-search-islands" type="checkbox" checked><span>Islands</span></label>
+          <label class="menu-check"><input id="layer-winds" type="checkbox" checked><span>Wind indicators</span></label>
+          <hr>
           <label class="menu-check"><input id="layer-grid" type="checkbox" checked><span>Coordinate grid</span></label>
           <label class="menu-check"><input id="layer-labels" type="checkbox" checked><span>Chart labels</span></label>
-          <label class="menu-check"><input id="layer-track" type="checkbox" checked><span>Imported track</span></label>
-          <label class="menu-check"><input id="layer-distances" type="checkbox" checked><span>Route distances</span></label>
-          <label class="menu-check"><input id="layer-measure" type="checkbox" checked><span>Measure line</span></label>
-          <label class="menu-check"><input id="layer-winds" type="checkbox" checked><span>Wind indicators</span></label>
           <label class="menu-check"><input id="layer-boats" type="checkbox" checked><span>Boat markers</span></label>
           <label class="menu-check"><input id="layer-islands" type="checkbox" checked><span>Island outlines</span></label>
+          <label class="menu-check"><input id="layer-track" type="checkbox" checked><span>Imported track</span></label>
           <hr>
-          <label class="menu-check"><input id="layer-vanilla" type="checkbox"><span>Vanilla map</span></label>
+          <label class="menu-check"><input id="layer-vanilla" type="checkbox"><span id="layer-vanilla-name">Vanilla map</span></label>
           <label class="menu-check menu-check-sub"><input id="layer-secrets" type="checkbox"><span>Secret islands</span></label>
-          <label class="menu-check menu-check-sub"><input id="layer-trade-winds" type="checkbox"><span>Trade winds</span></label>
-          <hr>
-          <button id="zoom-in" type="button" hidden>Bigger text <kbd>Ctrl +</kbd></button>
-          <button id="zoom-out" type="button" hidden>Smaller text <kbd>Ctrl −</kbd></button>
-          <button id="zoom-reset" type="button" hidden>Match Windows text size <kbd>Ctrl 0</kbd></button>
+          <label class="menu-check"><input id="layer-trade-winds" type="checkbox"><span>Trade winds</span></label>
+          <label class="menu-check menu-check-sub"><input id="layer-expanded-winds" type="checkbox"><span>Border Expander winds</span></label>
           <hr>
           <button id="fit-chart" type="button">Fit chart data</button>
           <button id="toggle-left-panel" type="button" aria-pressed="false">Hide chart tools</button>
@@ -68,8 +78,16 @@
       </details>
       <details class="app-menu" data-menu="help">
         <summary role="menuitem" aria-haspopup="true" aria-expanded="false">Help</summary>
-        <div class="menu-popover menu-compact" role="menu">
+        <div class="menu-popover" role="menu">
           <button id="help" type="button">Help and shortcuts</button>
+          <details id="text-menu" class="menu-sub" hidden>
+            <summary>Text</summary>
+            <div class="menu-sub-items">
+              <button id="zoom-in" type="button">Bigger text <kbd>Ctrl +</kbd></button>
+              <button id="zoom-out" type="button">Smaller text <kbd>Ctrl −</kbd></button>
+              <button id="zoom-reset" type="button">Match Windows text size <kbd>Ctrl 0</kbd></button>
+            </div>
+          </details>
           <button id="check-updates" type="button" hidden>Check for updates</button>
           <button id="release-notes" type="button" hidden>Release notes</button>
           <button id="about" type="button">About Chartroom</button>
@@ -185,6 +203,10 @@
             <label>Latitude <input id="route-lat" inputmode="decimal"></label>
             <label>Longitude <input id="route-lon" inputmode="decimal"></label>
           </div>
+          <div class="two-columns">
+            <label>Day <input id="route-day" maxlength="30" placeholder="Optional"></label>
+            <label>Time <input id="route-time" maxlength="30" placeholder="Optional"></label>
+          </div>
           <label>Notes <textarea id="route-notes" rows="3" maxlength="1000" placeholder="Landmarks, timing, hazards…"></textarea></label>
           <div id="route-leg-detail" class="leg-detail"></div>
           <button id="select-saved-route" type="button" hidden>Select the whole route</button>
@@ -200,17 +222,22 @@
           <label>Name <input id="saved-route-name" maxlength="100"></label>
           <label class="switch-row"><span>Show on chart</span><input id="saved-route-visible" type="checkbox"></label>
           <div id="saved-route-detail" class="leg-detail"></div>
-          <p class="fineprint">Drag the route to move it, or click one of its waypoints to edit that point.</p>
+          <button id="extend-saved-route" type="button">Add waypoints</button>
+          <p class="fineprint">Drag the route to move it, or click one of its waypoints to edit that point. Add waypoints continues the route from its last one.</p>
         </form>
       </section>
 
       <section id="measure-inspector" class="panel-section inspector" hidden>
         <div class="section-heading">
-          <div><div class="eyebrow">Measure line</div><h2>Measured distance</h2></div>
-          <button id="delete-measure" class="danger icon-button" type="button" title="Delete measure line" aria-label="Delete measure line">×</button>
+          <div><div id="measure-kind" class="eyebrow">Measure line</div><h2>Measured distance</h2></div>
+          <button id="delete-measure" class="danger icon-button" type="button" title="Delete line" aria-label="Delete line">×</button>
         </div>
         <div id="measure-detail" class="leg-detail"></div>
-        <p class="fineprint">Drag either end to adjust the line. Measuring again replaces it.</p>
+        <form id="line-form" class="stack-form">
+          <label id="line-colour-row">Colour <select id="line-colour"><option value="red">Red</option><option value="blue">Blue</option><option value="green">Green</option></select></label>
+          <button id="keep-measure" type="button">Keep as a chart line</button>
+        </form>
+        <p id="measure-note" class="fineprint"></p>
       </section>
 
       <section id="search-inspector" class="panel-section inspector" hidden>
@@ -257,13 +284,17 @@
             <label>Longitude <input id="wind-lon" inputmode="decimal"></label>
           </div>
           <label>Wind flows toward <input id="wind-direction" inputmode="decimal" placeholder="E or 090"></label>
+          <div class="two-columns">
+            <label>Day <input id="wind-day" maxlength="30" placeholder="Optional"></label>
+            <label>Time <input id="wind-time" maxlength="30" placeholder="Optional"></label>
+          </div>
         </form>
         <p class="fineprint">The arrow points in the direction the wind is blowing toward.</p>
       </section>
 
       <section class="panel-section locations-section">
         <div class="section-heading"><h2>Chart items</h2><span id="feature-count" class="count">0</span></div>
-        <div class="list-actions"><select id="item-filter" aria-label="Filter chart items"><option value="all">All chart items</option><option value="feature">Locations</option><option value="route">Waypoints</option><option value="saved-route">Saved routes</option><option value="search">Search areas</option><option value="measure">Measure line</option><option value="wind">Wind</option></select></div>
+        <div class="list-actions"><select id="item-filter" aria-label="Filter chart items"><option value="all">All chart items</option><option value="feature">Locations</option><option value="route">Waypoints</option><option value="saved-route">Saved routes</option><option value="search">Search areas</option><option value="measure">Measure line</option><option value="line">Kept lines</option><option value="wind">Wind</option></select></div>
         <input id="feature-search" class="search" type="search" placeholder="Search chart items" aria-label="Search chart items">
         <div id="feature-list" class="feature-list"></div>
       </section>
@@ -271,7 +302,7 @@
   </main>
 
   <input id="track-file" type="file" accept=".txt,text/plain" hidden>
-  <input id="json-file" type="file" accept=".json,application/json" hidden>
+  <input id="json-file" type="file" accept=".json,application/json,.xml,text/xml" hidden>
 
   <dialog id="chart-dialog">
     <form id="chart-form" method="dialog" class="dialog-card">
@@ -309,7 +340,7 @@
         <div><kbd data-shortcut="select">V</kbd><span>Select marks and pan the chart</span></div>
         <div><kbd data-shortcut="location">L</kbd><span>Add a location</span></div>
         <div><kbd data-shortcut="route">R</kbd><span>Plot route waypoints</span></div>
-        <div><kbd data-shortcut="measure">M</kbd><span>Measure: drag between two points, or click each end, for the distance, bearing and passage time. The line stays until you delete it or measure again.</span></div>
+        <div><kbd data-shortcut="measure">M</kbd><span>Measure: drag between two points, or click each end, for the distance, bearing and passage time. The line stays until you delete it or measure again. Keep as a chart line leaves it on the chart in red, blue or green.</span></div>
         <div><kbd data-shortcut="area">A</kbd><span>Rough area: press where it is centred and drag out the radius. Drag the edge of a selected area to resize it.</span></div>
         <div><kbd data-shortcut="search">S</kbd><span>Search area: press on the port or position that gave the direction, drag toward it and let go at the distance. The direction snaps to compass points.</span></div>
         <div><kbd>Space</kbd><span>Hold while dragging to pan from any tool</span></div>
@@ -323,9 +354,10 @@
         <div><kbd>F</kbd><span>Fit locations, route and track in view</span></div>
       </div>
       <p class="help-note"><strong>Finding an island:</strong> when someone gives you a direction and distance, draw a search area from where you heard it. Areas with the same name brighten only where they all overlap. Once you find the island, choose Resolve to location and click where it is.</p>
-      <p class="help-note"><strong>Routes:</strong> Save route keeps a finished route on the chart and starts a new one. Saved routes are listed under Chart items. Click a saved route's line to select or drag the whole route, or click one of its waypoints to edit that point.</p>
+      <p class="help-note"><strong>Routes:</strong> Save route keeps a finished route on the chart and starts a new one. Saved routes are listed under Chart items. Click a saved route's line to select or drag the whole route, or click one of its waypoints to edit that point. Add waypoints continues a saved route from its last waypoint.</p>
       <p class="help-note"><strong>Distance model:</strong> the original Sailwind map uses a flat chart and approximately 140 nautical miles per degree. Chartroom preserves that convention; it does not treat the game world as a globe.</p>
       <p class="help-note"><strong>Long plots:</strong> while a measurement, search or area is active, hold the pointer against the chart edge briefly to pan in that direction.</p>
+      <p class="help-note"><strong>Scrambled Seas:</strong> turn on ExternalSave in Scrambled Seas' settings and save your game, then use File, Import to open the scramble_&lt;slot&gt;.xml file in its plugin folder. Chartroom makes a new chart with the Scrambled Seas map in View, showing where that world's islands are.</p>
       <p class="help-note"><strong>Your charts:</strong> Chartroom saves automatically and keeps a copy from your previous launch. Use File, Back up all charts to keep your own copy, or to move your charts to another computer.</p>
       <p class="help-note"><strong>Layout:</strong> use the two panel buttons at the top to hide either sidebar. Drag a sidebar's inner edge to resize it.</p>
       <div class="dialog-actions"><button class="primary" type="button" data-close>Back to chart</button></div>

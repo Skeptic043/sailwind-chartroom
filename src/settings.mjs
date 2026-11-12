@@ -28,7 +28,7 @@ function applyAppearance() {
 export function initSettings() {
   applyInterfaceSize();
   if (!host.desktop) return;
-  for (const id of ["open-settings", "zoom-in", "zoom-out", "zoom-reset"]) elements[id].hidden = false;
+  for (const id of ["open-settings", "text-menu"]) elements[id].hidden = false;
   elements["open-settings"].addEventListener("click", openSettings);
   elements["zoom-in"].addEventListener("click", () => stepInterfaceSize(1));
   elements["zoom-out"].addEventListener("click", () => stepInterfaceSize(-1));

@@ -149,12 +149,13 @@ test("the island library applies an outline to the selected location", async ({ 
   expect((await chartroom.chart()).features[0].islandId).toBeTruthy();
 });
 
-test("the vanilla map draws under the chart, and its secrets and trade winds wait for it", async ({ chartroom, page }) => {
+test("the vanilla map draws under the chart with its secrets, and trade winds stand alone", async ({ chartroom, page }) => {
   await chartroom.open();
   const picture = () => page.locator("canvas").first().evaluate((canvas) => canvas.toDataURL());
   const toggle = (id) => page.locator(id).evaluate((input) => input.click());
   await expect(page.locator("#layer-secrets")).toBeDisabled();
-  await expect(page.locator("#layer-trade-winds")).toBeDisabled();
+  await expect(page.locator("#layer-trade-winds")).toBeEnabled();
+  await expect(page.locator("#layer-expanded-winds")).toBeDisabled();
   const empty = await picture();
   await toggle("#layer-vanilla");
   await expect(page.locator("#layer-secrets")).toBeEnabled();
@@ -166,6 +167,8 @@ test("the vanilla map draws under the chart, and its secrets and trade winds wai
   await toggle("#layer-secrets");
   expect((await chartroom.chart()).layers).toMatchObject({ vanillaMap: true, secretIslands: true, tradeWinds: true });
   await toggle("#layer-vanilla");
+  expect(await picture(), "trade winds stay without the vanilla map").not.toBe(empty);
+  await toggle("#layer-trade-winds");
   expect(await picture()).toBe(empty);
   expect((await chartroom.chart()).features).toHaveLength(0);
 });
@@ -178,7 +181,7 @@ test("exports the active chart as JSON", async ({ chartroom, page }) => {
   const [file] = await page.evaluate(() => window.__host.exports);
   expect(file.name).toMatch(/\.json$/);
   const exported = JSON.parse(file.contents);
-  expect(exported).toMatchObject({ format: "sailwind-chartroom", version: 1 });
+  expect(exported).toMatchObject({ format: "sailwind-chartroom", version: expect.any(Number) });
   expect(exported.charts[0].features).toHaveLength(1);
 });
 
@@ -232,7 +235,7 @@ test("saved waypoints can be edited on the chart and the whole route dragged", a
 
 test("About shows the version and the full license notices bundled with the app", async ({ chartroom, page }) => {
   await chartroom.open();
-  await page.locator('.app-menu[data-menu="help"] summary').click();
+  await page.locator('.app-menu[data-menu="help"] > summary').click();
   await page.locator("#about").click();
   await expect(page.locator("#about-version")).toHaveText("9.9.9");
   await expect(page.locator("#about-license")).toContainText("MIT License");
@@ -333,10 +336,10 @@ test("Update now shows every missed version's notes and reports install progress
 
 test("Help shows up to date and release notes; the startup check can be turned off", async ({ chartroom, page }) => {
   await chartroom.open(null, { updates: { all: newerReleases.all } });
-  await page.locator('.app-menu[data-menu="help"] summary').click();
+  await page.locator('.app-menu[data-menu="help"] > summary').click();
   await page.locator("#check-updates").click();
   await expect(page.locator("#toast")).toContainText("Chartroom is up to date (9.9.9).");
-  await page.locator('.app-menu[data-menu="help"] summary').click();
+  await page.locator('.app-menu[data-menu="help"] > summary').click();
   await page.locator("#release-notes").click();
   await expect(page.locator("#update-notes h3")).toHaveText(["10.1", "10.0.1"]);
   await expect(page.locator("#update-notes p")).toHaveText(["No notes for this version."]);
@@ -473,4 +476,72 @@ test("route speed arrows step in half knots and keep 0.1 kn as the lowest speed"
   await speed.fill("4.2");
   await speed.press("Tab");
   expect((await chartroom.chart()).speedKn).toBe(4.2);
+});
+
+test("View hides each tool's items, and its parts wait for them", async ({ chartroom, page }) => {
+  await chartroom.open();
+  const toggle = (id) => page.locator(id).evaluate((input) => input.click());
+  await chartroom.press("s");
+  await chartroom.dragChart({ x: 500, y: 450 }, { x: 500, y: 250 });
+  await chartroom.press("Escape");
+  await toggle("#layer-searches");
+  await expect(page.locator("#layer-search-lines")).toBeDisabled();
+  await expect(page.locator("#layer-search-islands")).toBeDisabled();
+  await chartroom.clickChart(500, 450);
+  await expect(page.locator("#search-inspector")).toBeHidden();
+  await toggle("#layer-searches");
+  await toggle("#layer-search-lines");
+  expect((await chartroom.chart()).layers).toMatchObject({ searches: true, searchLines: false });
+  await chartroom.press("l");
+  await toggle("#layer-locations");
+  await chartroom.clickChart(700, 400);
+  expect((await chartroom.chart()).layers.locations, "adding a location shows locations again").toBe(true);
+  await page.locator('.app-menu[data-menu="view"] summary').click();
+  await page.locator("#layer-grid").click();
+  await expect(page.locator('.app-menu[data-menu="view"]'), "checkboxes leave the menu open").toHaveAttribute("open", "");
+});
+
+test("a measure line can be kept as a coloured chart line", async ({ chartroom, page }) => {
+  await chartroom.open();
+  await chartroom.press("m");
+  await chartroom.dragChart({ x: 400, y: 400 }, { x: 600, y: 400 });
+  await page.locator("#keep-measure").click();
+  await expect(page.locator("#line-colour-row")).toBeVisible();
+  await page.locator("#line-colour").selectOption("green");
+  await chartroom.press("m");
+  await chartroom.dragChart({ x: 400, y: 300 }, { x: 600, y: 300 });
+  const chart = await chartroom.chart();
+  expect(chart.measures).toHaveLength(1);
+  expect(chart.segments).toHaveLength(1);
+  expect(chart.segments[0].color).toBe("green");
+});
+
+test("a saved route takes new waypoints from its last one", async ({ chartroom, page }) => {
+  await chartroom.open();
+  await chartroom.press("r");
+  await chartroom.clickChart(400, 300);
+  await chartroom.clickChart(500, 300);
+  await page.locator("#save-route").click();
+  await chartroom.press("v");
+  await chartroom.clickChart(450, 300);
+  await expect(page.locator("#saved-route-inspector")).toBeVisible();
+  await page.locator("#extend-saved-route").click();
+  await chartroom.clickChart(600, 400);
+  await chartroom.clickChart(700, 400);
+  const chart = await chartroom.chart();
+  expect(chart.route).toEqual([]);
+  expect(chart.savedRoutes[0].points).toHaveLength(4);
+});
+
+test("imports a Scrambled Seas save as a chart of its moved islands", async ({ chartroom, page }) => {
+  await chartroom.open();
+  const vectors = Array.from({ length: 43 }, () => "<Vector3><x>90000</x><y>0</y><z>0</z></Vector3>").join("");
+  const xml = `<?xml version="1.0" encoding="utf-8"?><ScrambledSeasSaveContainer><worldScramblerSeed>7</worldScramblerSeed><borderExpander>0</borderExpander><islandOffsets>${vectors}</islandOffsets></ScrambledSeasSaveContainer>`;
+  await page.locator("#json-file").setInputFiles({ name: "scramble_0.xml", mimeType: "text/xml", buffer: Buffer.from(xml) });
+  await expect(page.locator("#layer-vanilla-name")).toHaveText("Scrambled Seas map");
+  const chart = await chartroom.chart();
+  expect(chart.name).toContain("Scrambled Seas 7");
+  expect(chart.scramble.islands["alankh/gold_rock_city"].lon).toBeCloseTo(-4.867 + 10, 2);
+  await page.locator("#json-file").setInputFiles({ name: "preset.xml", mimeType: "text/xml", buffer: Buffer.from("<ScrambledSeasSaveContainer><islandOffsets /></ScrambledSeasSaveContainer>") });
+  await expect(page.locator("#toast")).toContainText("no island positions yet");
 });

@@ -1,5 +1,5 @@
 // Converts between chart coordinates and canvas pixels for the active chart's view.
-import { WORLD_BOUNDS } from "./model.mjs";
+import { WORLD_BOUNDS, islandsShown } from "./model.mjs";
 import { searchIsland, visibleIsland } from "./islands.mjs";
 import { boatMarkerSize, visibleBoat } from "./boats.mjs";
 import { clamp } from "./format.mjs";
@@ -38,13 +38,13 @@ export function islandPixelSpan(island) {
   return Math.max(island.bounds.maxLon - island.bounds.minLon, island.bounds.maxLat - island.bounds.minLat) * activeChart().view.zoom;
 }
 
-// The island outline a location or search area draws, unless View hides island outlines.
+// The island outline a location, rough area or search area draws, unless View hides its islands.
 export function chartIsland(feature) {
-  return activeChart().layers.islands ? visibleIsland(feature) : null;
+  return islandsShown(activeChart(), "feature", feature) ? visibleIsland(feature) : null;
 }
 
 export function chartSearchIsland(search) {
-  return activeChart().layers.islands ? searchIsland(search) : null;
+  return islandsShown(activeChart(), "search", search) ? searchIsland(search) : null;
 }
 
 export function boatIconBounds(feature) {

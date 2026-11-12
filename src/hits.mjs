@@ -1,5 +1,5 @@
 // Finds what is under the pointer and where drawing clicks snap to.
-import { NM_PER_DEGREE, destinationPoint, insideSearch, searchExtent, searchIconAnchors, summarizeRoute, visibleSavedRoutes } from "./model.mjs";
+import { NM_PER_DEGREE, destinationPoint, insideSearch, searchExtent, searchIconAnchors, itemShown, shownItems, summarizeRoute } from "./model.mjs";
 import { islandContains } from "./islands.mjs";
 import { visibleBoat } from "./boats.mjs";
 import { clamp } from "./format.mjs";
@@ -28,7 +28,8 @@ function findHits(x, y) {
     const screen = worldToScreen(point);
     candidates.push({ kind, id, passive, distance: distanceOverride ?? Math.hypot(screen.x - x, screen.y - y) });
   };
-  for (const feature of chart.features) {
+  // Only what the chart shows can be clicked; hidden items are still listed under Chart items.
+  for (const feature of shownItems(chart, "feature")) {
     const island = chartIsland(feature);
     const inside = island && islandPixelSpan(island) >= 14 && islandContains(island, feature, world);
     const boatBounds = chart.layers.boats && visibleBoat(feature) ? boatIconBounds(feature) : null;
@@ -36,8 +37,8 @@ function findHits(x, y) {
       && y >= boatBounds.y - boatBounds.height / 2 && y <= boatBounds.y + boatBounds.height / 2;
     consider("feature", feature.id, feature, inside || insideBoat ? 0 : null);
   }
-  for (const point of chart.route) consider("route", point.id, point);
-  for (const route of visibleSavedRoutes(chart)) {
+  for (const point of shownItems(chart, "route")) consider("route", point.id, point);
+  for (const route of shownItems(chart, "saved-route")) {
     for (const point of route.points) consider("saved-point", point.id, point);
     // Clicking a saved route's line picks the whole route; its waypoints win when they are as close.
     for (const leg of summarizeRoute(route.points).legs) {
@@ -47,8 +48,9 @@ function findHits(x, y) {
       if (distance <= SAVED_ROUTE_LINE_PX) consider("saved-route", route.id, leg.from, distance + 3);
     }
   }
-  const iconAnchors = searchIconAnchors(chart.searches);
-  for (const search of chart.searches) {
+  const searches = shownItems(chart, "search");
+  const iconAnchors = searchIconAnchors(searches);
+  for (const search of searches) {
     let insideBoat = false;
     if (chart.layers.boats && visibleBoat(search)) {
       const island = iconAnchors.has(search.id) ? null : chartSearchIsland(search);
@@ -60,11 +62,11 @@ function findHits(x, y) {
     }
     const searchOrigin = worldToScreen(search);
     const originDistance = Math.hypot(searchOrigin.x - x, searchOrigin.y - y);
-    if (insideBoat || originDistance <= 13) consider("search", search.id, search, insideBoat ? 0 : originDistance);
+    if (insideBoat || (chart.layers.searchLines && originDistance <= 13)) consider("search", search.id, search, insideBoat ? 0 : originDistance);
     else if (insideSearch(search, world)) consider("search", search.id, search, 12, true);
   }
   // A wind arrow is clickable along its whole drawn length.
-  if (chart.layers.winds) for (const wind of chart.winds) {
+  for (const wind of shownItems(chart, "wind")) {
     const start = worldToScreen(wind);
     const radians = wind.bearing * Math.PI / 180;
     const length = symbolSize("wind");
@@ -72,11 +74,11 @@ function findHits(x, y) {
     const near = closestOnSegment({ a: start, b: end }, { x, y });
     consider("wind", wind.id, wind, Math.hypot(near.x - x, near.y - y));
   }
-  // The measure line is clickable along its length; marks at its ends win when they are as close.
-  if (chart.layers.measure) for (const measure of chart.measures) {
-    const near = closestOnSegment({ a: worldToScreen(measure), b: worldToScreen(measure.end) }, { x, y });
+  // The measure line and kept lines are clickable along their length; marks at their ends win when they are as close.
+  for (const kind of ["measure", "line"]) for (const line of shownItems(chart, kind)) {
+    const near = closestOnSegment({ a: worldToScreen(line), b: worldToScreen(line.end) }, { x, y });
     const distance = Math.hypot(near.x - x, near.y - y);
-    if (distance <= MEASURE_LINE_PX) consider("measure", measure.id, measure, distance + 3);
+    if (distance <= MEASURE_LINE_PX) consider(kind, line.id, line, distance + 3);
   }
   candidates.sort((a, b) => a.distance - b.distance);
   return candidates.filter((candidate) => candidate.distance <= 13);
@@ -98,9 +100,10 @@ export function findHit(x, y, { cycle = false } = {}) {
   return hits[index];
 }
 
-// Which end of the selected measure line is under the pointer, so it can be dragged on its own.
-export function selectedMeasureEnd(screen) {
-  const item = selection?.kind === "measure" && activeChart().layers.measure ? selectedItem() : null;
+// Which end of the selected measure line or kept line is under the pointer, so it can be dragged on its own.
+export function selectedLineEnd(screen) {
+  const kind = selection?.kind;
+  const item = (kind === "measure" || kind === "line") && itemShown(activeChart(), kind, selectedItem() ?? {}) ? selectedItem() : null;
   if (!item) return null;
   const distanceTo = (point) => {
     const projected = worldToScreen(point);
@@ -113,7 +116,7 @@ export function selectedMeasureEnd(screen) {
 
 export function onSelectedAreaEdge(screen) {
   const item = selection?.kind === "feature" ? selectedItem() : null;
-  if (!item?.rangeNm) return false;
+  if (!item?.rangeNm || !itemShown(activeChart(), "feature", item)) return false;
   const center = worldToScreen(item);
   const radius = item.rangeNm / NM_PER_DEGREE * activeChart().view.zoom;
   return Math.abs(Math.hypot(screen.x - center.x, screen.y - center.y) - radius) <= 6;
@@ -147,31 +150,31 @@ function anchorOf(point) {
   const chart = activeChart();
   if (chart.features.includes(point)) return { kind: "feature", id: point.id };
   if (chart.route.includes(point)) return { kind: "route", id: point.id };
-  if (visibleSavedRoutes(chart).some((route) => route.points.includes(point))) return { kind: "saved-point", id: point.id };
+  if (shownItems(chart, "saved-point").includes(point)) return { kind: "saved-point", id: point.id };
   return null;
 }
 
 function magnetPoints() {
   const chart = activeChart();
   return [
-    ...chart.features,
-    ...chart.route,
-    ...visibleSavedRoutes(chart).flatMap((route) => route.points),
+    ...shownItems(chart, "feature"),
+    ...shownItems(chart, "route"),
+    ...shownItems(chart, "saved-point"),
     ...(chart.layers.track ? chart.track : []),
-    ...chart.searches.map((search) => searchExtent(search).centre)
+    ...shownItems(chart, "search").map((search) => searchExtent(search).centre)
   ];
 }
 
-// Charted lines in screen space: search centre lines, route legs and imported lines.
+// Charted lines in screen space: search centre lines, route legs and kept lines.
 function magnetLines() {
   const chart = activeChart();
   const lines = [];
   const add = (a, b) => lines.push({ a: worldToScreen(a), b: worldToScreen(b) });
-  for (const search of chart.searches) add(search, destinationPoint(search, search.bearing, searchExtent(search).farNm));
-  for (const points of [chart.route, ...visibleSavedRoutes(chart).map((route) => route.points)]) {
+  if (chart.layers.searchLines) for (const search of shownItems(chart, "search")) add(search, destinationPoint(search, search.bearing, searchExtent(search).farNm));
+  for (const points of [shownItems(chart, "route"), ...shownItems(chart, "saved-route").map((route) => route.points)]) {
     for (const leg of summarizeRoute(points).legs) add(leg.from, leg.to);
   }
-  for (const segment of chart.segments) add(segment.a, segment.b);
+  for (const line of shownItems(chart, "line")) add(line, line.end);
   return lines;
 }
 

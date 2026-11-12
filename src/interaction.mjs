@@ -1,5 +1,5 @@
 // Tool modes and pointer handling on the chart canvas, including the previews tools draw while active.
-import { COMPASS_STEP_DEG, ITEM_KINDS, MAX_RANGE_NM, MAX_ZOOM, MIN_ZOOM, WORLD_BOUNDS, bearingDegrees, chartItemFocusPoint, chartItems, createFeature, createMeasure, createRoutePoint, createSearch, createWind, distanceNm, formatCoordinate, itemForRef, searchExtent, searchesAnsweredBy, translateChartItems, visibleSavedRoutes } from "./model.mjs";
+import { COMPASS_STEP_DEG, ITEM_KINDS, MAX_RANGE_NM, MAX_ZOOM, MIN_ZOOM, WORLD_BOUNDS, bearingDegrees, chartItemFocusPoint, createFeature, createMeasure, createRoutePoint, createSearch, createWind, distanceNm, formatCoordinate, itemForRef, revealLayer, searchExtent, searchesAnsweredBy, shownItems, translateChartItems } from "./model.mjs";
 import { assignedIsland, islandById, searchIsland } from "./islands.mjs";
 import { drawBoatSilhouette, visibleBoat } from "./boats.mjs";
 import { clamp, formatDirection, formatNm } from "./format.mjs";
@@ -7,7 +7,7 @@ import { canvas, context, elements } from "./dom.mjs";
 import { activeChart, commit, host, isSelected, persist, pushUndo, refreshSelection, replaceSelectionState, selectItem, selectedItem, selectedKeys, selectedRefs, selection, selectionKey, setPrimarySelection } from "./state.mjs";
 import { boatIconBoundsAt, coordinatePrecision, eventPoint, screenToWorld, worldToScreen } from "./viewport.mjs";
 import { boatColours, drawAreaCircle, drawChart, drawIslandSilhouette, drawLine, drawMeasureLine, drawSearchWedge, drawWindIndicator, labelPill, magnetRing } from "./render.mjs";
-import { findHit, resetHitCycle, nearestTrackPoint, onSelectedAreaEdge, selectedMeasureEnd, snapAlongRay, snapPoint } from "./hits.mjs";
+import { findHit, resetHitCycle, nearestTrackPoint, onSelectedAreaEdge, selectedLineEnd, snapAlongRay, snapPoint } from "./hits.mjs";
 import { addLocation, addSearch, addWind, setAnchor } from "./edits.mjs";
 import { renderEverything, renderInspector, renderRouteSummary } from "./panels.mjs";
 
@@ -15,7 +15,7 @@ import { renderEverything, renderInspector, renderRouteSummary } from "./panels.
 const placesFreely = (event) => host.platform === "mac" ? event.altKey : event.ctrlKey;
 
 const MODE_HINTS = {
-  select: "Drag the chart to pan. Shift-click or Shift-drag to select several chart items. Drag either end of a selected measure line to adjust it.",
+  select: "Drag the chart to pan. Shift-click or Shift-drag to select several chart items. Drag either end of a selected line to adjust it.",
   location: "Click anywhere to add a location. Double-click also works from Select mode.",
   route: "Click to add route waypoints. Right-click or press Escape when finished.",
   measure: "Drag from one point to another, or click each end. The line stays until you delete it or measure a new one.",
@@ -43,6 +43,9 @@ let measureStart = null;
 
 let islandPlacement = null;
 
+// The saved route Plot Route is adding to, instead of the active route.
+let extendingRoute = null;
+
 let resolutionDraft = null;
 
 let spacePressed = false;
@@ -56,6 +59,13 @@ export function placeIsland(island) {
   setMode("location");
   islandPlacement = island.id;
   elements["mode-hint"].textContent = `Click to place ${island.name}. Press Escape to cancel.`;
+}
+
+// Arms Plot Route to continue a saved route from its last waypoint.
+export function extendSavedRoute(route) {
+  setMode("route");
+  extendingRoute = route.id;
+  elements["mode-hint"].textContent = `Click to add waypoints to ${route.name}. Right-click or press Escape when finished.`;
 }
 
 export function drawToolPreview(palette) {
@@ -75,6 +85,7 @@ export function setMode(nextMode) {
   measureStart = null;
   resetHitCycle();
   if (nextMode !== "location") islandPlacement = null;
+  extendingRoute = null;
   if (nextMode !== "resolve") resolutionDraft = null;
   stopEdgePan();
   document.querySelectorAll(".tool").forEach((button) => button.classList.toggle("active", button.dataset.mode === mode));
@@ -137,7 +148,7 @@ export function drawSearchDraft(palette) {
 
 // A ring shows where a click will land when the magnet has pulled it onto a mark or line.
 export function drawMagnet(palette) {
-  if (pointerState?.type === "measure-end") {
+  if (pointerState?.type === "line-end") {
     if (pointerState.target?.snapped) magnetRing(worldToScreen(pointerState.target), palette);
     return;
   }
@@ -201,7 +212,7 @@ export function drawMeasure(palette) {
   for (const item of activeChart().measures) drawMeasureLine(item, item.end, isSelected("measure", item.id), palette);
 }
 
-// A new measurement replaces the last one, is selected so Delete removes it, and shows even if View had hidden the line.
+// A new measurement replaces the last one and is selected so Delete removes it.
 function finishMeasure(end) {
   const start = measureStart;
   measureStart = null;
@@ -210,7 +221,7 @@ function finishMeasure(end) {
   commit((chart) => {
     const line = createMeasure(start, end);
     chart.measures = [line];
-    chart.layers.measure = true;
+    revealLayer(chart, "measure", line);
     replaceSelectionState("measure", line.id);
   });
 }
@@ -307,10 +318,18 @@ export function startPointer(event) {
     return;
   }
   if (mode === "route") {
+    const saved = activeChart().savedRoutes.find((route) => route.id === extendingRoute);
     commit((chart) => {
       const point = createRoutePoint(target);
-      chart.route.push(point);
-      replaceSelectionState("route", point.id);
+      revealLayer(chart, saved ? "saved-point" : "route", point);
+      if (saved) {
+        saved.points.push(point);
+        saved.hidden = false;
+        replaceSelectionState("saved-point", point.id);
+      } else {
+        chart.route.push(point);
+        replaceSelectionState("route", point.id);
+      }
     });
     return;
   }
@@ -322,8 +341,8 @@ export function startPointer(event) {
     drawChart();
     return;
   }
-  if (!event.shiftKey && selectedMeasureEnd(screen)) {
-    pointerState = { type: "measure-end", end: selectedMeasureEnd(screen), pointerId: event.pointerId, start: screen, moved: false };
+  if (!event.shiftKey && selectedLineEnd(screen)) {
+    pointerState = { type: "line-end", end: selectedLineEnd(screen), pointerId: event.pointerId, start: screen, moved: false };
     return;
   }
   if (!event.shiftKey && onSelectedAreaEdge(screen)) {
@@ -378,22 +397,22 @@ export function movePointer(event) {
   }
   if (!pointerState || pointerState.pointerId !== event.pointerId) {
     canvas.classList.toggle("resize", mode === "select" && onSelectedAreaEdge(screen));
-    canvas.classList.toggle("move-end", mode === "select" && Boolean(selectedMeasureEnd(screen)));
+    canvas.classList.toggle("move-end", mode === "select" && Boolean(selectedLineEnd(screen)));
     if (mode !== "select") drawChart();
     return;
   }
   if (pointerState.type === "pan") {
     const dx = screen.x - pointerState.start.x;
     const dy = screen.y - pointerState.start.y;
-    activeChart().view.lon = clamp(pointerState.original.lon - dx / activeChart().view.zoom, -90, 90);
-    activeChart().view.lat = clamp(pointerState.original.lat + dy / activeChart().view.zoom, -90, 90);
+    activeChart().view.lon = clamp(pointerState.original.lon - dx / activeChart().view.zoom, WORLD_BOUNDS.minLon, WORLD_BOUNDS.maxLon);
+    activeChart().view.lat = clamp(pointerState.original.lat + dy / activeChart().view.zoom, WORLD_BOUNDS.minLat, WORLD_BOUNDS.maxLat);
     drawChart();
   } else if (pointerState.type === "area") {
     drawChart();
   } else if (pointerState.type === "measure") {
     pointerState.moved ||= Math.hypot(screen.x - pointerState.start.x, screen.y - pointerState.start.y) >= DRAG_THRESHOLD_PX;
     drawChart();
-  } else if (pointerState.type === "measure-end") {
+  } else if (pointerState.type === "line-end") {
     if (!pointerState.moved && Math.hypot(screen.x - pointerState.start.x, screen.y - pointerState.start.y) < DRAG_THRESHOLD_PX) return;
     if (!pointerState.moved) pushUndo();
     pointerState.moved = true;
@@ -495,7 +514,7 @@ export function endPointer(event) {
     else drawChart();
     return;
   }
-  if (pointerState.type === "move-items" || pointerState.type === "resize-area" || pointerState.type === "measure-end") {
+  if (pointerState.type === "move-items" || pointerState.type === "resize-area" || pointerState.type === "line-end") {
     if (pointerState.moved) {
       activeChart().updatedAt = new Date().toISOString();
       persist();
@@ -515,10 +534,8 @@ function selectMarquee(start, end) {
   const bottom = Math.max(start.y, end.y);
   let last = null;
   const chart = activeChart();
-  const visiblePoints = new Set(visibleSavedRoutes(chart).flatMap((route) => route.points));
   for (const kind of ITEM_KINDS.filter((candidate) => candidate !== "saved-route")) {
-    for (const item of chartItems(chart, kind)) {
-      if (kind === "saved-point" && !visiblePoints.has(item)) continue;
+    for (const item of shownItems(chart, kind)) {
       const point = worldToScreen(chartItemFocusPoint(kind, item));
       if (point.x < left || point.x > right || point.y < top || point.y > bottom) continue;
       selectedKeys.add(selectionKey(kind, item.id));
@@ -555,6 +572,7 @@ function resolveToLocation(point) {
       const answered = new Set(searchesAnsweredBy(chart.searches, source));
       chart.searches = chart.searches.filter((search) => !answered.has(search));
       chart.features.push(feature);
+      revealLayer(chart, "feature", feature);
       replaceSelectionState("feature", feature.id);
     } else if (ref.kind === "feature") {
       source.lat = point.lat;
@@ -574,8 +592,8 @@ export function zoomAt(event) {
   const factor = Math.exp(-clamp(pixels, -300, 300) * .0016);
   activeChart().view.zoom = clamp(activeChart().view.zoom * factor, MIN_ZOOM, MAX_ZOOM);
   const after = screenToWorld(screen.x, screen.y);
-  activeChart().view.lon = clamp(activeChart().view.lon + before.lon - after.lon, -90, 90);
-  activeChart().view.lat = clamp(activeChart().view.lat + before.lat - after.lat, -90, 90);
+  activeChart().view.lon = clamp(activeChart().view.lon + before.lon - after.lon, WORLD_BOUNDS.minLon, WORLD_BOUNDS.maxLon);
+  activeChart().view.lat = clamp(activeChart().view.lat + before.lat - after.lat, WORLD_BOUNDS.minLat, WORLD_BOUNDS.maxLat);
   persist();
   drawChart();
 }

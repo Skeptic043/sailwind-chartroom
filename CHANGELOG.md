@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.6.10
+
+### Added
+- View toggles for chart tools that didn't have one yet, along with various sub-toggles
+- Measure lines can now be saved in 3 colors: red, blue and green
+- A new `Add waypoints` button that allows you to add waypoints to the end of a saved route
+- Day and time entries for waypoints and wind indicators
+- Import Scrambled Seas worlds from the scramble XML file
+- `Border Expander winds` toggle under `Trade winds`, for its two southern trade winds
+
+### Changed
+- The `View` menu follows the order of the chart tools
+- Checkboxes in the `View` menu no longer unnecessarily close the `View` menu (how annoying was that?)
+- Charts reach 180° east and west for wider Scrambled Seas worlds
+- `Trade winds` have their own toggle in the `View` menu instead of being locked under the `Vanilla map` toggle
+- `Bigger text`, `Smaller text` and `Match Windows text size` moved to a `Text` submenu in `Help`
+
+### Fixed
+- Long messages, such as import errors, stay on screen long enough to read
+
+Thanks to yogos for suggesting the search area toggles, kept lines, adding to saved routes, day and time for waypoints and winds, and the `Measure line` toggle
+
 ## 0.6.5
 
 ### Added
