@@ -21,7 +21,8 @@ public struct TrackTail: Equatable {
         let whole = String(decoding: bytes.prefix(end), as: UTF8.self)
         var day = from.day
         var text = ""
-        for raw in whole.split(separator: "\n", omittingEmptySubsequences: true) {
+        // isNewline, as a Windows line end is one Character in Swift and never equals "\n".
+        for raw in whole.split(whereSeparator: \.isNewline) {
             let line = raw.trimmingCharacters(in: .whitespacesAndNewlines)
             if line.isEmpty { continue }
             if isDayLine(line) {
@@ -38,7 +39,7 @@ public struct TrackTail: Equatable {
     public static func lastPosition(_ text: String) -> String? {
         var day: String?
         var last: String?
-        for line in text.split(separator: "\n", omittingEmptySubsequences: true).map(String.init) {
+        for line in text.split(whereSeparator: \.isNewline).map(String.init) {
             if isDayLine(line) { day = line } else { last = line }
         }
         guard let last else { return nil }

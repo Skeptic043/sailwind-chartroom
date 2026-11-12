@@ -554,7 +554,8 @@ test("follows Coordinate Viewer live into the chart it started on", async ({ cha
   await page.locator('.app-menu[data-menu="file"] > summary').click();
   await page.locator("#follow-track").click();
   await expect(page.locator("#follow-track")).toHaveText("Stop following coords_0.txt");
-  await expect.poll(async () => (await chartroom.chart()).track.length).toBe(2);
+  // Nothing is saved until the first position arrives, so this waits on the host itself.
+  await expect.poll(() => page.evaluate(() => window.__host.workspace?.charts?.[0]?.track?.length ?? 0)).toBe(2);
   const [first, second] = (await chartroom.chart()).track;
   expect([first.lat, first.day, second.lon]).toEqual([40.1, "3", 0.6]);
   await chartroom.press("Control+z");
@@ -589,7 +590,8 @@ test("a Coordinate Viewer position can be selected, edited and deleted", async (
   await chartroom.open();
   await page.locator('.app-menu[data-menu="file"] > summary').click();
   await page.locator("#follow-track").click();
-  await expect.poll(async () => (await chartroom.chart()).track.length).toBe(2);
+  // Nothing is saved until the first position arrives, so this waits on the host itself.
+  await expect.poll(() => page.evaluate(() => window.__host.workspace?.charts?.[0]?.track?.length ?? 0)).toBe(2);
   await page.keyboard.press("Escape");
   const box = await chartroom.canvas.boundingBox();
   const spot = await page.evaluate(() => {
