@@ -3,6 +3,15 @@
     <channel>
         <title>Sailwind Chartroom</title>
         <item>
+            <title>0.7.1</title>
+            <pubDate>Thu, 12 Nov 2026 16:27:07 +0000</pubDate>
+            <link>https://github.com/Skeptic043/sailwind-chartroom/releases</link>
+            <sparkle:version>0.7.1999</sparkle:version>
+            <sparkle:shortVersionString>0.7.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/Skeptic043/sailwind-chartroom/releases/download/v0.7.1/SailwindChartroom-macos-universal-0.7.1.zip" length="1618441" type="application/octet-stream" sparkle:edSignature="z4hhBKQHMkKggaoqI8zgEAx4IiP7of9qAMfU230wCWFNbiZ8nLSK+5ZpP7D9P1riHkSqHINMmN9/q/JEpMvcBA=="/>
+        </item>
+        <item>
             <title>0.6.13</title>
             <pubDate>Thu, 12 Nov 2026 05:52:30 +0000</pubDate>
             <link>https://github.com/Skeptic043/sailwind-chartroom/releases</link>
@@ -19,15 +28,6 @@
             <sparkle:shortVersionString>0.6.10</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
             <enclosure url="https://github.com/Skeptic043/sailwind-chartroom/releases/download/v0.6.10/SailwindChartroom-macos-universal-0.6.10.zip" length="1572883" type="application/octet-stream" sparkle:edSignature="GE37xY68LOx95yyvp9z4rb4YhD1h4/DPzupyE8D0YTG8SbsL+n55ESGH8omgA3PlWvc3ZMgS9QZslUgCdH5NCA=="/>
-        </item>
-        <item>
-            <title>0.6.5</title>
-            <pubDate>Wed, 11 Nov 2026 23:42:20 +0000</pubDate>
-            <link>https://github.com/Skeptic043/sailwind-chartroom/releases</link>
-            <sparkle:version>0.6.5999</sparkle:version>
-            <sparkle:shortVersionString>0.6.5</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
-            <enclosure url="https://github.com/Skeptic043/sailwind-chartroom/releases/download/v0.6.5/SailwindChartroom-macos-universal-0.6.5.zip" length="1566156" type="application/octet-stream" sparkle:edSignature="s/+++jg8QNmeSD5t/aKm3PWlGDJ6pZZeOKSYvWGD1KKxR2eymPY/uFSewJnYCG8GgOBl8StmrmQVlsZKmxmbCg=="/>
         </item>
         <item>
             <title>0.6.0-rc.1</title>
