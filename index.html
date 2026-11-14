@@ -57,6 +57,7 @@
           <label class="menu-check menu-check-sub"><input id="layer-red-lines" type="checkbox" checked><span>Red lines</span></label>
           <label class="menu-check menu-check-sub"><input id="layer-blue-lines" type="checkbox" checked><span>Blue lines</span></label>
           <label class="menu-check menu-check-sub"><input id="layer-green-lines" type="checkbox" checked><span>Green lines</span></label>
+          <label class="menu-check"><input id="layer-dead-reckoning" type="checkbox" checked><span>Dead reckoning</span></label>
           <label class="menu-check"><input id="layer-areas" type="checkbox" checked><span>Rough areas</span></label>
           <label class="menu-check menu-check-sub"><input id="layer-area-islands" type="checkbox" checked><span>Islands</span></label>
           <label class="menu-check"><input id="layer-searches" type="checkbox" checked><span>Search areas</span></label>
@@ -68,7 +69,8 @@
           <label class="menu-check"><input id="layer-labels" type="checkbox" checked><span>Chart labels</span></label>
           <label class="menu-check"><input id="layer-boats" type="checkbox" checked><span>Boat markers</span></label>
           <label class="menu-check"><input id="layer-islands" type="checkbox" checked><span>Island outlines</span></label>
-          <label class="menu-check"><input id="layer-track" type="checkbox" checked><span>Imported track</span></label>
+          <label class="menu-check"><input id="layer-track" type="checkbox" checked><span>Coordinate Viewer track</span></label>
+          <label class="menu-check menu-check-sub"><input id="layer-track-winds" type="checkbox" checked><span>Wind along the track</span></label>
           <hr>
           <label class="menu-check"><input id="layer-vanilla" type="checkbox"><span>Vanilla map</span></label>
           <label id="layer-imported-row" class="menu-check" hidden><input id="layer-imported-map" type="checkbox" checked><span>Imported map</span></label>
@@ -101,6 +103,10 @@
       </details>
     </nav>
     <div class="top-actions">
+      <div class="panel-toggles" role="group" aria-label="Side panels">
+        <button id="show-left-panel" class="panel-toggle" type="button" aria-pressed="true" title="Show or hide the Tools panel"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><rect x="3.5" y="5" width="17" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="3.5" y="5" width="6" height="14" rx="1.5" fill="currentColor" fill-opacity=".45"/></svg><span>Tools</span></button>
+        <button id="show-right-panel" class="panel-toggle" type="button" aria-pressed="true" title="Show or hide the Items panel"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><rect x="3.5" y="5" width="17" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="14.5" y="5" width="6" height="14" rx="1.5" fill="currentColor" fill-opacity=".45"/></svg><span>Items</span></button>
+      </div>
       <span id="app-version" class="app-version"></span>
       <span id="save-status" class="save-status"><i></i> Saved</span>
     </div>
@@ -122,11 +128,38 @@
           <button class="tool" type="button" data-mode="location"><b>L</b><span>Add location</span><svg class="tool-icon icon-location" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 21.5s-6.2-6.4-6.2-11.2a6.2 6.2 0 0 1 12.4 0c0 4.8-6.2 11.2-6.2 11.2z" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><circle cx="12" cy="10.2" r="2.3" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button>
           <button class="tool" type="button" data-mode="route"><b>R</b><span>Plot route</span><svg class="tool-icon icon-route" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4.5 18 11.5 7.5 19.5 15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2 2.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="4.5" cy="18" r="2.4" fill="currentColor"/><circle cx="11.5" cy="7.5" r="2.4" fill="currentColor"/><circle cx="19.5" cy="15" r="2.4" fill="currentColor"/></svg></button>
           <button class="tool" type="button" data-mode="measure"><b>M</b><span>Measure</span><svg class="tool-icon icon-measure" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><g transform="rotate(-35 12 12)"><rect x="2" y="8.5" width="20" height="7" rx="1.2" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 8.5v3M9 8.5v2M12.5 8.5v3M16 8.5v2M19.5 8.5v3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></g></svg></button>
+          <button class="tool" type="button" data-mode="dr"><b>D</b><span>Dead reckoning</span><svg class="tool-icon icon-dr" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 7.5 10.5 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="2 2.2" stroke-linecap="round"/><path d="M8.5 16a6 6 0 0 1 12 0z" fill="currentColor" fill-opacity=".18" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><circle cx="14.5" cy="16" r="1.6" fill="currentColor"/><circle cx="4" cy="7.5" r="1.8" fill="currentColor"/></svg></button>
           <button class="tool" type="button" data-mode="area"><b>A</b><span>Rough area</span><svg class="tool-icon icon-area" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="8.5" fill="currentColor" fill-opacity=".14" stroke="currentColor" stroke-width="1.5" stroke-dasharray="3.2 2.2"/><circle cx="12" cy="12" r="1.8" fill="currentColor"/></svg></button>
           <button class="tool" type="button" data-mode="search"><b>S</b><span>Search area</span><svg class="tool-icon icon-search" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 20.5 4.6 7.7a13 13 0 0 1 14.8 0z" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M12 20.5V5" stroke="currentColor" stroke-width="1.1" stroke-dasharray="1.6 2" stroke-linecap="round"/><circle cx="12" cy="20.5" r="1.7" fill="currentColor"/></svg></button>
           <button class="tool" type="button" data-mode="wind"><b>W</b><span>Add wind</span><svg class="tool-icon icon-wind" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 9h10.5a2.6 2.6 0 1 0-2.6-2.6M3 13h15a2.8 2.8 0 1 1-2.8 2.8M3 17h7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
         </div>
         <p id="mode-hint" class="hint">Drag the chart to pan. Select a mark, waypoint or measure line to edit it.</p>
+      </section>
+
+      <section id="dr-panel" class="panel-section dr-panel" hidden>
+        <form id="dr-plot-form" class="stack-form">
+          <h2>Dead reckoning</h2>
+          <p class="fineprint">Find where you are now from a previous position, your compass course, chip log speed and time sailed.</p>
+          <div class="from-row">
+            <span>Starting position</span>
+            <strong id="dr-from-label">Your latest position</strong>
+            <button id="dr-from-latest" class="link-button" type="button" hidden>Use your latest position</button>
+          </div>
+          <div class="two-columns">
+            <label>Compass course <input id="dr-course" inputmode="decimal" placeholder="NE or 045" required></label>
+            <label>Chip log speed, knots <input id="dr-speed" type="number" min="0" max="40" step="any" required></label>
+          </div>
+          <div class="two-columns">
+            <label>Hours sailed <input id="dr-hours" inputmode="decimal" placeholder="2.5 or 2:30" required></label>
+            <label title="Your guess at how far off you could be, as a share of the distance sailed. At 10%, after 20 nm you could be 2 nm off. The circle round each DR position shows it.">Error, % of distance <input id="dr-percent" type="number" min="0" max="100" step="1"></label>
+          </div>
+          <div class="two-columns">
+            <label>Start day <input id="dr-day" maxlength="30" placeholder="Optional"></label>
+            <label>Start time <input id="dr-time" maxlength="30" placeholder="Optional"></label>
+          </div>
+          <button class="primary" type="submit">Plot DR position</button>
+          <p class="fineprint">Use game time for hours sailed. Plot a new DR position whenever you change course or speed; the next one starts there.</p>
+        </form>
       </section>
 
       <div id="inspector-host"></div>
@@ -141,7 +174,6 @@
       </div>
       <div id="route-summary" class="route-summary" aria-live="polite" hidden>
         <div><span id="route-summary-title">Route</span><strong id="route-distance">0 nm</strong></div>
-        <div><span>Next bearing</span><strong id="route-bearing">—</strong></div>
         <div><label for="route-speed">Speed kn</label><input id="route-speed" type="number" max="30" step="0.5"></div>
         <div><span>Passage</span><strong id="route-eta">—</strong></div>
         <div title="Routes on this chart take the short way around the world, across its east and west edges."><label for="route-circumnavigation">Circumnavigation</label><input id="route-circumnavigation" type="checkbox"></div>
@@ -309,6 +341,15 @@
           </div>
           <label>Recorded wind <input id="track-wind" maxlength="30" placeholder="Optional"></label>
         </form>
+        <div id="track-selection" hidden>
+          <h3 class="form-heading">Selected Coordinate Viewer positions</h3>
+          <div id="track-selection-detail" class="leg-detail"></div>
+          <div class="two-columns">
+            <label>Maximum distance from route, nm <input id="track-route-tolerance" type="number" min="0.1" max="50" step="any" value="2"></label>
+            <button id="track-to-route" type="button">Save route</button>
+          </div>
+          <p class="fineprint">Save route keeps only the waypoints needed to stay within this distance of them.</p>
+        </div>
       </section>
 
       <section id="wind-inspector" class="panel-section inspector" hidden>
@@ -331,9 +372,21 @@
         <p class="fineprint">The arrow points in the direction the wind is blowing toward.</p>
       </section>
 
+      <section id="dr-inspector" class="panel-section inspector" hidden>
+        <div class="section-heading">
+          <div><div class="eyebrow">Dead reckoning</div><h2>DR position</h2></div>
+          <div class="heading-actions"><button id="delete-dr" class="danger icon-button" type="button" title="Delete DR position" aria-label="Delete DR position">×</button></div>
+        </div>
+        <form id="dr-form" class="stack-form">
+          <label>Name <input id="dr-label" maxlength="100" placeholder="Optional"></label>
+        </form>
+        <div id="dr-detail" class="leg-detail"></div>
+        <button id="dr-reckon-from" type="button">Start dead reckoning here</button>
+      </section>
+
       <section class="panel-section locations-section">
         <div class="section-heading"><h2>Chart items</h2><span id="feature-count" class="count">0</span></div>
-        <div class="list-actions"><select id="item-filter" aria-label="Filter chart items"><option value="all">All chart items</option><option value="feature">Locations</option><option value="route">Waypoints</option><option value="saved-route">Saved routes</option><option value="search">Search areas</option><option value="measure">Measure line</option><option value="line">Kept lines</option><option value="wind">Wind</option></select></div>
+        <div class="list-actions"><select id="item-filter" aria-label="Filter chart items"><option value="all">All chart items</option><option value="feature">Locations</option><option value="route">Waypoints</option><option value="saved-route">Saved routes</option><option value="search">Search areas</option><option value="measure">Measure line</option><option value="line">Kept lines</option><option value="wind">Wind</option><option value="dr">Dead reckoning</option></select></div>
         <input id="feature-search" class="search" type="search" placeholder="Search chart items" aria-label="Search chart items">
         <div id="feature-list" class="feature-list"></div>
       </section>
@@ -380,6 +433,7 @@
         <div><kbd data-shortcut="location">L</kbd><span>Add a location</span></div>
         <div><kbd data-shortcut="route">R</kbd><span>Plot route waypoints</span></div>
         <div><kbd data-shortcut="measure">M</kbd><span>Measure: drag between two points, or click each end, for the distance, bearing and passage time. The line stays until you delete it or measure again. Keep as a chart line leaves it on the chart in red, blue or green.</span></div>
+        <div><kbd data-shortcut="dr">D</kbd><span>Dead reckoning: plot your position from your compass course, chip log speed and hours sailed.</span></div>
         <div><kbd data-shortcut="area">A</kbd><span>Rough area: press where it is centred and drag out the radius. Drag the edge of a selected area to resize it.</span></div>
         <div><kbd data-shortcut="search">S</kbd><span>Search area: press on the port or position that gave the direction, drag toward it and let go at the distance. The direction snaps to compass points.</span></div>
         <div><kbd>Space</kbd><span>Hold while dragging to pan from any tool</span></div>
@@ -397,7 +451,9 @@
       <p class="help-note"><strong>Routes:</strong> Save route keeps a finished route on the chart and starts a new one. Saved routes are listed under Chart items. Click a saved route's line to select or drag the whole route, or click one of its waypoints to edit that point. Add waypoints continues a saved route from its last waypoint.</p>
       <p class="help-note"><strong>Distance model:</strong> the original Sailwind map uses a flat chart and approximately 140 nautical miles per degree. Chartroom preserves that convention; it does not treat the game world as a globe.</p>
       <p class="help-note"><strong>Long plots:</strong> while a measurement, search or area is active, hold the pointer against the chart edge briefly to pan in that direction.</p>
-      <p class="help-note"><strong>Following your boat:</strong> start recording in Coordinate Viewer, then choose File, Coordinate Viewer, Follow live and pick the coords file in Coordinate Viewer's plugin folder. Each position it records joins the chart you started on.</p>
+      <p class="help-note"><strong>Without Coordinate Viewer:</strong> Dead reckoning carries your position forward from your last known position, using your compass course, chip log speed and hours sailed. Plot a new DR position whenever you change course or speed. Each circle shows how far that DR position may be off.</p>
+      <p class="help-note"><strong>Following your boat:</strong>
+ start recording in Coordinate Viewer, then choose File, Coordinate Viewer, Follow live and pick the coords file in Coordinate Viewer's plugin folder. Each position it records joins the chart you started on.</p>
       <p class="help-note"><strong>Scrambled Seas:</strong> turn on ExternalSave in Scrambled Seas' settings and save your game, then use File, Import to open the scramble_&lt;slot&gt;.xml file in its plugin folder. Chartroom makes a new chart with the Scrambled Seas map in View, showing where that world's islands are.</p>
       <p class="help-note"><strong>Your charts:</strong> Chartroom saves automatically and keeps a copy from your previous launch. Use File, Back up all charts to keep your own copy, or to move your charts to another computer.</p>
       <p class="help-note"><strong>Layout:</strong> use the two panel buttons at the top to hide either sidebar. Drag a sidebar's inner edge to resize it.</p>

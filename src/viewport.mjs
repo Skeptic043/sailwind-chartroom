@@ -15,6 +15,15 @@ export function worldToScreen(point) {
   };
 }
 
+// worldToScreen for drawing many points at once: the canvas size and view are read once, not per point.
+export function projector() {
+  const rectangle = canvas.getBoundingClientRect();
+  const { lat, lon, zoom } = activeChart().view;
+  const x = rectangle.width / 2;
+  const y = rectangle.height / 2;
+  return (point) => ({ x: x + (point.lon - lon) * zoom, y: y - (point.lat - lat) * zoom });
+}
+
 export function screenToWorld(x, y) {
   const rectangle = canvas.getBoundingClientRect();
   const view = activeChart().view;
@@ -62,6 +71,19 @@ const SYMBOLS = Object.freeze({
   wind: { full: 34, min: 10, max: 41 },       // length of a wind arrow
   boat: { full: 0.4, min: 0.3, max: 1.5 }     // boat marker, as a share of its own marker size
 });
+
+// The two ends on screen of an arrow of this length, centred on a screen point and pointing at a bearing.
+export function centredArrowEnds(centre, bearing, length) {
+  const radians = bearing * Math.PI / 180;
+  const dx = Math.sin(radians) * length / 2;
+  const dy = -Math.cos(radians) * length / 2;
+  return { start: { x: centre.x - dx, y: centre.y - dy }, end: { x: centre.x + dx, y: centre.y + dy } };
+}
+
+// A wind indicator's arrow, centred on its position and pointing the way the wind flows.
+export function windArrowEnds(wind) {
+  return centredArrowEnds(worldToScreen(wind), wind.bearing, symbolSize("wind"));
+}
 
 export function symbolSize(name) {
   const { full, min, max } = SYMBOLS[name];

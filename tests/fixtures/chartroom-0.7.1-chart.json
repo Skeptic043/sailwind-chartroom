@@ -1,0 +1,75 @@
+{
+  "format": "sailwind-chartroom",
+  "version": 2,
+  "exportedAt": "2026-11-12T08:00:00.000Z",
+  "charts": [
+    {
+      "id": "chart-071",
+      "name": "Passage 0.7.1",
+      "seed": "",
+      "createdAt": "2026-11-12T08:00:00.000Z",
+      "updatedAt": "2026-11-12T08:00:00.000Z",
+      "view": {
+        "lat": 10,
+        "lon": 0,
+        "zoom": 5
+      },
+      "layers": {
+        "locations": true,
+        "locationIslands": true,
+        "routes": true,
+        "routeDistances": true,
+        "savedRoutes": true,
+        "measure": true,
+        "redLines": true,
+        "blueLines": true,
+        "greenLines": true,
+        "areas": true,
+        "areaIslands": true,
+        "searches": true,
+        "searchLines": true,
+        "searchIslands": true,
+        "winds": true,
+        "grid": true,
+        "labels": true,
+        "boats": true,
+        "islands": true,
+        "track": true,
+        "vanillaMap": false,
+        "importedMap": true,
+        "secretIslands": false,
+        "tradeWinds": false,
+        "expandedWinds": false
+      },
+      "circumnavigation": false,
+      "speedKn": 6,
+      "features": [],
+      "route": [],
+      "savedRoutes": [],
+      "track": [
+        {
+          "id": "track-timed",
+          "lat": 35.25,
+          "lon": -3.5,
+          "name": "",
+          "day": "4",
+          "time": "09:30",
+          "wind": "E"
+        },
+        {
+          "id": "track-untimed",
+          "lat": 35.3,
+          "lon": -3.4,
+          "name": "",
+          "day": "",
+          "time": "",
+          "wind": "N"
+        }
+      ],
+      "measures": [],
+      "winds": [],
+      "searches": [],
+      "segments": []
+    }
+  ]
+}

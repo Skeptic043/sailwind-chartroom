@@ -1,11 +1,14 @@
 import { islandById } from "./islands.mjs";
 import { scrambledIslands } from "./scrambled-seas.mjs";
+import { clockText, parseDayTime } from "./gametime.mjs";
 
 // Exported files are { format, version, exportedAt, charts }. The version counts changes to the saved
 // shape of a chart; when it increases, upgrade older files in importChartData before they are sanitized.
 export const FILE_FORMAT = "sailwind-chartroom";
 // 2: lines run from lat and lon to end, like the measure line, instead of from a to b.
-export const SCHEMA_VERSION = 2;
+// 3: track positions keep their game time and wind in degrees; earlier wind labels were read from
+//    Coordinate Viewer's mathematical angle as if it were a compass bearing and are corrected on load.
+export const SCHEMA_VERSION = 3;
 export const NM_PER_DEGREE = 140;
 // Longitude reaches all the way round, so Scrambled Seas worlds as wide as the globe fit on a chart.
 export const WORLD_BOUNDS = Object.freeze({ minLat: -90, maxLat: 90, minLon: -180, maxLon: 180 });
@@ -39,7 +42,10 @@ export function createChart({ name = "Uncharted Sea", seed = "" } = {}) {
     measures: [],
     winds: [],
     searches: [],
-    segments: []
+    segments: [],
+    // Dead reckoning positions, and the error percentage the next one starts with.
+    drPositions: [],
+    drPercent: 10
   };
 }
 
@@ -51,8 +57,9 @@ const LAYER_DEFAULTS = Object.freeze({
   measure: true, redLines: true, blueLines: true, greenLines: true,
   areas: true, areaIslands: true,
   searches: true, searchLines: true, searchIslands: true,
+  deadReckoning: true,
   winds: true,
-  grid: true, labels: true, boats: true, islands: true, track: true,
+  grid: true, labels: true, boats: true, islands: true, track: true, trackWinds: true,
   vanillaMap: false, importedMap: true, secretIslands: false, tradeWinds: false, expandedWinds: false
 });
 
@@ -71,6 +78,7 @@ export function itemShown(chart, kind, item) {
   if (kind === "measure") return layers.measure;
   if (kind === "line") return layers.measure && layers[`${item.color}Lines`];
   if (kind === "track") return layers.track;
+  if (kind === "dr") return layers.deadReckoning;
   if (kind === "map-island") return layers.importedMap && (layers.secretIslands || !islandById(item.id)?.secret);
   return true;
 }
@@ -100,6 +108,7 @@ export function revealLayer(chart, kind, item) {
   if (kind === "wind") layers.winds = true;
   if (kind === "measure") layers.measure = true;
   if (kind === "line") layers.measure = layers[`${item.color}Lines`] = true;
+  if (kind === "dr") layers.deadReckoning = true;
 }
 
 export function createWorkspace() {
@@ -119,6 +128,7 @@ export const CHART_TOOLS = Object.freeze([
   { mode: "location", label: "Add location", key: "l" },
   { mode: "route", label: "Plot route", key: "r" },
   { mode: "measure", label: "Measure", key: "m" },
+  { mode: "dr", label: "Dead reckoning", key: "d" },
   { mode: "area", label: "Rough area", key: "a" },
   { mode: "search", label: "Search area", key: "s" },
   { mode: "wind", label: "Add wind", key: "w" }
@@ -166,9 +176,24 @@ function sanitizeSettings(value) {
   };
 }
 
+// Tools added after 0.7.1, whose shortcuts settings saved before then lack.
+const ADDED_TOOLS = new Set(["dr"]);
+
+// A missing tool takes its default key. An added tool whose default the player already gave to another
+// tool takes the first free key instead, so their own choices survive the update.
 function sanitizeShortcuts(value) {
+  const saved = value && typeof value === "object" ? value : {};
+  const shortcuts = { ...defaultShortcuts(), ...saved };
+  const isNew = (tool) => ADDED_TOOLS.has(tool.mode) && !saved[tool.mode];
+  const taken = new Set(FIXED_KEYS);
+  for (const tool of CHART_TOOLS) if (!isNew(tool)) taken.add(String(shortcuts[tool.mode]).toLowerCase());
+  for (const tool of CHART_TOOLS) {
+    if (!isNew(tool) || !taken.has(tool.key)) continue;
+    shortcuts[tool.mode] = [..."abcdefghijklmnopqrstuvwxyz0123456789"].find((candidate) => !taken.has(candidate));
+    taken.add(shortcuts[tool.mode]);
+  }
   try {
-    return validateShortcuts({ ...defaultShortcuts(), ...(value && typeof value === "object" ? value : {}) });
+    return validateShortcuts(shortcuts);
   } catch {
     return defaultShortcuts();
   }
@@ -176,7 +201,8 @@ function sanitizeShortcuts(value) {
 
 export function sanitizeWorkspace(value) {
   if (!value || typeof value !== "object") return createWorkspace();
-  const charts = Array.isArray(value.charts) ? value.charts.map(sanitizeChart).filter(Boolean) : [];
+  const legacyWind = !(Number(value.version) >= 3);
+  const charts = Array.isArray(value.charts) ? value.charts.map((chart) => sanitizeChart(chart, { legacyWind })).filter(Boolean) : [];
   if (!charts.length) return createWorkspace();
   const activeChartId = charts.some((chart) => chart.id === value.activeChartId)
     ? value.activeChartId
@@ -190,7 +216,8 @@ export function sanitizeWorkspace(value) {
   };
 }
 
-export function sanitizeChart(value) {
+// legacyWind marks charts saved before version 3, whose recorded wind labels need correcting.
+export function sanitizeChart(value, { legacyWind = false } = {}) {
   if (!value || typeof value !== "object") return null;
   const base = createChart({ name: value.name, seed: value.seed });
   const view = value.view && typeof value.view === "object" ? value.view : {};
@@ -208,7 +235,10 @@ export function sanitizeChart(value) {
   base.features = arrayOf(value.features, sanitizeFeature);
   base.route = arrayOf(value.route, sanitizeRoutePoint);
   base.savedRoutes = arrayOf(value.savedRoutes, sanitizeSavedRoute);
-  base.track = arrayOf(value.track, (point) => sanitizeTrackPoint(point));
+  base.track = arrayOf(value.track, (point) => sanitizeTrackPoint(point, legacyWind));
+  // The 0.8.0 test build kept DR positions among other plotted positions, as fixes of kind "dr".
+  base.drPositions = arrayOf(value.drPositions ?? (value.fixes ?? []).filter((fix) => fix?.kind === "dr"), sanitizeDrPosition);
+  base.drPercent = clampNumber(value.drPercent, 0, 100, base.drPercent);
   // A chart keeps one measure line; a new measurement replaces it.
   base.measures = arrayOf(value.measures, sanitizeMeasure).slice(-1);
   base.winds = arrayOf(value.winds, sanitizeWind);
@@ -330,9 +360,12 @@ export function followAnchors(chart) {
 }
 
 // Every kind of item a selection can hold. A saved route owns its waypoints, which can also be selected alone.
-const ITEM_LISTS = { feature: "features", route: "route", measure: "measures", line: "segments", wind: "winds", search: "searches", track: "track" };
+const ITEM_LISTS = { feature: "features", route: "route", measure: "measures", line: "segments", wind: "winds", search: "searches", track: "track", dr: "drPositions" };
 // An imported Scrambled Seas map's islands can be selected, noted and deleted, but never moved.
 export const ITEM_KINDS = Object.freeze([...Object.keys(ITEM_LISTS), "saved-route", "saved-point", "map-island"]);
+// Kinds that stay where they were worked out or imported: a DR position is where its course, speed and
+// time put it.
+const IMMOVABLE_KINDS = new Set(["map-island", "dr"]);
 
 export function chartItems(chart, kind) {
   if (kind === "saved-route") return chart.savedRoutes;
@@ -386,7 +419,7 @@ export function setLocked(chart, refs, locked) {
 export function translateChartItems(chart, refs, delta, { strict = false } = {}) {
   const unique = new Map();
   for (const ref of pointRefs(chart, refs)) {
-    if (ref.kind === "map-island") continue;
+    if (IMMOVABLE_KINDS.has(ref.kind)) continue;
     const item = itemForRef(chart, ref);
     if (item && !item.locked) unique.set(`${ref.kind}:${ref.id}`, { ref, item });
   }
@@ -803,14 +836,66 @@ function sanitizeSavedRoute(value) {
   };
 }
 
-function sanitizeTrackPoint(value) {
+// A recorded position. t is absolute game hours (see gametime.mjs) and windDeg the direction the wind
+// blows toward, in degrees; day, time and wind are their display text. Positions from charts saved
+// before both were kept get t from their day and time text, and their wind labels corrected.
+function sanitizeTrackPoint(value, legacyWind = false) {
   const point = sanitizePoint(value, "track");
   if (!point) return null;
+  const day = cleanText(value.day, 30);
+  const time = cleanText(value.time, 30);
+  let wind = cleanText(value.wind, 30);
+  let windDeg = Number.isFinite(value.windDeg) ? normalizeDegrees(value.windDeg) : null;
+  if (windDeg === null && legacyWind && COMPASS_POINTS.includes(wind)) windDeg = windFromMathAngle(COMPASS_POINTS.indexOf(wind) * COMPASS_STEP_DEG);
+  if (windDeg !== null && (legacyWind || !wind)) wind = compassPoint(windDeg);
+  const t = Number.isFinite(value.t) && value.t >= 0 ? Number(value.t) : parseDayTime(day, time);
   return {
     ...point,
-    day: cleanText(value.day, 30),
-    time: cleanText(value.time, 30),
-    wind: cleanText(value.wind, 30),
+    day,
+    time,
+    wind,
+    t,
+    windDeg,
+    ...lockedFlag(value)
+  };
+}
+
+function normalizeDegrees(value) {
+  return ((Number(value) % 360) + 360) % 360;
+}
+
+// Coordinate Viewer writes the wind as atan2(z, x) of Sailwind's wind vector: degrees from east,
+// counterclockwise, x being east and z north. The game moves air along that vector (sails feel it less
+// the boat's own velocity), so it points downwind. As a compass bearing it blows toward 90 - angle.
+export function windFromMathAngle(degrees) {
+  return normalizeDegrees(90 - Number(degrees));
+}
+
+// A dead reckoning position: where course, speed and hours sailed put the boat from its starting point.
+// sigmaNm is how far off it may be, t its game time when known.
+export function createDrPosition(values) {
+  return sanitizeDrPosition({ ...values, id: makeId("dr"), createdAt: new Date().toISOString() });
+}
+
+function sanitizeDrPosition(value) {
+  if (!value || typeof value !== "object") return null;
+  // Positions from the 0.8.0 test build kept what they were worked out from in inputs.
+  const worked = value.inputs ?? value;
+  const from = value.from ?? { lat: worked.fromLat, lon: worked.fromLon, label: worked.from };
+  if (!isFiniteCoordinate(value.lat, value.lon) || !isFiniteCoordinate(from?.lat, from?.lon)) return null;
+  return {
+    id: cleanText(value.id, 120) || makeId("dr"),
+    lat: Number(value.lat),
+    lon: Number(value.lon),
+    t: Number.isFinite(value.t) && value.t >= 0 ? Number(value.t) : null,
+    sigmaNm: clampNumber(value.sigmaNm, 0, 5000, 0),
+    label: cleanText(value.label, 100),
+    course: normalizeDegrees(Number(worked.course) || 0),
+    speedKn: clampNumber(worked.speedKn, 0, 40, 0),
+    hours: clampNumber(worked.hours, 0, 1000, 0),
+    percent: clampNumber(worked.percent, 0, 100, 0),
+    from: { lat: Number(from.lat), lon: Number(from.lon), label: cleanText(from.label, 120) },
+    createdAt: validDate(value.createdAt) || new Date().toISOString(),
     ...lockedFlag(value)
   };
 }
@@ -965,16 +1050,19 @@ export function parseCoordinateViewer(text) {
     const lat = Number(parts[0]);
     const lon = Number(parts[1]);
     if (!isFiniteCoordinate(lat, lon)) continue;
+    // Each position keeps its game time to the full precision written, and the wind as a bearing.
     let time = "";
     let wind = "";
+    let t = null;
+    let windDeg = null;
     if (parts.length >= 4 && Number.isFinite(Number(parts[2])) && Number.isFinite(Number(parts[3]))) {
-      const decimalHours = Number(parts[2]);
-      const hours = Math.floor(decimalHours);
-      const minutes = Math.floor((decimalHours - hours) * 60);
-      time = `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
-      wind = compassPoint(Number(parts[3]));
+      const hours = Number(parts[2]);
+      t = day ? parseDayTime(day, hours) : null;
+      time = clockText(hours);
+      windDeg = windFromMathAngle(Number(parts[3]));
+      wind = compassPoint(windDeg);
     }
-    points.push({ id: makeId("track"), lat, lon, name: "", day, time, wind });
+    points.push({ id: makeId("track"), lat, lon, name: "", day, time, wind, t, windDeg });
   }
   if (!points.length) throw new Error("No valid Coordinate Viewer positions were found.");
   return points;
@@ -988,7 +1076,7 @@ export function importChartData(value, suggestedName = "Imported chart") {
   if (value?.format === FILE_FORMAT) {
     if (!Number.isInteger(value.version) || value.version < 1) throw new Error("This Chartroom file has no readable format version.");
     if (value.version > SCHEMA_VERSION) throw new Error("This file was saved by a newer version of Chartroom. Update Chartroom to open it.");
-    const charts = arrayOf(value.charts, sanitizeChart);
+    const charts = arrayOf(value.charts, (chart) => sanitizeChart(chart, { legacyWind: value.version < 3 }));
     if (!charts.length) throw new Error("This Chartroom file contains no charts.");
     return charts.map(freshImport);
   }
@@ -997,7 +1085,7 @@ export function importChartData(value, suggestedName = "Imported chart") {
     return sanitizeWorkspace(value).charts.map(freshImport);
   }
   if (Array.isArray(value?.features) || Array.isArray(value?.route) || Array.isArray(value?.track)) {
-    const chart = sanitizeChart({ ...value, name: value.name || suggestedName });
+    const chart = sanitizeChart({ ...value, name: value.name || suggestedName }, { legacyWind: true });
     if (!chart) throw new Error("The chart file is not valid.");
     chart.id = makeId("chart");
     chart.name = uniqueImportedName(chart.name);

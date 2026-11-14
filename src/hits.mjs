@@ -4,7 +4,7 @@ import { islandById, islandContains } from "./islands.mjs";
 import { assignedBoats } from "./boats.mjs";
 import { clamp } from "./format.mjs";
 import { activeChart, selectedItem, selection } from "./state.mjs";
-import { boatRowAt, chartIsland, chartSearchIsland, featureBoats, insideBounds, islandPixelSpan, screenToWorld, symbolSize, worldToScreen } from "./viewport.mjs";
+import { boatRowAt, chartIsland, chartSearchIsland, featureBoats, insideBounds, islandPixelSpan, screenToWorld, windArrowEnds, worldToScreen } from "./viewport.mjs";
 
 const POINT_MAGNET_PX = 11;
 
@@ -61,10 +61,7 @@ function findHits(x, y) {
   }
   // A wind arrow is clickable along its whole drawn length.
   for (const wind of shownItems(chart, "wind")) {
-    const start = worldToScreen(wind);
-    const radians = wind.bearing * Math.PI / 180;
-    const length = symbolSize("wind");
-    const end = { x: start.x + Math.sin(radians) * length, y: start.y - Math.cos(radians) * length };
+    const { start, end } = windArrowEnds(wind);
     const near = closestOnSegment({ a: start, b: end }, { x, y });
     consider("wind", wind.id, wind, Math.hypot(near.x - x, near.y - y));
   }
@@ -81,6 +78,12 @@ function findHits(x, y) {
     const screen = worldToScreen(point);
     const distance = Math.hypot(screen.x - x, screen.y - y);
     if (distance <= 8) consider("track", point.id, point, distance + 2);
+  }
+  // DR positions stay where they were reckoned, so pressing one selects it and pans the chart.
+  for (const position of shownItems(chart, "dr")) {
+    const screen = worldToScreen(position);
+    const distance = Math.hypot(screen.x - x, screen.y - y);
+    if (distance <= 9) consider("dr", position.id, position, distance + 1, true);
   }
   // The measure line and kept lines are clickable along their length; marks at their ends win when they are as close.
   for (const kind of ["measure", "line"]) for (const line of shownItems(chart, kind)) {
@@ -168,7 +171,8 @@ function magnetPoints() {
     ...shownItems(chart, "feature"),
     ...shownItems(chart, "route"),
     ...shownItems(chart, "saved-point"),
-    ...(chart.layers.track ? chart.track : []),
+    ...shownItems(chart, "track"),
+    ...shownItems(chart, "dr"),
     ...shownItems(chart, "search").map((search) => searchExtent(search).centre)
   ];
 }
@@ -232,10 +236,9 @@ function segmentCrossing(first, second) {
 }
 
 export function nearestTrackPoint(screen) {
-  if (!activeChart().layers.track) return null;
   let best = null;
   let bestDistance = 8;
-  for (const point of activeChart().track) {
+  for (const point of shownItems(activeChart(), "track")) {
     const projected = worldToScreen(point);
     const distance = Math.hypot(projected.x - screen.x, projected.y - screen.y);
     if (distance < bestDistance) { best = point; bestDistance = distance; }

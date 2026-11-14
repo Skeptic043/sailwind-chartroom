@@ -16,6 +16,8 @@ import { exportActiveChart, exportLocationsCsv, exportWorkspace, importChartFile
 import { initUpdates } from "./updates.mjs";
 import { initLiveTrack } from "./live-track.mjs";
 import { initSettings, initTheme, stepInterfaceSize } from "./settings.mjs";
+import { initDeadReckoning, reckonFrom } from "./dead-reckoning-panel.mjs";
+import { initTrackSelection } from "./track-selection.mjs";
 import "./menus.mjs";
 
 const host = await connectHost();
@@ -58,6 +60,7 @@ elements.about.addEventListener("click", openAbout);
 for (const side of ["left", "right"]) {
   const resizer = elements[`${side}-panel-resizer`];
   elements[`toggle-${side}-panel`].addEventListener("click", () => togglePanel(side));
+  elements[`show-${side}-panel`].addEventListener("click", () => togglePanel(side));
   resizer.addEventListener("pointerdown", (event) => startPanelResize(side, event));
   resizer.addEventListener("pointermove", movePanelResize);
   resizer.addEventListener("pointerup", endPanelResize);
@@ -127,6 +130,18 @@ for (const button of document.querySelectorAll("[data-lock]")) {
 elements["lock-selected"].addEventListener("click", () => lockSelected(true));
 elements["unlock-selected"].addEventListener("click", () => lockSelected(false));
 elements["saved-route-form"].addEventListener("change", updateSavedRouteFromForm);
+elements["dr-form"].addEventListener("submit", (event) => event.preventDefault());
+elements["dr-label"].addEventListener("change", (event) => {
+  const position = selection?.kind === "dr" ? selectedItem() : null;
+  if (position) commit(() => { position.label = event.target.value.trim(); });
+});
+elements["delete-dr"].addEventListener("click", deleteSelected);
+elements["dr-reckon-from"].addEventListener("click", () => {
+  const position = selection?.kind === "dr" ? selectedItem() : null;
+  if (!position) return;
+  reckonFrom(position);
+  setMode("dr");
+});
 elements["line-form"].addEventListener("submit", (event) => event.preventDefault());
 elements["map-island-form"].addEventListener("submit", (event) => event.preventDefault());
 elements["map-island-notes"].addEventListener("change", (event) => {
@@ -311,3 +326,5 @@ resizeCanvas();
 initSettings();
 initUpdates();
 initLiveTrack();
+initDeadReckoning();
+initTrackSelection();

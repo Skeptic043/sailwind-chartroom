@@ -1,6 +1,6 @@
 # Sailwind Chartroom
 
-A charting desk for Sailwind. Mark islands, plot and save routes, narrow down islands from mission directions, and load coords from Coordinate Viewer.
+A charting desk for Sailwind. Mark islands, plot and save routes, narrow down islands from mission directions, find your position by dead reckoning, and follow your boat live with Coordinate Viewer.
 
 ## Screenshots
 

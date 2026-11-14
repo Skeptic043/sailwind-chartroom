@@ -86,13 +86,22 @@ test("summarizes route legs and total distance", () => {
 });
 
 test("parses Coordinate Viewer day, time and wind records", () => {
-  const points = parseCoordinateViewer("Day: 12\n35.25 -3.5 6.5 90\n35,5 -3,0");
-  assert.equal(points.length, 2);
+  const points = parseCoordinateViewer("Day: 12\n35.25 -3.5 6.5 90\n35,5 -3,0\n35.6 -3.1 6.508333 0");
+  assert.equal(points.length, 3);
   assert.equal(points[0].day, "12");
   assert.equal(points[0].time, "06:30");
-  assert.equal(points[0].wind, "E");
+  // The game time keeps its full precision, as absolute hours from day 0.
+  assert.equal(points[0].t, 12 * 24 + 6.5);
+  assert.ok(Math.abs(points[2].t - (12 * 24 + 6.508333)) < 1e-9);
+  // Coordinate Viewer's angle is measured from east, counterclockwise: 90 is a wind blowing north.
+  assert.equal(points[0].wind, "N");
+  assert.equal(points[0].windDeg, 0);
+  assert.equal(points[2].wind, "E");
+  assert.equal(points[2].windDeg, 90);
   assert.equal(points[1].lat, 35.5);
+  assert.equal(points[1].t, null);
 });
+
 
 test("imports the useful parts of legacy Sailwind Map exports", () => {
   const chart = importLegacyMap({
@@ -646,7 +655,7 @@ test("labelled exports round-trip every chart item", async () => {
 });
 
 test("refuses files from a newer Chartroom instead of dropping what it cannot read", () => {
-  assert.throws(() => importChartData({ format: "sailwind-chartroom", version: 3, charts: [createChart()] }), /newer version of Chartroom/);
+  assert.throws(() => importChartData({ format: "sailwind-chartroom", version: 4, charts: [createChart()] }), /newer version of Chartroom/);
   assert.throws(() => importChartData({ format: "sailwind-chartroom", version: 1, charts: [] }), /no charts/);
 });
 

@@ -7,7 +7,9 @@ import { assignedBoats, boatMarkerSize, drawBoatSilhouette } from "./boats.mjs";
 import { clamp, formatBearing, formatDirection, formatNm, isNightTime, nearlyMultiple, shortCoordinate } from "./format.mjs";
 import { canvas, context, elements } from "./dom.mjs";
 import { activeChart, isSelected, persist } from "./state.mjs";
-import { boatRowAt, chartIsland, chartSearchIsland, featureBoats, islandPixelSpan, screenToWorld, symbolSize, worldToScreen } from "./viewport.mjs";
+import { trackBearing, trackSegments, unwrapNear, unwrapStretch } from "./track.mjs";
+import { formatGameTime } from "./gametime.mjs";
+import { boatRowAt, chartIsland, chartSearchIsland, featureBoats, centredArrowEnds, islandPixelSpan, projector, screenToWorld, symbolSize, windArrowEnds, worldToScreen } from "./viewport.mjs";
 
 let visibleChartLabels = new Set();
 
@@ -62,7 +64,8 @@ function chartLabelCandidates() {
     add("route-leg", index, "Route distance", leg.mid, false, 40);
   });
   if (chart.layers.winds) for (const wind of chart.winds) add("wind", wind.id, wind.label, wind, isSelected("wind", wind.id));
-  if (chart.layers.track && chart.track.length) add("track", "last", "Last fix", chart.track.at(-1));
+  const track = shownItems(chart, "track");
+  if (track.length) add("track", "last", "Last position", track.at(-1));
   return candidates;
 }
 
@@ -128,6 +131,7 @@ export function drawChart() {
   drawRoute(palette);
   // Coordinate Viewer positions sit above route lines, which often run along them.
   if (activeChart().layers.track) drawTrack(palette);
+  if (activeChart().layers.deadReckoning) drawDrPositions(palette);
   drawFeatures(palette);
   overlay(palette);
   drawCompassRose(width - 56, height - 64, palette);
@@ -215,33 +219,124 @@ function drawLines(palette) {
   }
 }
 
+// Positions closer together on screen than this share one dot. The line skips positions less than a
+// pixel from the last one it drew, which a long recording seen from far out is mostly made of.
+const TRACK_DOT_SPACING_PX = 4;
+const TRACK_LINE_SPACING_PX = 1;
+const TRACK_WIND_SPACING_PX = 70;
+
+// Each stretch of the track is drawn on its own, so a reload or a jump leaves a gap instead of a false
+// line. A stretch that crosses the chart's east or west edge is drawn again from the other side.
 function drawTrack(palette) {
-  const track = activeChart().track;
+  const chart = activeChart();
+  const track = shownItems(chart, "track");
   if (!track.length) return;
+  const { width, height } = canvas.getBoundingClientRect();
+  const project = projector();
   context.save();
   context.strokeStyle = palette.track;
   context.lineWidth = 1.5;
-  strokeDashed(track.map(worldToScreen), [3, 5]);
+  const segments = trackSegments(track);
+  for (const segment of segments) {
+    const line = unwrapStretch(segment);
+    const offsets = [0];
+    if (line.some((point) => point.lon > WORLD_BOUNDS.maxLon)) offsets.push(-360);
+    if (line.some((point) => point.lon < WORLD_BOUNDS.minLon)) offsets.push(360);
+    for (const offset of offsets) {
+      const screen = [];
+      for (const [index, point] of line.entries()) {
+        const next = project({ lat: point.lat, lon: point.lon + offset });
+        const previous = screen.at(-1);
+        if (previous && index < line.length - 1 && Math.abs(next.x - previous.x) < TRACK_LINE_SPACING_PX && Math.abs(next.y - previous.y) < TRACK_LINE_SPACING_PX) continue;
+        screen.push(next);
+      }
+      strokeDashed(screen, [3, 5]);
+    }
+  }
+  const visible = (screen) => screen.x >= -12 && screen.y >= -12 && screen.x <= width + 12 && screen.y <= height + 12;
+  let lastDot = null;
+  let lastWind = null;
   for (const point of track) {
-    const screen = worldToScreen(point);
+    const screen = project(point);
+    const selected = isSelected("track", point.id);
+    if (!selected && !visible(screen)) continue;
+    if (chart.layers.trackWinds && Number.isFinite(point.windDeg) && (!lastWind || Math.hypot(screen.x - lastWind.x, screen.y - lastWind.y) >= TRACK_WIND_SPACING_PX)) {
+      drawTrackWind(screen, point.windDeg, palette);
+      lastWind = screen;
+    }
+    if (!selected && lastDot && Math.abs(screen.x - lastDot.x) < TRACK_DOT_SPACING_PX && Math.abs(screen.y - lastDot.y) < TRACK_DOT_SPACING_PX) continue;
+    lastDot = screen;
     context.fillStyle = isNightTime(point.time) ? palette.night : palette.track;
     context.beginPath();
     context.arc(screen.x, screen.y, 2.2, 0, Math.PI * 2);
     context.fill();
-    if (isSelected("track", point.id)) selectionHalo(screen, palette);
+    if (selected) selectionHalo(screen, palette);
   }
-  const last = track.at(-1);
-  const previous = track.at(-2);
+  const lastSegment = segments.at(-1);
+  const last = lastSegment.at(-1);
+  const previous = lastSegment.at(-2);
   const screen = worldToScreen(last);
   context.translate(screen.x, screen.y);
-  context.rotate(previous ? bearingDegrees(previous, last) * Math.PI / 180 : 0);
+  context.rotate(previous ? trackBearing(previous, last) * Math.PI / 180 : 0);
   context.fillStyle = palette.track;
   context.strokeStyle = palette.paperB;
   context.lineWidth = 1.5;
   context.beginPath(); context.moveTo(0, -9); context.lineTo(6, 7); context.lineTo(0, 4); context.lineTo(-6, 7); context.closePath();
   context.fill(); context.stroke();
   context.restore();
-  if (activeChart().layers.labels && labelVisible("track", "last")) labelText(`Last fix${last.day ? ` · day ${last.day}` : ""}${last.time ? ` ${last.time}` : ""}`, screen.x, screen.y + 11, palette);
+  if (activeChart().layers.labels && labelVisible("track", "last")) labelText(`Last position${last.day ? ` · day ${last.day}` : ""}${last.time ? ` ${last.time}` : ""}`, screen.x, screen.y + 11, palette);
+}
+
+// A small faded arrow for the wind Coordinate Viewer recorded, pointing where it blew toward.
+function drawTrackWind(screen, degrees, palette) {
+  const { start, end } = centredArrowEnds(screen, degrees, 16);
+  context.save();
+  context.strokeStyle = palette.faded;
+  context.fillStyle = palette.faded;
+  context.lineWidth = 1.2;
+  context.beginPath(); context.moveTo(start.x, start.y); context.lineTo(end.x, end.y); context.stroke();
+  context.translate(end.x, end.y);
+  context.rotate(Math.atan2(end.y - start.y, end.x - start.x));
+  context.beginPath(); context.moveTo(0, 0); context.lineTo(-5, -3); context.lineTo(-5, 3); context.closePath(); context.fill();
+  context.restore();
+}
+
+// Dead reckoning positions, each with a dashed line from where it was reckoned from. As on paper
+// charts, a DR position is a half circle round its dot, and its circle shows how far off it may be.
+function drawDrPositions(palette) {
+  const chart = activeChart();
+  for (const position of shownItems(chart, "dr")) {
+    const selected = isSelected("dr", position.id);
+    const colour = selected ? palette.select : palette.accent;
+    const screen = worldToScreen(position);
+    context.save();
+    context.strokeStyle = colour;
+    context.lineWidth = 1.5;
+    // A run across the chart's east or west edge is drawn the short way, off the edge.
+    strokeDashed([worldToScreen(unwrapNear(position, position.from)), screen], [6, 4]);
+    if (position.sigmaNm > 0) {
+      const radius = position.sigmaNm / NM_PER_DEGREE * chart.view.zoom;
+      if (radius >= 3) {
+        context.beginPath();
+        context.arc(screen.x, screen.y, radius, 0, Math.PI * 2);
+        context.fillStyle = palette.areaFill;
+        context.fill();
+        context.lineWidth = 1;
+        strokeDashedCircle(screen, radius, [3, 4]);
+      }
+    }
+    context.fillStyle = colour;
+    context.lineWidth = selected ? 2.4 : 1.8;
+    context.beginPath();
+    context.arc(screen.x, screen.y, 6, Math.PI, Math.PI * 2);
+    context.stroke();
+    context.beginPath();
+    context.arc(screen.x, screen.y, 1.8, 0, Math.PI * 2);
+    context.fill();
+    context.restore();
+    if (selected) selectionHalo(screen, palette);
+    if (chart.layers.labels && (selected || position.label)) labelText(position.label || ["DR", formatGameTime(position.t)].filter(Boolean).join(" · "), screen.x, screen.y + 10, palette);
+  }
 }
 
 function drawAreas(palette) {
@@ -377,9 +472,7 @@ const WIND_ARROW_PX = 34;
 export function drawWindIndicator(wind, selected, palette) {
   const length = symbolSize("wind");
   const size = length / WIND_ARROW_PX;
-  const start = worldToScreen(wind);
-  const radians = wind.bearing * Math.PI / 180;
-  const end = { x: start.x + Math.sin(radians) * length, y: start.y - Math.cos(radians) * length };
+  const { start, end } = windArrowEnds(wind);
   const angle = Math.atan2(end.y - start.y, end.x - start.x);
   context.save();
   context.strokeStyle = selected ? palette.select : palette.track;
@@ -400,8 +493,9 @@ export function drawWindIndicator(wind, selected, palette) {
   context.closePath();
   context.fill();
   context.restore();
-  if (selected) selectionHalo(start, palette);
-  if (activeChart().layers.labels && wind.label && labelVisible("wind", wind.id)) labelText(wind.label, start.x, start.y + 12, palette);
+  const centre = worldToScreen(wind);
+  if (selected) selectionHalo(centre, palette);
+  if (activeChart().layers.labels && wind.label && labelVisible("wind", wind.id)) labelText(wind.label, centre.x, centre.y + 12, palette);
 }
 
 // The measure line, and the one being drawn: distance, bearing and passage time at the chart's speed.
@@ -841,7 +935,7 @@ function updateZoomLabel() {
 export function fitData() {
   const chart = activeChart();
   // Only what the chart shows; hidden layers stay out of the fit.
-  const points = [...shownItems(chart, "route"), ...shownItems(chart, "saved-point"), ...(chart.layers.track ? chart.track : []),
+  const points = [...shownItems(chart, "route"), ...shownItems(chart, "saved-point"), ...shownItems(chart, "track"), ...shownItems(chart, "dr"),
     ...shownItems(chart, "measure").flatMap((measure) => [measure, measure.end]), ...shownItems(chart, "wind"), ...shownItems(chart, "line").flatMap((line) => [line, line.end])];
   // A Scrambled Seas world's map counts while it is shown, so the whole world fits on screen.
   for (const { centre, item } of vanillaIslands()) if (item) points.push(centre);
@@ -868,10 +962,15 @@ export function fitData() {
   fitPoints(points);
 }
 
+// Loops rather than Math.min(...list): a long track has more positions than a call takes arguments.
 export function fitPoints(points) {
-  const lats = points.map((point) => point.lat);
-  const lons = points.map((point) => point.lon);
-  const bounds = { minLat: Math.min(...lats), maxLat: Math.max(...lats), minLon: Math.min(...lons), maxLon: Math.max(...lons) };
+  const bounds = { minLat: Infinity, maxLat: -Infinity, minLon: Infinity, maxLon: -Infinity };
+  for (const point of points) {
+    bounds.minLat = Math.min(bounds.minLat, point.lat);
+    bounds.maxLat = Math.max(bounds.maxLat, point.lat);
+    bounds.minLon = Math.min(bounds.minLon, point.lon);
+    bounds.maxLon = Math.max(bounds.maxLon, point.lon);
+  }
   const rectangle = canvas.getBoundingClientRect();
   const width = Math.max(.5, bounds.maxLon - bounds.minLon);
   const height = Math.max(.5, bounds.maxLat - bounds.minLat);

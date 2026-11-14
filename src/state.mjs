@@ -5,6 +5,9 @@ import { elements } from "./dom.mjs";
 const UNDO_LIMIT = 60;
 
 export let host = null;
+// Whether Coordinate Viewer is being followed live, which decides the latest position (dead-reckoning.mjs).
+export const live = { following: false };
+
 export let workspace = null;
 export let selection = null;
 export let selectedKeys = new Set();
@@ -37,12 +40,34 @@ export function setSaveStatus(ok) {
   status.lastChild.textContent = ok ? " Saved" : " Save failed";
 }
 
+// Snapshots copy everything but the track, which can hold tens of thousands of positions. Each
+// snapshot keeps its own list of the same position objects instead. Only selected positions are ever
+// changed in place, so before an edit each snapshot is given its own copy of those (protectSelected).
 function snapshotChart() {
-  return structuredClone(activeChart());
+  const chart = activeChart();
+  const { track, ...rest } = chart;
+  const snapshot = structuredClone(rest);
+  snapshot.track = track.slice();
+  return snapshot;
+}
+
+// Gives every snapshot of the chart, the new one included, its own copy of each selected position,
+// in one pass over each snapshot's list however many positions are selected.
+function protectSelected(snapshots) {
+  const chart = activeChart();
+  const ids = new Set(selectedRefs().filter((ref) => ref.kind === "track").map((ref) => ref.id));
+  if (!ids.size) return;
+  const selected = new Set(chart.track.filter((point) => ids.has(point.id)));
+  for (const snapshot of snapshots) {
+    if (snapshot.id !== chart.id) continue;
+    snapshot.track = snapshot.track.map((point) => selected.has(point) ? structuredClone(point) : point);
+  }
 }
 
 export function pushUndo() {
-  undoStack.push(snapshotChart());
+  const snapshot = snapshotChart();
+  protectSelected([...undoStack, ...redoStack, snapshot]);
+  undoStack.push(snapshot);
   if (undoStack.length > UNDO_LIMIT) undoStack.shift();
   redoStack = [];
   updateUndoButtons();
@@ -76,9 +101,11 @@ export function commit(mutator, { history = true, render = true } = {}) {
 // Adds items that are not an edit, such as live positions. They join every snapshot of the chart as
 // well, so undoing or redoing an edit never takes them away.
 export function appendOutsideHistory(chart, key, items) {
-  chart[key].push(...items);
+  for (const item of items) chart[key].push(item);
   for (const snapshot of [...undoStack, ...redoStack]) {
-    if (snapshot.id === chart.id) snapshot[key].push(...structuredClone(items));
+    if (snapshot.id !== chart.id) continue;
+    const copies = key === "track" ? items : structuredClone(items);
+    for (const item of copies) snapshot[key].push(item);
   }
 }
 

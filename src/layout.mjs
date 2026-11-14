@@ -38,6 +38,8 @@ export function applyLayout() {
     button.title = label;
     button.setAttribute("aria-label", label);
     button.textContent = label;
+    // The top bar's toggle reads as pressed while its panel shows.
+    elements[`show-${side}-panel`].setAttribute("aria-pressed", String(open));
     const resizer = elements[`${side}-panel-resizer`];
     resizer.setAttribute("aria-valuemin", "190");
     resizer.setAttribute("aria-valuemax", String(Math.round(panelMaxWidth(side))));

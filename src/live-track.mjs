@@ -1,7 +1,7 @@
 // Follows Coordinate Viewer as it records: the desktop host watches the file and sends each new line.
 import { parseCoordinateViewer } from "./model.mjs";
 import { elements, showToast } from "./dom.mjs";
-import { activeChart, appendOutsideHistory, host, persist, workspace } from "./state.mjs";
+import { activeChart, appendOutsideHistory, host, live, persist, workspace } from "./state.mjs";
 import { centerOn } from "./render.mjs";
 import { renderEverything } from "./panels.mjs";
 
@@ -20,6 +20,7 @@ export function initLiveTrack() {
   // The host keeps the chart, so a reloaded page carries on into the same one.
   host.on("track-following", ({ name, chartId, resumed }) => {
     followedChartId = String(chartId ?? "");
+    live.following = true;
     awaitingFirst = resumed !== true;
     fileName = String(name ?? "");
     const chart = workspace.charts.find((candidate) => candidate.id === followedChartId);
@@ -33,6 +34,7 @@ export function initLiveTrack() {
   });
   host.on("track-stopped", () => {
     followedChartId = null;
+    live.following = false;
     renderButton();
     showToast("Stopped following Coordinate Viewer.");
   });

@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.8.0
+
+### Added
+- `Dead reckoning` tool (D)
+- Select at least two Coordinate Viewer positions to see their distance and average speed. You can also save them as a route
+- Use the `Tools` and `Items` buttons in the top bar to show or hide the side panels without opening the `View` menu
+- Recorded wind appears along the Coordinate Viewer track and has its own toggle in `View`
+- The `View` menu can show or hide DR positions
+
+### Changed
+- Coordinate Viewer positions keep their exact game time instead of rounding to the nearest minute
+- The track leaves a gap after a jump, such as reloading a save or starting a new game in the same slot, instead of drawing across the chart
+- Long Coordinate Viewer tracks draw faster, and undo no longer copies the whole track for every edit
+- `Imported track` in the `View` menu is now `Coordinate Viewer track`. The final position is labelled `Last position`
+- Wind indicators are centered on the point you place them instead of rotating around the placed location
+- The route bar no longer shows the bearing of the first leg
+- Paired fields stack in narrow side panels instead of squeezing together
+
+### Fixed
+- Corrected Coordinate Viewer wind directions. Coordinate Viewer records wind as an angle from east, but Chartroom treated it as a compass bearing. Charts from earlier versions are corrected when loaded
+- A track crossing the chart’s east and west edges no longer draws a line across the whole chart
+
 ## 0.7.1
 
 ### Added

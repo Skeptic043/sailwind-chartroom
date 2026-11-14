@@ -1,6 +1,7 @@
 // Chart edits started from panels, dialogs and tools.
 import { createFeature, createSearch, createWind, destinationPoint, locationRangeForType, parseBearing, parseCoordinate, removeChartItems, revealLayer, searchExtent, setLocked, translateChartItems } from "./model.mjs";
 import { clamp, positiveNumber } from "./format.mjs";
+import { parseDayTime } from "./gametime.mjs";
 import { elements, showToast } from "./dom.mjs";
 import { clearSelection, commit, refreshSelection, replaceSelectionState, selectedItem, selectedRefs, selection } from "./state.mjs";
 import { fitPoints } from "./render.mjs";
@@ -62,12 +63,17 @@ export function updateSelectedFromForm(kind) {
       day: elements["route-day"].value.trim(),
       time: elements["route-time"].value.trim()
     });
-    if (kind === "track") Object.assign(updates, {
-      name: elements["track-name"].value.trim(),
-      day: elements["track-day"].value.trim(),
-      time: elements["track-time"].value.trim(),
-      wind: elements["track-wind"].value.trim()
-    });
+    if (kind === "track") {
+      const day = elements["track-day"].value.trim();
+      const time = elements["track-time"].value.trim();
+      const wind = elements["track-wind"].value.trim();
+      Object.assign(updates, { name: elements["track-name"].value.trim(), day, time, wind });
+      // The exact game time and wind bearing follow the text only when it is changed.
+      if (day !== item.day || time !== item.time) updates.t = parseDayTime(day, time);
+      if (wind !== item.wind) {
+        try { updates.windDeg = parseBearing(wind); } catch { updates.windDeg = null; }
+      }
+    }
     if (kind === "wind") Object.assign(updates, {
       label: elements["wind-label"].value.trim(),
       bearing: parseBearing(elements["wind-direction"].value),

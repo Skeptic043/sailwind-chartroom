@@ -4,8 +4,12 @@ import { assignedIsland, islandById, searchIsland, visibleIsland } from "./islan
 import { assignedBoats } from "./boats.mjs";
 import { formatBearing, formatDirection, formatLeg, formatNm, plainDegrees } from "./format.mjs";
 import { elements } from "./dom.mjs";
-import { activeChart, isSelected, selectItem, selectedItem, selectedKeys, selectedRefs, selection, updateUndoButtons, workspace } from "./state.mjs";
+import { activeChart, isSelected, live, selectItem, selectedItem, selectedKeys, selectedRefs, selection, updateUndoButtons, workspace } from "./state.mjs";
 import { centerOn, drawChart } from "./render.mjs";
+import { renderDeadReckoning } from "./dead-reckoning-panel.mjs";
+import { renderTrackSelection } from "./track-selection.mjs";
+import { latestPosition, positionLabel } from "./dead-reckoning.mjs";
+import { formatGameTime } from "./gametime.mjs";
 
 export function renderEverything() {
   renderHeader();
@@ -14,6 +18,7 @@ export function renderEverything() {
   renderRouteSummary();
   renderInspector();
   renderFeatureList();
+  renderDeadReckoning();
   updateUndoButtons();
   drawChart();
 }
@@ -21,7 +26,7 @@ export function renderEverything() {
 // Tool buttons and the help list show whatever keys Settings assigns.
 function renderShortcuts() {
   const { shortcuts } = workspace.settings;
-  for (const button of document.querySelectorAll(".tool[data-mode]")) {
+  for (const button of document.querySelectorAll(".tool-grid .tool")) {
     const key = shortcuts[button.dataset.mode]?.toUpperCase() ?? "";
     button.querySelector("b").textContent = key;
     button.title = `${button.querySelector("span").textContent} (${key})`;
@@ -51,6 +56,7 @@ export const LAYER_CONTROLS = Object.freeze([
   ["layer-red-lines", "redLines", ["measure"]],
   ["layer-blue-lines", "blueLines", ["measure"]],
   ["layer-green-lines", "greenLines", ["measure"]],
+  ["layer-dead-reckoning", "deadReckoning", []],
   ["layer-areas", "areas", []],
   ["layer-area-islands", "areaIslands", ["areas", "islands"]],
   ["layer-searches", "searches", []],
@@ -62,6 +68,7 @@ export const LAYER_CONTROLS = Object.freeze([
   ["layer-boats", "boats", []],
   ["layer-islands", "islands", []],
   ["layer-track", "track", []],
+  ["layer-track-winds", "trackWinds", ["track"]],
   ["layer-vanilla", "vanillaMap", []],
   ["layer-imported-map", "importedMap", []],
   // Secret islands are part of whichever map is on.
@@ -95,8 +102,6 @@ export function renderRouteSummary() {
   elements["route-summary-title"].textContent = saved ? saved.name : "Route";
   elements["route-actions"].hidden = Boolean(saved);
   elements["route-distance"].textContent = `${formatNm(summary.totalNm)} nm`;
-  const nextLeg = summary.legs[0];
-  elements["route-bearing"].textContent = nextLeg ? formatBearing(nextLeg.bearing) : "—";
   if (document.activeElement !== elements["route-speed"]) elements["route-speed"].value = chart.speedKn;
   elements["route-eta"].textContent = formatDuration(summary.totalNm / chart.speedKn);
 }
@@ -111,6 +116,9 @@ export function renderInspector() {
   const isWind = selection?.kind === "wind" && item;
   const isTrack = selection?.kind === "track" && item;
   const isMapIsland = selection?.kind === "map-island" && item;
+  const isDr = selection?.kind === "dr" && item;
+  elements["dr-inspector"].hidden = !isDr;
+  if (isDr) renderDrInspector(item);
   elements["empty-inspector"].hidden = Boolean(item);
   elements["feature-inspector"].hidden = !isFeature;
   elements["route-inspector"].hidden = !isRoute;
@@ -129,6 +137,7 @@ export function renderInspector() {
     for (const field of ["name", "day", "time", "wind"]) elements[`track-${field}`].value = item[field];
     elements["track-lat"].value = item.lat.toFixed(4);
     elements["track-lon"].value = item.lon.toFixed(4);
+    renderTrackSelection();
   }
   if (isMeasure) renderMeasureInspector(item, selection.kind === "line");
   if (isSearch) renderSearchInspector(item);
@@ -161,9 +170,10 @@ export function renderInspector() {
     const selectedCount = selectedKeys.size;
     elements["feature-selection-note"].hidden = selectedCount <= 1;
     elements["feature-selection-note"].textContent = `${selectedCount} items selected. Coordinate changes move the whole selection; other fields edit this item.`;
-    const origin = activeChart().track.at(-1) ?? activeChart().route.findLast((point) => point.id !== item.id) ?? null;
+    const position = latestPosition(activeChart(), { followingLive: live.following });
+    const origin = position ?? activeChart().route.findLast((point) => point.id !== item.id) ?? null;
     elements["feature-navigation"].hidden = !origin;
-    if (origin) elements["feature-navigation"].textContent = `From last fix: ${formatLeg(origin, item)}`;
+    if (origin) elements["feature-navigation"].textContent = `From ${position ? `the latest ${positionLabel(position)}` : "the last waypoint"}: ${formatLeg(origin, item)}`;
   }
   if (isRoute) {
     const savedRoute = selection.kind === "saved-point" ? savedRouteForPoint(activeChart(), item.id) : null;
@@ -210,6 +220,18 @@ function renderLockControls() {
   const refs = selectedRefs().filter((ref) => ref.kind !== "map-island");
   elements["lock-selected"].disabled = !refs.some((ref) => !isLocked(chart, ref));
   elements["unlock-selected"].disabled = !refs.some((ref) => isLocked(chart, ref));
+}
+
+// Where a DR position is, and the course, speed and time that put it there.
+function renderDrInspector(position) {
+  elements["dr-label"].value = position.label;
+  elements["dr-detail"].textContent = [
+    `${formatCoordinate(position.lat, "lat", 3)} · ${formatCoordinate(position.lon, "lon", 3)}`,
+    formatGameTime(position.t),
+    `Course: ${formatBearing(position.course)} · Speed: ${position.speedKn} kn · Time sailed: ${formatDuration(position.hours)} · Distance: ${formatNm(position.speedKn * position.hours)} nm`,
+    `Starting position: ${position.from.label || "a position"}`,
+    position.sigmaNm > 0 ? `Possible error: about ${formatNm(position.sigmaNm)} nm, growing by ${position.percent}% of the distance sailed` : ""
+  ].filter(Boolean).join("\n");
 }
 
 function renderSavedRouteInspector(route) {
@@ -297,10 +319,11 @@ export function renderFeatureList() {
     ...chart.searches.map((item) => ({ kind: "search", item, name: item.label || "Search area", detail: `${formatDirection(item.bearing)} · ${formatNm(item.distanceNm)} nm${assignedBoats(item).length ? ` · ${boatNames(assignedBoats(item))}` : ""}`, marker: "⌖" })),
     ...chart.measures.map((item) => ({ kind: "measure", item, name: "Measure line", detail: `${formatNm(distanceNm(item, item.end))} nm · ${formatBearing(bearingDegrees(item, item.end))}`, marker: "↔" })),
     ...chart.segments.map((item) => ({ kind: "line", item, name: `Kept ${item.color} line`, detail: `${formatNm(distanceNm(item, item.end))} nm · ${formatBearing(bearingDegrees(item, item.end))}`, marker: "╱" })),
-    ...chart.winds.map((item) => ({ kind: "wind", item, name: item.label || "Wind", detail: withDayTime(`Flows toward ${formatDirection(item.bearing)}`, item), marker: "➤" }))
+    ...chart.winds.map((item) => ({ kind: "wind", item, name: item.label || "Wind", detail: withDayTime(`Flows toward ${formatDirection(item.bearing)}`, item), marker: "➤" })),
+    ...chart.drPositions.map((item) => ({ kind: "dr", item, name: item.label || "DR position", detail: [formatGameTime(item.t), item.sigmaNm > 0 ? `±${formatNm(item.sigmaNm)} nm` : ""].filter(Boolean).join(" · ") || "Dead reckoning", marker: "◓" }))
   ].filter((entry) => (filter === "all" || entry.kind === filter)
     && `${entry.name} ${entry.detail} ${assignedBoats(entry.item).map((boat) => boat.provider).join(" ")} ${entry.item.notes ?? ""} ${entry.search ?? ""}`.toLowerCase().includes(query));
-  elements["feature-count"].textContent = chart.features.length + chart.route.length + chart.savedRoutes.length + chart.searches.length + chart.measures.length + chart.segments.length + chart.winds.length;
+  elements["feature-count"].textContent = chart.features.length + chart.route.length + chart.savedRoutes.length + chart.searches.length + chart.measures.length + chart.segments.length + chart.winds.length + chart.drPositions.length;
   elements["feature-list"].replaceChildren(...items.map((entry) => {
     const { kind, item } = entry;
     const focus = chartItemFocusPoint(kind, item);

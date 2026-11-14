@@ -8,7 +8,7 @@ import { renderEverything } from "./panels.mjs";
 
 export function importTrackText(text) {
   const points = parseCoordinateViewer(text);
-  commit((chart) => { chart.track.push(...points); });
+  commit((chart) => { for (const point of points) chart.track.push(point); });
   fitData();
   showToast(`Imported ${points.length} track position${points.length === 1 ? "" : "s"}.`);
 }

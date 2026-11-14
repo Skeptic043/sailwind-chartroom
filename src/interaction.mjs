@@ -10,6 +10,7 @@ import { boatColours, drawAreaCircle, drawChart, drawIslandSilhouette, drawLine,
 import { findHit, resetHitCycle, nearestTrackPoint, onSelectedAreaEdge, selectedLineEnd, snapAlongRay, snapPoint } from "./hits.mjs";
 import { addLocation, addSearch, addWind, setAnchor } from "./edits.mjs";
 import { renderEverything, renderInspector, renderRouteSummary } from "./panels.mjs";
+import { DR_HINT, pickStart, reckoningStart, showDeadReckoning } from "./dead-reckoning-panel.mjs";
 
 // Holding Ctrl places freely. On macOS that is Option, because Ctrl-click is a right-click there.
 const placesFreely = (event) => host.platform === "mac" ? event.altKey : event.ctrlKey;
@@ -21,7 +22,8 @@ const MODE_HINTS = {
   measure: "Drag from one point to another, or click each end. The line stays until you delete it or measure a new one.",
   area: "Press where the area is centred and drag out its radius. Drag the edge of a selected area to resize it.",
   search: "Press on the port or position that gave the direction, drag toward the destination and let go at the distance. Snaps to compass points.",
-  wind: "Press where the regional wind belongs, then drag in the direction it is blowing toward."
+  wind: "Press where the regional wind belongs, then drag in the direction it is blowing toward.",
+  dr: DR_HINT
 };
 
 const DRAG_THRESHOLD_PX = 5;
@@ -76,6 +78,25 @@ export function drawToolPreview(palette) {
   drawPlacementDraft(palette);
   drawMagnet(palette);
   drawMarquee(palette);
+  drawReckoningStart(palette);
+}
+
+// Where the next DR position will start, while the Dead reckoning tool is active.
+function drawReckoningStart(palette) {
+  const start = reckoningStart();
+  if (!start) return;
+  const at = worldToScreen(start);
+  context.save();
+  context.strokeStyle = palette.accent;
+  context.lineWidth = 2;
+  context.beginPath();
+  context.arc(at.x, at.y, 9, 0, Math.PI * 2);
+  for (const [dx, dy] of [[0, -1], [1, 0], [0, 1], [-1, 0]]) {
+    context.moveTo(at.x + dx * 5, at.y + dy * 5);
+    context.lineTo(at.x + dx * 14, at.y + dy * 14);
+  }
+  context.stroke();
+  context.restore();
 }
 
 let edgePan = null;
@@ -91,6 +112,8 @@ export function setMode(nextMode) {
   document.querySelectorAll(".tool").forEach((button) => button.classList.toggle("active", button.dataset.mode === mode));
   canvas.className = mode === "select" ? "" : `mode-${mode}`;
   elements["mode-hint"].textContent = MODE_HINTS[mode] ?? "Click the resolved position. Press Escape to cancel.";
+  // Dead reckoning fills in a form in its own panel.
+  showDeadReckoning(mode === "dr");
   drawChart();
 }
 
@@ -293,6 +316,11 @@ export function startPointer(event) {
   if (forcePan) return startPan(event, screen);
 
   const target = snapPoint(screen, placesFreely(event));
+  if (mode === "dr") {
+    pickStart(target);
+    drawChart();
+    return;
+  }
   if (mode === "resolve") {
     resolveToLocation(target);
     return;

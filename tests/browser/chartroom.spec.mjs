@@ -250,13 +250,13 @@ test("refuses a file from a newer Chartroom with a clear message", async ({ char
 
 test("Settings opens the native window with the current keys and applies what it sends back", async ({ chartroom, page }) => {
   await chartroom.open();
-  const reply = { shortcuts: { select: "v", location: "k", route: "r", measure: "m", area: "a", search: "s", wind: "w" }, checkForUpdates: true, interfaceSize: 150 };
+  const reply = { shortcuts: { select: "v", location: "k", route: "r", measure: "m", area: "a", search: "s", wind: "w", dr: "d" }, checkForUpdates: true, interfaceSize: 150 };
   await page.evaluate((settings) => { window.__host.settingsReply = settings; }, reply);
   await page.locator('.app-menu[data-menu="file"] summary').click();
   await page.locator("#open-settings").click();
   const opened = await page.evaluate(() => window.__host.settingsOpened);
   expect(opened.settings.tools.find((tool) => tool.mode === "location")).toEqual({ mode: "location", label: "Add location", key: "l" });
-  expect(opened.defaults).toHaveLength(7);
+  expect(opened.defaults).toHaveLength(8);
   await expect(page.locator('.tool[data-mode="location"] b')).toHaveText("K");
   await expect(page.locator('kbd[data-shortcut="location"]')).toHaveText("K");
   await chartroom.press("k");
@@ -346,7 +346,7 @@ test("Help shows up to date and release notes; the startup check can be turned o
   await expect(page.locator("#update-install")).toBeHidden();
   await page.locator("#update-dialog-close").click();
 
-  await page.evaluate(() => { window.__host.settingsReply = { shortcuts: { select: "v", location: "l", route: "r", measure: "m", area: "a", search: "s", wind: "w" }, checkForUpdates: false, interfaceSize: 0 }; });
+  await page.evaluate(() => { window.__host.settingsReply = { shortcuts: { select: "v", location: "l", route: "r", measure: "m", area: "a", search: "s", wind: "w", dr: "d" }, checkForUpdates: false, interfaceSize: 0 }; });
   await page.locator('.app-menu[data-menu="file"] summary').click();
   await page.locator("#open-settings").click();
   await expect.poll(async () => (await chartroom.saved())?.settings.checkForUpdates).toBe(false);
@@ -361,7 +361,7 @@ test("themes and light or dark mode apply from settings and follow Settings chan
   await expect(page.locator("html")).toHaveAttribute("data-theme", "sailwind");
   await expect(page.locator("html")).toHaveAttribute("data-mode", "light");
   expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--paper-texture"))).toContain("assets/sailwind/paper-light.jpg");
-  const reply = { shortcuts: { select: "v", location: "l", route: "r", measure: "m", area: "a", search: "s", wind: "w" }, checkForUpdates: true, interfaceSize: 0, theme: "chartroom", appearance: "dark" };
+  const reply = { shortcuts: { select: "v", location: "l", route: "r", measure: "m", area: "a", search: "s", wind: "w", dr: "d" }, checkForUpdates: true, interfaceSize: 0, theme: "chartroom", appearance: "dark" };
   await page.evaluate((settings) => { window.__host.settingsReply = settings; }, reply);
   await page.locator('.app-menu[data-menu="file"] summary').click();
   await page.locator("#open-settings").click();
@@ -558,6 +558,8 @@ test("follows Coordinate Viewer live into the chart it started on", async ({ cha
   await expect.poll(() => page.evaluate(() => window.__host.workspace?.charts?.[0]?.track?.length ?? 0)).toBe(2);
   const [first, second] = (await chartroom.chart()).track;
   expect([first.lat, first.day, second.lon]).toEqual([40.1, "3", 0.6]);
+  // The fake Coordinate Viewer writes the wind as 90 and 92: blowing north, then just west of north.
+  expect([first.wind, second.wind, second.t]).toEqual(["N", "N", 3 * 24 + 10]);
   await chartroom.press("Control+z");
   const undone = await chartroom.chart();
   expect(undone.features, "undo takes back the location").toHaveLength(0);
@@ -616,7 +618,6 @@ test("a circumnavigation chart routes across the edge the short way", async ({ c
   await expect.poll(async () => (await chartroom.chart()).circumnavigation).toBe(true);
   // 20° east across the edge, then 10° south and 10° east.
   await expect(page.locator("#route-distance")).toHaveText(`${Math.round(20 * 140 + Math.hypot(10, 10) * 140).toLocaleString()} nm`);
-  await expect(page.locator("#route-bearing")).toContainText("090°");
   await page.locator("#route-circumnavigation").uncheck();
   await expect(page.locator("#route-distance")).toContainText("49,580");
 });
@@ -670,4 +671,80 @@ test("renaming a precisely placed location leaves it where it is", async ({ char
   await expect.poll(async () => (await chartroom.chart()).features[0].name).toBe("Bell buoy");
   const [buoy] = (await chartroom.chart()).features;
   expect([buoy.lat, buoy.lon]).toEqual([0.123456, 0.654321]);
+});
+
+const atSea = (items) => seaWith({ view: { lat: 30.6, lon: -4.45, zoom: 400 }, ...items });
+
+test("dead reckoning carries on from the latest position, or from a point clicked on the chart", async ({ chartroom, page }) => {
+  await chartroom.open(atSea({ track: [{ id: "cv", lat: 30.6, lon: -4.6, t: 3 * 24 + 10, day: "3", time: "10:00", windDeg: 45 }] }));
+  await chartroom.press("d");
+  await expect(page.locator("#dr-panel")).toBeVisible();
+  await expect(page.locator("#dr-from-label")).toHaveText("Your latest Coordinate Viewer position, day 3 10:00");
+  await expect(page.locator("#dr-percent").locator("..")).toHaveAttribute("title", /share of the distance sailed/);
+  await page.locator("#dr-course").fill("E");
+  await page.locator("#dr-speed").fill("6");
+  await page.locator("#dr-hours").fill("2");
+  await page.getByRole("button", { name: "Plot DR position" }).click();
+  const [dr] = (await chartroom.chart()).drPositions;
+  expect([dr.lat, dr.t, dr.course, dr.from.lon]).toEqual([30.6, 3 * 24 + 12, 90, -4.6]);
+  expect(dr.sigmaNm, "10% of the 12 nm sailed").toBeCloseTo(1.2, 9);
+  expect(dr.lon).toBeCloseTo(-4.6 + 12 / 140, 9);
+  await expect(page.locator("#dr-inspector")).toBeVisible();
+  await expect(page.locator("#dr-from-label")).toHaveText("Your latest DR position, day 3 12:00");
+
+  // A click on open water starts the next one there, until the latest position is chosen again.
+  await chartroom.clickChart(100, 100);
+  await expect(page.locator("#dr-from-label")).toHaveText(/° N · /);
+  await expect(page.locator("#dr-from-latest")).toBeVisible();
+  await page.locator("#dr-from-latest").click();
+  await expect(page.locator("#dr-from-label")).toHaveText("Your latest DR position, day 3 12:00");
+
+  await page.locator('.app-menu[data-menu="view"] > summary').click();
+  await page.locator("#layer-dead-reckoning").uncheck();
+  await expect.poll(async () => (await chartroom.chart()).layers.deadReckoning).toBe(false);
+});
+
+test("selected track positions show their figures and save as a route", async ({ chartroom, page }) => {
+  await chartroom.open(seaWith({
+    view: { lat: 0, lon: 0.01, zoom: 2000 },
+    track: [{ id: "t1", lat: 0, lon: 0, t: 10 }, { id: "t2", lat: 0, lon: 0.01, t: 10.5 }, { id: "t3", lat: 0, lon: 0.02, t: 11 }]
+  }));
+  const box = await chartroom.canvas.boundingBox();
+  await chartroom.dragChart({ x: 20, y: 20 }, { x: box.width - 20, y: box.height - 20 }, { modifiers: ["Shift"] });
+  await expect(page.locator("#track-selection")).toBeVisible();
+  await expect(page.locator("#track-selection-detail")).toContainText("3 positions");
+  await page.locator("#track-to-route").click();
+  const [route] = (await chartroom.chart()).savedRoutes;
+  expect(route.points.map((point) => point.lon)).toEqual([0, 0.02]);
+});
+
+test("the top bar toggles show and hide the side panels", async ({ chartroom, page }) => {
+  await chartroom.open();
+  await expect(page.locator("#show-left-panel")).toHaveAttribute("aria-pressed", "true");
+  await page.locator("#show-left-panel").click();
+  await expect(page.locator("body")).toHaveClass(/left-panel-hidden/);
+  await expect(page.locator("#show-left-panel")).toHaveAttribute("aria-pressed", "false");
+  await page.locator("#show-right-panel").click();
+  await expect(page.locator("body")).toHaveClass(/right-panel-hidden/);
+  await page.locator("#show-left-panel").click();
+  await expect(page.locator("body")).not.toHaveClass(/left-panel-hidden/);
+});
+
+test("undo after moving a recorded position puts it back, and earlier history keeps it too", async ({ chartroom, page }) => {
+  await chartroom.open(seaWith({ view: { lat: 0, lon: 0, zoom: 200 }, track: [{ id: "cv", lat: 0, lon: 0, t: 30, day: "1", time: "06:00" }] }));
+  const centre = await page.evaluate(() => {
+    const canvas = document.querySelector("#chart-canvas").getBoundingClientRect();
+    return { x: canvas.width / 2, y: canvas.height / 2 };
+  });
+  await chartroom.press("l");
+  await chartroom.clickChart(centre.x + 150, centre.y + 100);
+  await page.keyboard.press("Escape");
+  await chartroom.dragChart(centre, { x: centre.x + 60, y: centre.y });
+  await expect.poll(async () => (await chartroom.chart()).track[0].lon).toBeGreaterThan(0.2);
+  await chartroom.press("Control+z");
+  await expect.poll(async () => (await chartroom.chart()).track[0].lon).toBe(0);
+  await chartroom.press("Control+z");
+  const chart = await chartroom.chart();
+  expect(chart.features).toHaveLength(0);
+  expect(chart.track[0].lon).toBe(0);
 });
