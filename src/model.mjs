@@ -59,7 +59,7 @@ const LAYER_DEFAULTS = Object.freeze({
   searches: true, searchLines: true, searchIslands: true,
   deadReckoning: true,
   winds: true,
-  grid: true, labels: true, boats: true, islands: true, track: true, trackWinds: true,
+  grid: true, labels: true, boats: true, islands: true, track: true, trackCoordinateViewer: true, trackVoyageRecorder: true, trackWinds: true,
   vanillaMap: false, importedMap: true, secretIslands: false, tradeWinds: false, expandedWinds: false
 });
 
@@ -77,7 +77,7 @@ export function itemShown(chart, kind, item) {
   if (kind === "wind") return layers.winds;
   if (kind === "measure") return layers.measure;
   if (kind === "line") return layers.measure && layers[`${item.color}Lines`];
-  if (kind === "track") return layers.track;
+  if (kind === "track") return layers.track && layers[trackSourceLayer(item)];
   if (kind === "dr") return layers.deadReckoning;
   if (kind === "map-island") return layers.importedMap && (layers.secretIslands || !islandById(item.id)?.secret);
   return true;
@@ -109,6 +109,12 @@ export function revealLayer(chart, kind, item) {
   if (kind === "measure") layers.measure = true;
   if (kind === "line") layers.measure = layers[`${item.color}Lines`] = true;
   if (kind === "dr") layers.deadReckoning = true;
+  if (kind === "track") layers.track = layers[trackSourceLayer(item)] = true;
+}
+
+// Positions from Voyage Recorder and from Coordinate Viewer show and hide separately.
+function trackSourceLayer(point) {
+  return point?.source === "voyage" ? "trackVoyageRecorder" : "trackCoordinateViewer";
 }
 
 export function createWorkspace() {
@@ -162,7 +168,7 @@ export const APPEARANCE_IDS = Object.freeze(["system", "light", "dark"]);
 
 // App settings live in the workspace so the host saves them with the charts.
 export function defaultSettings() {
-  return { shortcuts: defaultShortcuts(), checkForUpdates: true, skippedUpdate: "", interfaceSize: 0, theme: "chartroom", appearance: "system" };
+  return { shortcuts: defaultShortcuts(), checkForUpdates: true, skippedUpdate: "", interfaceSize: 0, theme: "chartroom", appearance: "system", searchPoints: DEFAULT_SEARCH_POINTS, clearReachedAreas: true };
 }
 
 function sanitizeSettings(value) {
@@ -172,7 +178,9 @@ function sanitizeSettings(value) {
     skippedUpdate: cleanText(value?.skippedUpdate, 40),
     interfaceSize: INTERFACE_SIZES.includes(value?.interfaceSize) ? value.interfaceSize : 0,
     theme: THEME_IDS.includes(value?.theme) ? value.theme : "chartroom",
-    appearance: APPEARANCE_IDS.includes(value?.appearance) ? value.appearance : "system"
+    appearance: APPEARANCE_IDS.includes(value?.appearance) ? value.appearance : "system",
+    searchPoints: SEARCH_POINT_CHOICES.includes(value?.searchPoints) ? value.searchPoints : DEFAULT_SEARCH_POINTS,
+    clearReachedAreas: value?.clearReachedAreas !== false
   };
 }
 
@@ -329,7 +337,11 @@ export function savedRouteForPoint(chart, pointId) {
 }
 
 // A search area is a rough heading and distance from where it was given: "about 120 nm SSE".
-// A compass point covers 11.25° either side, and the distance is trusted to within a percentage.
+// A direction covers half the gap to the next either side (11.25° on a 16-point compass), and the
+// distance is trusted to within a percentage. Searches are drawn on a 16, 32 or 64-point compass, as the
+// player chooses to match how their directions are given.
+export const SEARCH_POINT_CHOICES = [16, 32, 64];
+export const DEFAULT_SEARCH_POINTS = 16;
 export const DEFAULT_SPREAD_DEG = 11.25;
 export const DEFAULT_TOLERANCE_PCT = 10;
 
@@ -836,6 +848,8 @@ function sanitizeSavedRoute(value) {
   };
 }
 
+const TRACK_EVENTS = ["start", "stop", "sleep", "wake", "mark"];
+
 // A recorded position. t is absolute game hours (see gametime.mjs) and windDeg the direction the wind
 // blows toward, in degrees; day, time and wind are their display text. Positions from charts saved
 // before both were kept get t from their day and time text, and their wind labels corrected.
@@ -849,6 +863,10 @@ function sanitizeTrackPoint(value, legacyWind = false) {
   if (windDeg === null && legacyWind && COMPASS_POINTS.includes(wind)) windDeg = windFromMathAngle(COMPASS_POINTS.indexOf(wind) * COMPASS_STEP_DEG);
   if (windDeg !== null && (legacyWind || !wind)) wind = compassPoint(windDeg);
   const t = Number.isFinite(value.t) && value.t >= 0 ? Number(value.t) : parseDayTime(day, time);
+  // What Voyage Recorder adds: the boat, its course and speed over ground, sleep and recording events,
+  // and the first position after a load or new game, where the track always breaks.
+  const boat = cleanText(value.boat, 60);
+  const event = TRACK_EVENTS.includes(value.event) ? value.event : "";
   return {
     ...point,
     day,
@@ -856,6 +874,13 @@ function sanitizeTrackPoint(value, legacyWind = false) {
     wind,
     t,
     windDeg,
+    ...(boat && { boat }),
+    ...(Number.isFinite(value.course) && { course: value.course >= 0 && value.course < 360 ? Number(value.course) : normalizeDegrees(value.course) }),
+    ...(Number.isFinite(value.knots) && value.knots >= 0 && { knots: Number(value.knots) }),
+    ...(Number.isFinite(value.hull) && value.hull >= 0 && value.hull <= 100 && { hull: Math.round(value.hull) }),
+    ...(event && { event }),
+    ...(value.newSession === true && { newSession: true }),
+    ...(value.source === "voyage" && { source: "voyage" }),
     ...lockedFlag(value)
   };
 }
@@ -1066,6 +1091,126 @@ export function parseCoordinateViewer(text) {
   }
   if (!points.length) throw new Error("No valid Coordinate Viewer positions were found.");
   return points;
+}
+
+// Voyage Recorder writes one JSON object per line (its FORMAT.md). Unknown lines and fields are ignored and a
+// line that does not parse, such as one still being written, is skipped. A session line marks a load or new
+// game, so the next position starts a new stretch of track. Live following passes the same carry to every
+// run of lines, so a session line whose position arrives in the next run still breaks the track.
+export function parseVoyageRecorder(text, carry = { newSession: false }) {
+  const { points } = readVoyageRecorder(text, carry);
+  if (!points.length) throw new Error("No valid Voyage Recorder positions were found.");
+  return points;
+}
+
+// Everything a Voyage Recorder log holds: positions, the ports reached and the missions read from the mission
+// book (FORMAT.md). A run of lines can hold ports or missions without any position.
+export function readVoyageRecorder(text, carry = { newSession: false }) {
+  const points = [];
+  const ports = [];
+  const missions = [];
+  let newSession = carry.newSession === true;
+  for (const rawLine of String(text ?? "").split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line.startsWith("{")) continue;
+    let record;
+    try {
+      record = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (record?.type === "session") newSession = true;
+    const day = Number.isInteger(record?.day) && record.day >= 0 ? String(record.day) : "";
+    const hours = Number(record?.hour);
+    const t = day && Number.isFinite(hours) ? parseDayTime(day, hours) : null;
+    const when = { day, time: t === null ? "" : clockText(hours) };
+    if (record?.type === "port" && isFiniteCoordinate(record.lat, record.lon) && cleanText(record.port, 100)) {
+      ports.push({
+        ...when,
+        port: cleanText(record.port, 100),
+        island: Number.isInteger(record.island) ? record.island : -1,
+        lat: record.lat,
+        lon: record.lon,
+        ...(Number.isFinite(record.offsetLat) && Number.isFinite(record.offsetLon) && { offsetLat: record.offsetLat, offsetLon: record.offsetLon })
+      });
+      continue;
+    }
+    if (record?.type === "mission" && isFiniteCoordinate(record.originLat, record.originLon) && cleanText(record.destination, 100)) {
+      missions.push({
+        ...when,
+        origin: cleanText(record.origin, 100),
+        originLat: record.originLat,
+        originLon: record.originLon,
+        destination: cleanText(record.destination, 100),
+        destinationIsland: Number.isInteger(record.destinationIsland) ? record.destinationIsland : -1,
+        ...(Number.isFinite(record.heading) && Number.isInteger(record.points) && record.points > 0 && { heading: normalizeDegrees(record.heading), points: record.points }),
+        ...(isFiniteCoordinate(record.approxLat, record.approxLon) && Number.isInteger(record.decimals) && { approxLat: record.approxLat, approxLon: record.approxLon, decimals: record.decimals }),
+        ...(Number.isFinite(record.miles) && record.miles > 0 && { miles: record.miles })
+      });
+      continue;
+    }
+    if (record?.type !== "position" || !isFiniteCoordinate(record.lat, record.lon)) continue;
+    // The file says where the wind comes from; the chart shows where it blows toward.
+    const windDeg = Number.isFinite(record.windFrom) ? normalizeDegrees(record.windFrom + 180) : null;
+    const point = sanitizeTrackPoint({
+      id: makeId("track"),
+      lat: record.lat,
+      lon: record.lon,
+      day,
+      time: t === null ? "" : clockText(hours),
+      t,
+      windDeg,
+      wind: windDeg === null ? "" : compassPoint(windDeg),
+      boat: recordedBoatName(record.boat),
+      course: record.course,
+      knots: record.knots,
+      hull: record.hull,
+      event: record.event,
+      newSession,
+      source: "voyage"
+    });
+    if (!point) continue;
+    points.push(point);
+    newSession = false;
+  }
+  carry.newSession = newSession;
+  return { points, ports, missions };
+}
+
+// Voyage Recorder lines are JSON objects; anything else is read as Coordinate Viewer.
+export function isVoyageRecorderText(text) {
+  return String(text ?? "").trimStart().startsWith("{");
+}
+
+export function parseTrackText(text, carry) {
+  const first = String(text ?? "").split(/\r?\n/).find((line) => line.trim());
+  return first?.trim().startsWith("{") ? parseVoyageRecorder(text, carry) : parseCoordinateViewer(text);
+}
+
+// Voyage Recorder writes the boat's scene name without its number. The ones confirmed so far read as the
+// boat's usual name; any other is kept as written.
+const RECORDED_BOATS = Object.freeze({
+  "dhow small": "Dhow",
+  "dhow medium": "Sanbuq",
+  "dhow large": "Baghlah",
+  "junk small singleroof": "Kakam",
+  "junk medium": "Junk",
+  "junk large": "Jong",
+  "medi small": "Cog",
+  "medi medium": "Brig",
+  "Shroud Small": "Sh'ba",
+  "happybayboat": "Happy Bay Boat",
+  "LEOPARD": "HMS Leopard",
+  "GALLUS": "Gallus",
+  "CAELANOR": "Caelanor",
+  "GLORIANA": "Gloriana",
+  "SANTA MARIA": "Santa Maria",
+  "CUTTER": "Cutter"
+});
+
+function recordedBoatName(name) {
+  const text = typeof name === "string" ? name.trim() : "";
+  return Object.hasOwn(RECORDED_BOATS, text) ? RECORDED_BOATS[text] : text;
 }
 
 export function exportFile(charts) {

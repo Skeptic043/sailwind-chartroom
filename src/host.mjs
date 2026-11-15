@@ -84,7 +84,7 @@ async function connectDesktop({ post, listen }) {
     dataFolder: String(init.dataFolder ?? ""),
     version: String(init.version ?? ""),
     textScale: Number(init.textScale) || 100,
-    // The Windows host can follow a Coordinate Viewer file as the game writes it.
+    // Both desktop hosts can follow a Voyage Recorder or Coordinate Viewer file as the game writes it.
     liveTrack: init.liveTrack === true,
     on: events.on,
     // The host shows the Settings window and answers OK or Apply with "settings-changed".
@@ -96,8 +96,10 @@ async function connectDesktop({ post, listen }) {
     save: (workspace) => post({ type: "save", workspace }),
     // The host asks where to save and writes the file.
     exportFile: (name, contents) => post({ type: "export-file", name, contents }),
-    // The host asks which file, then sends "track-following", "track-lines" with each new run of lines, and "track-stopped".
-    followTrack: (chartId) => post({ type: "follow-track", chartId }),
+    // Without a choice the host offers the Voyage Recorder logs it finds with "track-choices", or asks for a
+    // file when it finds none. The page answers with { log } for an offered log or { pick: true } for a file.
+    // Following then sends "track-following", "track-lines" with each new run of lines, and "track-stopped".
+    followTrack: (chartId, choice = {}) => post({ type: "follow-track", chartId, ...choice }),
     stopTrack: () => post({ type: "stop-track" }),
     togglePin: () => post({ type: "pin" }),
     openFolder: () => post({ type: "open-folder" }),

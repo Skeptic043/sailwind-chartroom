@@ -7,6 +7,7 @@ import {
   clusteredLabelIds,
   compassPoint,
   createChart,
+  createFeature,
   createLine,
   createMeasure,
   importScrambledSeas,
@@ -38,6 +39,7 @@ import {
   parseBearing,
   parseCoordinate,
   parseCoordinateViewer,
+  parseTrackText,
   sanitizeWorkspace,
   searchAreasOverlap,
   searchEvidenceOpacity,
@@ -671,8 +673,9 @@ test("tool shortcuts are single unique keys that leave Fit and Islands alone", a
   assert.throws(() => validateShortcuts({ ...defaultShortcuts(), location: "r" }), /can't share R/);
   assert.throws(() => validateShortcuts({ ...defaultShortcuts(), wind: "f" }), /fit the chart/);
   assert.throws(() => validateShortcuts({ ...defaultShortcuts(), wind: "" }), /Add wind/);
-  const restored = sanitizeWorkspace({ charts: [createChart()], settings: { shortcuts: { location: "r" }, checkForUpdates: false, skippedUpdate: "0.6", interfaceSize: 137, theme: "neon", appearance: "dusk" } });
-  assert.deepEqual(restored.settings, { shortcuts: defaultShortcuts(), checkForUpdates: false, skippedUpdate: "0.6", interfaceSize: 0, theme: "chartroom", appearance: "system" });
+  const restored = sanitizeWorkspace({ charts: [createChart()], settings: { shortcuts: { location: "r" }, checkForUpdates: false, skippedUpdate: "0.6", interfaceSize: 137, theme: "neon", appearance: "dusk", searchPoints: 12 } });
+  assert.deepEqual(restored.settings, { shortcuts: defaultShortcuts(), checkForUpdates: false, skippedUpdate: "0.6", interfaceSize: 0, theme: "chartroom", appearance: "system", searchPoints: 16, clearReachedAreas: true });
+  assert.equal(sanitizeWorkspace({ charts: [createChart()], settings: { searchPoints: 64 } }).settings.searchPoints, 64);
   assert.equal(sanitizeWorkspace({ charts: [createChart()], settings: { theme: "sailwind", appearance: "dark" } }).settings.theme, "sailwind");
   assert.equal(sanitizeWorkspace({ charts: [createChart()], settings: { interfaceSize: 150 } }).settings.interfaceSize, 150);
 });
@@ -762,7 +765,7 @@ function scrambleXml(count) {
 }
 
 test("a Scrambled Seas save moves each island by its own offset", () => {
-  const chart = importScrambledSeas(parseScrambledSeasXml(scrambleXml(43)));
+  const chart = importScrambledSeas(parseScrambledSeasXml(scrambleXml(67)));
   assert.equal(chart.seed, "-42");
   assert.equal(chart.layers.importedMap, true);
   assert.equal(chart.layers.expandedWinds, true, "the save says Border Expander was installed");
@@ -772,7 +775,7 @@ test("a Scrambled Seas save moves each island by its own offset", () => {
   const fireFish = islandById("firefish/fire_fish_town").sourceCenter;
   assert.ok(Math.abs(moved("firefish/fire_fish_town").lon - (fireFish.lon + 26)) < 1e-4, "island 26 is Fire Fish Town");
   const map = importedMapIslands(chart);
-  assert.ok(map.some(({ island }) => island.id === "better-ports/bottleneck"), "island 43 is Better Ports' Bottleneck Isle");
+  assert.ok(map.some(({ island }) => island.id === "better-ports/bottleneck"), "island 67 is Better Ports' Bottleneck Isle");
   const restored = sanitizeWorkspace({ activeChartId: chart.id, charts: [chart] }).charts[0];
   assert.deepEqual(restored.scramble, chart.scramble);
   const old = sanitizeWorkspace({ charts: [{ ...createChart(), scramble: { islands: { "alankh/oasis": { lat: 1, lon: 2 } } } }] }).charts[0];
@@ -782,7 +785,7 @@ test("a Scrambled Seas save moves each island by its own offset", () => {
 });
 
 test("an imported map's islands take notes and can be removed, but stay where the world put them", () => {
-  const chart = importScrambledSeas(parseScrambledSeasXml(scrambleXml(43)));
+  const chart = importScrambledSeas(parseScrambledSeasXml(scrambleXml(67)));
   const oasis = itemForRef(chart, { kind: "map-island", id: "alankh/oasis" });
   const before = { lat: oasis.lat, lon: oasis.lon };
   translateChartItems(chart, [{ kind: "map-island", id: oasis.id }], { lat: 1, lon: 1 });
@@ -806,4 +809,102 @@ test("Border Expander adds southern trade winds to a scrambled world", () => {
   assert.equal(tradeWindAt(-40, 0, true).zone, "southWesterly");
   assert.equal(tradeWindAt(20, 0, true), null);
   assert.equal(tradeWindAt(31, 5, true).zone, "emerald");
+});
+
+test("parses Voyage Recorder logs, splitting at sessions and skipping unreadable lines", () => {
+  const text = [
+    '{"type":"header","format":"voyage-recorder","version":1,"mod":"0.1.0","slot":1}',
+    '{"type":"session","day":12,"hour":7.25}',
+    '{"type":"position","day":12,"hour":7.25,"lat":31.5,"lon":-1.5,"event":"start","boat":"medi medium","course":214.3,"knots":5.8,"windFrom":90,"windKnots":11.2,"future":1}',
+    '{"type":"position","day":12,"hour":8,"lat":31.4,"lon":-1.6,"event":"mark"}',
+    '{"type":"session","day":3,"hour":6}',
+    '{"type":"position","day":3,"hour":6,"lat":30,"lon":-2,"boat":"Odd Boat"}',
+    '{"type":"position","day":3,"ho'
+  ].join("\n");
+  const points = parseTrackText(text);
+  assert.equal(points.length, 3);
+  assert.equal(points[0].t, 12 * 24 + 7.25);
+  assert.equal(points[0].boat, "Brig");
+  assert.equal(points[0].course, 214.3);
+  assert.equal(points[0].knots, 5.8);
+  assert.equal(points[0].event, "start");
+  // Wind from the east blows toward the west.
+  assert.equal(points[0].windDeg, 270);
+  assert.equal(points[0].newSession, true);
+  assert.equal(points[1].newSession, undefined);
+  assert.equal(points[1].boat, undefined);
+  assert.equal(points[1].event, "mark", "a location recorded with the key");
+  assert.equal(points[2].newSession, true);
+  assert.equal(points[2].boat, "Odd Boat");
+  // Coordinate Viewer text still goes to its own reader.
+  assert.equal(parseTrackText("Day: 3\n40.1 0.5 9.5 90").length, 1);
+});
+
+test("Coordinate Viewer and Voyage Recorder positions show and hide separately", () => {
+  const chart = createChart();
+  const viewer = parseTrackText("Day: 3\n40.1 0.5 9.5 90");
+  const recorder = parseTrackText('{"type":"position","day":3,"hour":10,"lat":40.2,"lon":0.6}');
+  chart.track.push(...viewer, ...recorder);
+  const shown = () => shownItems(chart, "track").length;
+  assert.equal(shown(), 2);
+  chart.layers.trackCoordinateViewer = false;
+  assert.equal(shown(), 1);
+  chart.layers.trackVoyageRecorder = false;
+  assert.equal(shown(), 0);
+  revealLayer(chart, "track", recorder[0]);
+  assert.deepEqual(shownItems(chart, "track"), recorder);
+});
+
+test("Voyage Recorder ports and missions become locations and search areas, once", async () => {
+  const { readVoyageRecorder } = await import("../src/model.mjs");
+  const { applyMarks, discoveredMarks } = await import("../src/discoveries.mjs");
+  const { islandById } = await import("../src/islands.mjs");
+  const log = [
+    '{"type":"port","day":4,"hour":9.5,"port":"Gold Rock City","island":1,"lat":45.16,"lon":27.59,"portLat":45.14,"portLon":27.68,"offsetLat":14,"offsetLon":32.5}',
+    '{"type":"mission","day":4,"hour":10,"origin":"Gold Rock City","originIsland":1,"originLat":45.14,"originLon":27.68,"destination":"Fort Aestrin","destinationIsland":15,"heading":22.5,"points":16,"miles":214}',
+    '{"type":"mission","day":4,"hour":10,"origin":"Gold Rock City","originIsland":1,"originLat":45.14,"originLon":27.68,"destination":"Fort Aestrin","destinationIsland":15,"heading":22.5,"points":16,"miles":214}',
+    '{"type":"mission","day":4,"hour":10,"origin":"Gold Rock City","originIsland":1,"originLat":45.14,"originLon":27.68,"destination":"Senna","destinationIsland":28,"approxLat":31.5,"approxLon":-3,"decimals":1}',
+    '{"type":"mission","day":4,"hour":10,"origin":"Senna","originIsland":28,"originLat":31.5,"originLon":-3,"destination":"Gold Rock City","destinationIsland":1,"heading":180,"points":16,"miles":90}'
+  ].join("\n");
+  const found = readVoyageRecorder(log);
+  assert.equal(found.points.length, 0);
+  const chart = createChart();
+  // A search drawn by hand for the port, written differently, and an unrelated one.
+  chart.searches.push(createSearch({ lat: 46.6, lon: 26.9, bearing: 157.5, distanceNm: 232, label: "gold rock  CITY" }));
+  chart.searches.push(createSearch({ lat: 46.6, lon: 26.9, bearing: 180, distanceNm: 300, label: "Oasis" }));
+  const marks = discoveredMarks(chart, found);
+  // The island goes where an imported Scrambled Seas world would put it: its outline's centre moved by its offset.
+  const centre = islandById("alankh/gold_rock_city").sourceCenter;
+  assert.deepEqual(marks.features.map((feature) => [feature.name, feature.lat, feature.lon, feature.islandId ?? "", feature.rangeNm]),
+    [["Gold Rock City", centre.lat + 14, centre.lon + 32.5, "alankh/gold_rock_city", 0], ["Senna", 31.5, -3, "", 9.9]]);
+  assert.deepEqual(marks.answered, [chart.searches[0].id], "the port answers its own search only");
+  assert.deepEqual(marks.searches.map((search) => [search.label, search.bearing, search.distanceNm, search.spreadDeg]), [["Fort Aestrin", 22.5, 214, 11.25]],
+    "Gold Rock City, reached, gets no search");
+  applyMarks(chart, marks);
+  assert.deepEqual(chart.searches.map((search) => search.label), ["Oasis", "Fort Aestrin"]);
+  const again = discoveredMarks(chart, found);
+  assert.deepEqual([again.features, again.searches, again.cleared, again.answered], [[], [], [], []], "reading the same log again changes nothing");
+});
+
+test("a port reached removes the rough areas marked for it and charts the island", async () => {
+  const { discoveredMarks, applyMarks } = await import("../src/discoveries.mjs");
+  const chart = createChart();
+  const area = createFeature({ lat: 31, lon: -3, name: "senna", rangeNm: 20 });
+  const other = createFeature({ lat: 30, lon: -2, name: "Oasis", rangeNm: 20 });
+  chart.features.push(area, other);
+  const marks = discoveredMarks(chart, { ports: [{ port: "Senna", island: 28, lat: 31.2, lon: -2.9 }] });
+  assert.deepEqual(marks.cleared, [area.id]);
+  applyMarks(chart, marks);
+  assert.deepEqual(chart.features.map((feature) => [feature.name, feature.lat, feature.lon, feature.rangeNm, feature.islandId ?? ""]),
+    [["Oasis", 30, -2, 20, ""], ["Senna", 31.2, -2.9, 0, "firefish/senna"]]);
+});
+
+test("with clearing turned off, a port reached keeps its areas and still becomes a location", async () => {
+  const { discoveredMarks } = await import("../src/discoveries.mjs");
+  const chart = createChart();
+  chart.features.push(createFeature({ lat: 31, lon: -3, name: "Senna", rangeNm: 20 }));
+  chart.searches.push(createSearch({ lat: 30, lon: -4, bearing: 45, distanceNm: 80, label: "Senna" }));
+  const marks = discoveredMarks(chart, { ports: [{ port: "Senna", island: 28, lat: 31.2, lon: -2.9 }] }, { clearReached: false });
+  assert.deepEqual([marks.cleared, marks.answered], [[], []]);
+  assert.deepEqual(marks.features.map((feature) => [feature.name, feature.rangeNm]), [["Senna", 0]]);
 });

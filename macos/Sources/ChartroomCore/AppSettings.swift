@@ -31,6 +31,8 @@ public struct AppSettings: Equatable {
     public var themes: [SettingChoice] = []
     public var appearances: [SettingChoice] = []
     public var dark = true
+    /// Whether a port reached with Voyage Recorder clears its search areas and rough areas.
+    public var clearReachedAreas = true
 
     public init(tools: [ToolShortcut], checkForUpdates: Bool, interfaceSize: Int, theme: String = "chartroom", appearance: String = "system") {
         self.tools = tools
@@ -61,6 +63,7 @@ public struct AppSettings: Equatable {
         settings.themes = choices(object["themes"])
         settings.appearances = choices(object["appearances"])
         settings.dark = JSONValue.bool(object["dark"]) != false
+        settings.clearReachedAreas = JSONValue.bool(object["clearReachedAreas"]) != false
         return settings
     }
 

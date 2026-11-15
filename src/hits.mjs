@@ -73,11 +73,13 @@ function findHits(x, y) {
     const inside = islandPixelSpan(island) >= 14 && islandContains(island, item, world);
     if (inside || distance <= 8) consider("map-island", item.id, item, inside ? 12 : distance + 4, true);
   }
-  // Coordinate Viewer positions; anything else at the same spot wins.
-  for (const point of shownItems(chart, "track")) {
+  // Recorded positions; anything else at the same spot wins, except over the last position, which is drawn
+  // above everything else and so is picked first.
+  const track = shownItems(chart, "track");
+  for (const point of track) {
     const screen = worldToScreen(point);
     const distance = Math.hypot(screen.x - x, screen.y - y);
-    if (distance <= 8) consider("track", point.id, point, distance + 2);
+    if (distance <= 8) consider("track", point.id, point, point === track.at(-1) ? -1 : distance + 2);
   }
   // DR positions stay where they were reckoned, so pressing one selects it and pans the chart.
   for (const position of shownItems(chart, "dr")) {

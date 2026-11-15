@@ -14,8 +14,9 @@ public enum HostMessage: Equatable {
     case setZoom(Double)
     case setAppearance(dark: Bool, followsSystem: Bool)
     case exportFile(name: String, contents: String)
-    /// Follow a Coordinate Viewer file into the chart with this id.
-    case followTrack(chartId: String)
+    /// Follow a recording into the chart with this id. Without a choice the host offers the recordings it
+    /// finds; log follows one of those it offered, and pick asks for a file instead.
+    case followTrack(chartId: String, log: Int? = nil, pick: Bool = false)
     case stopTrack
     case copyText(String)
 
@@ -35,7 +36,8 @@ public enum HostMessage: Equatable {
         case "stop-track": return .stopTrack
         case "follow-track":
             guard let chartId = root["chartId"] as? String, !chartId.isEmpty else { return nil }
-            return .followTrack(chartId: chartId)
+            let log = JSONValue.number(root["log"]).flatMap { $0 >= 0 && $0 == $0.rounded() ? Int($0) : nil }
+            return .followTrack(chartId: chartId, log: log, pick: JSONValue.bool(root["pick"]) ?? false)
         case "copy-text":
             guard let text = root["text"] as? String, !text.isEmpty else { return nil }
             return .copyText(text)

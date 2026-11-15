@@ -13,6 +13,15 @@ public sealed class HostMessageTests
         Assert.IsType(expected, HostMessage.Parse(json));
 
     [Fact]
+    public void FollowTrackCarriesTheChosenLogOrAFileRequest()
+    {
+        Assert.Equal(new HostMessage.FollowTrack("chart-1"), HostMessage.Parse("""{"type":"follow-track","chartId":"chart-1"}"""));
+        Assert.Equal(new HostMessage.FollowTrack("chart-1", 2), HostMessage.Parse("""{"type":"follow-track","chartId":"chart-1","log":2}"""));
+        Assert.Equal(new HostMessage.FollowTrack("chart-1", null, true), HostMessage.Parse("""{"type":"follow-track","chartId":"chart-1","pick":true}"""));
+        Assert.Equal(new HostMessage.FollowTrack("chart-1"), HostMessage.Parse("""{"type":"follow-track","chartId":"chart-1","log":-1}"""));
+    }
+
+    [Fact]
     public void SaveCarriesTheWorkspaceJson()
     {
         var save = Assert.IsType<HostMessage.Save>(HostMessage.Parse("""{"type":"save","workspace":{"charts":[]}}"""));

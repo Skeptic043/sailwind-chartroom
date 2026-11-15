@@ -39,9 +39,9 @@ export function initSettings() {
 }
 
 function openSettings() {
-  const { shortcuts, checkForUpdates, interfaceSize, theme, appearance } = workspace.settings;
+  const { shortcuts, checkForUpdates, clearReachedAreas, interfaceSize, theme, appearance } = workspace.settings;
   const tools = CHART_TOOLS.map(({ mode, label }) => ({ mode, label, key: shortcuts[mode] }));
-  host.openSettings({ tools, checkForUpdates, interfaceSize, theme, appearance, themes: THEMES, appearances: appearanceChoices(), dark: isDark() },
+  host.openSettings({ tools, checkForUpdates, clearReachedAreas, interfaceSize, theme, appearance, themes: THEMES, appearances: appearanceChoices(), dark: isDark() },
     CHART_TOOLS.map(({ mode, label, key }) => ({ mode, label, key })));
 }
 
@@ -50,7 +50,7 @@ function appearanceChoices() {
   return host.platform === "mac" ? APPEARANCES.map((choice) => choice.id === "system" ? { ...choice, label: "Match macOS" } : choice) : APPEARANCES;
 }
 
-function applySettings({ shortcuts, checkForUpdates, interfaceSize, theme, appearance }) {
+function applySettings({ shortcuts, checkForUpdates, clearReachedAreas, interfaceSize, theme, appearance }) {
   try {
     workspace.settings.shortcuts = validateShortcuts(shortcuts);
   } catch (error) {
@@ -58,6 +58,7 @@ function applySettings({ shortcuts, checkForUpdates, interfaceSize, theme, appea
     return;
   }
   workspace.settings.checkForUpdates = checkForUpdates !== false;
+  workspace.settings.clearReachedAreas = clearReachedAreas !== false;
   if (INTERFACE_SIZES.includes(interfaceSize)) workspace.settings.interfaceSize = interfaceSize;
   if (THEME_IDS.includes(theme)) workspace.settings.theme = theme;
   if (APPEARANCE_IDS.includes(appearance)) workspace.settings.appearance = appearance;

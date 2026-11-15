@@ -27,6 +27,8 @@ final class ChartWindow: NSObject, NSWindowDelegate, WKScriptMessageHandler, WKN
     private var pendingWorkspace: String?
     private var saveTimer: Timer?
     private var follower: TrackFollower?
+    // The Voyage Recorder logs last offered to the page, which may follow only these.
+    private var offeredLogs: [URL] = []
     // The chart the followed positions go to, kept here so a reloaded page sends them to the same one.
     private var followedChartId = ""
     // Counts follows, so lines from one that has since been stopped or replaced are dropped.
@@ -139,8 +141,8 @@ final class ChartWindow: NSObject, NSWindowDelegate, WKScriptMessageHandler, WKN
             settings?.window.appearance = appearance
         case .exportFile(let name, let contents):
             export(name: name, contents: contents)
-        case .followTrack(let chartId):
-            chooseTrackFile(chartId: chartId)
+        case .followTrack(let chartId, let log, let pick):
+            chooseTrack(chartId: chartId, log: log, pick: pick)
         case .stopTrack:
             stopFollowing()
         case .copyText(let text):
@@ -194,13 +196,31 @@ final class ChartWindow: NSObject, NSWindowDelegate, WKScriptMessageHandler, WKN
 
     // MARK: Following Coordinate Viewer
 
-    // The player picks the coords_<slot>.txt file Coordinate Viewer writes beside itself while recording.
-    private func chooseTrackFile(chartId: String) {
+    // The page first asks with no choice: the host offers Voyage Recorder's logs, newest first, and the page
+    // lets the player pick one or ask for a file. Without any logs the file picker opens at once, as for the
+    // coords_<slot>.txt file Coordinate Viewer writes beside itself. Only a log the host offered is followed.
+    private func chooseTrack(chartId: String, log: Int?, pick: Bool) {
+        if let log {
+            if log < offeredLogs.count { startFollowing(offeredLogs[log], chartId: chartId) }
+            return
+        }
+        if !pick {
+            let found = VoyageLogs.all(in: VoyageLogs.candidateFolders(home: FileManager.default.homeDirectoryForCurrentUser))
+            offeredLogs = found.map(\.url)
+            if !found.isEmpty {
+                let stamp = ISO8601DateFormatter()
+                let logs: [[String: Any]] = found.enumerated().map { (id, entry) -> [String: Any] in
+                    ["id": id, "name": entry.url.lastPathComponent, "place": entry.place, "modified": stamp.string(from: entry.modified)]
+                }
+                post(["type": "track-choices", "chartId": chartId, "logs": logs])
+                return
+            }
+        }
         let panel = NSOpenPanel()
-        panel.title = "Follow a Coordinate Viewer file"
+        panel.title = "Follow a recording"
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
-        panel.allowedContentTypes = [.plainText]
+        panel.allowedContentTypes = [UTType.plainText] + [UTType(filenameExtension: "jsonl")].compactMap { $0 }
         panel.beginSheetModal(for: window) { [weak self] response in
             guard response == .OK, let url = panel.url else { return }
             self?.startFollowing(url, chartId: chartId)
@@ -266,6 +286,7 @@ final class ChartWindow: NSObject, NSWindowDelegate, WKScriptMessageHandler, WKN
             self?.post(["type": "settings-changed", "settings": [
                 "shortcuts": Dictionary(uniqueKeysWithValues: applied.tools.map { ($0.mode, $0.key) }),
                 "checkForUpdates": applied.checkForUpdates,
+                "clearReachedAreas": applied.clearReachedAreas,
                 "interfaceSize": applied.interfaceSize,
                 "theme": applied.theme,
                 "appearance": applied.appearance

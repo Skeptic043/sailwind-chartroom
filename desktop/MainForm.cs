@@ -34,6 +34,8 @@ internal sealed class MainForm : Form
     private CancellationTokenSource? updateCancel;
     private SettingsForm? openSettings;
     private TrackFollower? follower;
+    // The Voyage Recorder logs last offered to the page, which may follow only these.
+    private List<string> offeredLogs = [];
     // The chart the followed positions go to, kept here so a reloaded page sends them to the same one.
     private string followedChartId = "";
 
@@ -74,6 +76,7 @@ internal sealed class MainForm : Form
             {
                 shortcuts = applied.Tools.ToDictionary(tool => tool.Mode, tool => tool.Key),
                 checkForUpdates = applied.CheckForUpdates,
+                clearReachedAreas = applied.ClearReachedAreas,
                 interfaceSize = applied.InterfaceSize,
                 theme = applied.Theme,
                 appearance = applied.Appearance
@@ -210,7 +213,7 @@ internal sealed class MainForm : Form
                 break;
             case HostMessage.FollowTrack follow:
                 // Shown after this handler returns, so the dialog never runs inside a WebView2 event.
-                BeginInvoke(() => ChooseTrackFile(follow.ChartId));
+                BeginInvoke(() => ChooseTrack(follow));
                 break;
             case HostMessage.StopTrack:
                 StopFollowing();
@@ -349,21 +352,42 @@ internal sealed class MainForm : Form
         }
     }
 
-    // The player picks the coords_<slot>.txt file Coordinate Viewer writes beside itself while recording.
-    private void ChooseTrackFile(string chartId)
+    // The page first asks with no choice: the host offers Voyage Recorder's logs, newest first, and the page
+    // lets the player pick one or ask for a file. Without any logs the file picker opens at once, as for the
+    // coords_<slot>.txt file Coordinate Viewer writes beside itself. Only a log the host offered is followed.
+    private void ChooseTrack(HostMessage.FollowTrack follow)
     {
+        if (follow.Log is int index)
+        {
+            if (index < offeredLogs.Count) StartFollowing(offeredLogs[index], follow.ChartId);
+            return;
+        }
+        if (!follow.Pick)
+        {
+            offeredLogs = VoyageLogs.All(VoyageLogs.Folder(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile))).Select(file => file.FullName).ToList();
+            if (offeredLogs.Count > 0)
+            {
+                var logs = offeredLogs.Select((path, id) => new { id, name = Path.GetFileName(path), place = "", modified = File.GetLastWriteTimeUtc(path).ToString("o") });
+                Post(new { type = "track-choices", chartId = follow.ChartId, logs });
+                return;
+            }
+        }
         using var dialog = new OpenFileDialog
         {
-            Title = "Follow a Coordinate Viewer file",
-            Filter = "Coordinate Viewer files|coords_*.txt|Text files|*.txt|All files|*.*"
+            Title = "Follow a recording",
+            Filter = "Recordings|slot*.jsonl;coords_*.txt|Voyage Recorder logs|*.jsonl|Coordinate Viewer files|coords_*.txt|All files|*.*"
         };
-        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        if (dialog.ShowDialog(this) == DialogResult.OK) StartFollowing(dialog.FileName, follow.ChartId);
+    }
+
+    private void StartFollowing(string path, string chartId)
+    {
         StopFollowing();
         try
         {
             // New lines arrive on a worker thread and are posted from the window's thread.
             TrackFollower? created = null;
-            created = new TrackFollower(dialog.FileName, text => PostFromFollower(() => created, text));
+            created = new TrackFollower(path, text => PostFromFollower(() => created, text));
             follower = created;
             followedChartId = chartId;
             Post(new { type = "track-following", name = follower.FileName, chartId, resumed = false });

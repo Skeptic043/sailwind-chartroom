@@ -4,7 +4,7 @@ import { assignedIsland, islandById, searchIsland } from "./islands.mjs";
 import { assignedBoats, drawBoatSilhouette } from "./boats.mjs";
 import { clamp, formatDirection, formatNm } from "./format.mjs";
 import { canvas, context, elements } from "./dom.mjs";
-import { activeChart, commit, host, isSelected, persist, pushUndo, refreshSelection, replaceSelectionState, selectItem, selectedItem, selectedKeys, selectedRefs, selection, selectionKey, setPrimarySelection } from "./state.mjs";
+import { activeChart, commit, host, workspace, isSelected, persist, pushUndo, refreshSelection, replaceSelectionState, selectItem, selectedItem, selectedKeys, selectedRefs, selection, selectionKey, setPrimarySelection } from "./state.mjs";
 import { boatRowAt, coordinatePrecision, eventPoint, screenToWorld, worldToScreen } from "./viewport.mjs";
 import { boatColours, drawAreaCircle, drawChart, drawIslandSilhouette, drawLine, drawMeasureLine, drawSearchWedge, drawWindIndicator, labelPill, magnetRing } from "./render.mjs";
 import { findHit, resetHitCycle, nearestTrackPoint, onSelectedAreaEdge, selectedLineEnd, snapAlongRay, snapPoint } from "./hits.mjs";
@@ -114,28 +114,27 @@ export function setMode(nextMode) {
   elements["mode-hint"].textContent = MODE_HINTS[mode] ?? "Click the resolved position. Press Escape to cancel.";
   // Dead reckoning fills in a form in its own panel.
   showDeadReckoning(mode === "dr");
+  elements["search-points-row"].hidden = mode !== "search";
   drawChart();
 }
 
-// Dragging out a search snaps to the 32 points of the compass and to whole miles,
+// Dragging out a search snaps to the chosen points of the compass and to whole miles,
 // unless the centre comes near a charted line or mark along that heading, which it then sits on.
 function searchFromDrag(origin, screen, free) {
   const cursor = screenToWorld(screen.x, screen.y);
-  const bearing = Math.round(bearingDegrees(origin, cursor) / COMPASS_STEP_DEG) * COMPASS_STEP_DEG % 360;
+  const step = 360 / workspace.settings.searchPoints;
+  const bearing = Math.round(bearingDegrees(origin, cursor) / step) * step % 360;
   const magnetNm = free ? null : snapAlongRay(origin, bearing, screen);
   return {
     ...origin,
     bearing,
     distanceNm: magnetNm === null ? Math.max(1, Math.round(distanceNm(origin, cursor))) : Math.round(magnetNm * 10) / 10,
     snapped: magnetNm !== null,
-    ...searchMargins()
+    // A direction covers half the gap to the next either side. The distance margin carries over from the
+    // last search, so a corrected default only has to be set once.
+    spreadDeg: step / 2,
+    ...(activeChart().searches.at(-1) && { tolerancePct: activeChart().searches.at(-1).tolerancePct })
   };
-}
-
-// New searches reuse the margins of the last one, so a corrected default only has to be set once.
-function searchMargins() {
-  const previous = activeChart().searches.at(-1);
-  return previous ? { spreadDeg: previous.spreadDeg, tolerancePct: previous.tolerancePct } : {};
 }
 
 function windFromDrag(origin, screen, free) {

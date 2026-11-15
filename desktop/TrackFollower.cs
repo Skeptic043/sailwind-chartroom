@@ -31,11 +31,11 @@ internal sealed class TrackFollower : IDisposable
         watcher.Changed += (_, _) => ReadNew();
         watcher.Created += (_, _) => ReadNew();
         watcher.EnableRaisingEvents = true;
-        // The newest position shows at once; the rest of the file is already on the chart or was left out.
+        // The whole file goes first, so the page can join it to the chart's track and offer what it missed.
         lock (gate)
         {
             (string text, tail) = Read(TrackTail.Start);
-            if (TrackTail.LastPosition(text) is { } latest) onText(latest);
+            if (text.Length > 0) onText(text);
         }
     }
 
@@ -109,18 +109,27 @@ internal readonly record struct TrackTail(long Offset, string? Day)
         return (text.ToString(), new TrackTail(from.Offset + end, day));
     }
 
-    /// <summary>The last position in <paramref name="text"/> with the day before it, or null.</summary>
-    public static string? LastPosition(string text)
-    {
-        string? day = null;
-        string? last = null;
-        foreach (string line in text.Split('\n', StringSplitOptions.RemoveEmptyEntries))
-        {
-            if (IsDayLine(line)) day = line;
-            else last = line;
-        }
-        return last is null ? null : day is null ? last + "\n" : $"{day}\n{last}\n";
-    }
-
     private static bool IsDayLine(string line) => line.TrimStart().StartsWith("Day", StringComparison.OrdinalIgnoreCase);
+}
+
+/// <summary>Where Voyage Recorder writes its logs, beside the game's saves, and the newest of them.</summary>
+internal static class VoyageLogs
+{
+    public static string Folder(string userProfile) =>
+        Path.Combine(userProfile, "AppData", "LocalLow", "Raw Lion Workshop", "Sailwind", "Voyage Recorder");
+
+    /// <summary>The save slot logs in the folder, most recently written first.</summary>
+    public static IReadOnlyList<FileInfo> All(string folder)
+    {
+        try
+        {
+            var directory = new DirectoryInfo(folder);
+            if (!directory.Exists) return [];
+            return directory.EnumerateFiles("slot*.jsonl").OrderByDescending(file => file.LastWriteTimeUtc).ToList();
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            return [];
+        }
+    }
 }

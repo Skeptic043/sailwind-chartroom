@@ -68,6 +68,8 @@ export const LAYER_CONTROLS = Object.freeze([
   ["layer-boats", "boats", []],
   ["layer-islands", "islands", []],
   ["layer-track", "track", []],
+  ["layer-track-cv", "trackCoordinateViewer", ["track"]],
+  ["layer-track-voyage", "trackVoyageRecorder", ["track"]],
   ["layer-track-winds", "trackWinds", ["track"]],
   ["layer-vanilla", "vanillaMap", []],
   ["layer-imported-map", "importedMap", []],
@@ -137,6 +139,9 @@ export function renderInspector() {
     for (const field of ["name", "day", "time", "wind"]) elements[`track-${field}`].value = item[field];
     elements["track-lat"].value = item.lat.toFixed(4);
     elements["track-lon"].value = item.lon.toFixed(4);
+    const recorded = recordedDetail(item);
+    elements["track-recorded"].textContent = recorded;
+    elements["track-recorded"].hidden = !recorded;
     renderTrackSelection();
   }
   if (isMeasure) renderMeasureInspector(item, selection.kind === "line");
@@ -347,4 +352,15 @@ export function renderFeatureList() {
     empty.textContent = query ? "No chart items match this search." : "Your chart items will collect here.";
     elements["feature-list"].append(empty);
   }
+}
+
+const TRACK_EVENT_TEXT = { start: "Recording started", stop: "Recording stopped", sleep: "Fell asleep", wake: "Woke up", mark: "Location recorded" };
+
+// What Voyage Recorder noted beside the position: the boat, its course and speed, and why it was noted.
+function recordedDetail(item) {
+  const motion = Number.isFinite(item.knots)
+    ? Number.isFinite(item.course) ? `${formatBearing(item.course)} at ${item.knots.toFixed(1)} kn` : `${item.knots.toFixed(1)} kn`
+    : "";
+  const hull = Number.isFinite(item.hull) ? `hull ${item.hull}% damaged` : "";
+  return [item.boat, motion, hull, TRACK_EVENT_TEXT[item.event]].filter(Boolean).join(" · ");
 }

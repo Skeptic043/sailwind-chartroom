@@ -10,7 +10,7 @@ const csp = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 's
 // Stands in for the WebView2 host: answers "ready" with the latest saved workspace and records saves.
 // The workspace survives reloads in sessionStorage, as the real host keeps it in memory. Update checks
 // answer with the given releases; an install reports progress and then the given failure.
-function fakeHost({ seed, updates, platform }) {
+function fakeHost({ seed, updates, platform, recording }) {
   const key = "fake-host-workspace";
   if (sessionStorage.getItem(key) === null) sessionStorage.setItem(key, JSON.stringify(seed ?? null));
   const listeners = new Set();
@@ -32,11 +32,17 @@ function fakeHost({ seed, updates, platform }) {
         }
         if (data.type === "export-file") host.exports.push(data);
         if (data.type === "pin") dispatch({ type: "pinned", value: true });
-        // Following answers with the newest position, then one more as if the game had written it.
-        if (data.type === "follow-track") {
-          dispatch({ type: "track-following", name: "coords_0.txt", chartId: data.chartId, resumed: false });
-          dispatch({ type: "track-lines", text: "Day: 3\n40.1 0.5 9.5 90\n" });
-          setTimeout(() => dispatch({ type: "track-lines", text: "Day: 3\n40.2 0.6 10 92\n" }), 50);
+        // Following answers with the newest position, then more as if the game had written them. The
+        // default recording is Coordinate Viewer's; a test can give a file name and runs of lines instead.
+        // A recording with choices is offered as Voyage Recorder logs first, and followed once one is picked.
+        host.follows = host.follows ?? [];
+        if (data.type === "follow-track") host.follows.push({ log: data.log, pick: data.pick });
+        if (data.type === "follow-track" && recording?.choices && data.log === undefined && !data.pick) {
+          dispatch({ type: "track-choices", chartId: data.chartId, logs: recording.choices });
+        } else if (data.type === "follow-track") {
+          const { name, runs } = recording ?? { name: "coords_0.txt", runs: ["Day: 3\n40.1 0.5 9.5 90\n", "Day: 3\n40.2 0.6 10 92\n"] };
+          dispatch({ type: "track-following", name, chartId: data.chartId, resumed: false });
+          runs.forEach((text, index) => setTimeout(() => dispatch({ type: "track-lines", text }), index * 50));
         }
         if (data.type === "stop-track") dispatch({ type: "track-stopped" });
         if (data.type === "copy-text") host.copied = data.text;
@@ -89,8 +95,8 @@ export class Chartroom {
   }
 
   // platform "mac" makes the stand-in answer as the macOS host does.
-  async open(workspace = null, { updates, platform } = {}) {
-    await this.page.addInitScript(fakeHost, { seed: workspace, updates, platform });
+  async open(workspace = null, { updates, platform, recording } = {}) {
+    await this.page.addInitScript(fakeHost, { seed: workspace, updates, platform, recording });
     await this.page.goto("https://chartroom.app/index.html");
     await expect(this.page.locator("#app-version")).toHaveText("9.9.9");
   }

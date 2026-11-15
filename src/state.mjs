@@ -109,6 +109,19 @@ export function appendOutsideHistory(chart, key, items) {
   }
 }
 
+// Makes a change to the chart and to each of its undo snapshots, so undo neither reverts nor brings it back.
+export function changeOutsideHistory(chart, change) {
+  for (const target of [chart, ...[...undoStack, ...redoStack].filter((snapshot) => snapshot.id === chart.id)]) change(target);
+}
+
+// Puts items in before another, in the chart and its undo history, as appendOutsideHistory adds them.
+export function insertOutsideHistory(chart, key, before, items) {
+  for (const list of [chart[key], ...[...undoStack, ...redoStack].filter((snapshot) => snapshot.id === chart.id).map((snapshot) => snapshot[key])]) {
+    const index = list.indexOf(before);
+    list.splice(index < 0 ? list.length : index, 0, ...items);
+  }
+}
+
 export const undo = () => restoreFrom(undoStack, redoStack);
 export const redo = () => restoreFrom(redoStack, undoStack);
 

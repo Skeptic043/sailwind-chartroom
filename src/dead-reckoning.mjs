@@ -34,5 +34,5 @@ export function latestPosition(chart, { followingLive = false } = {}) {
 }
 
 export function positionLabel(position) {
-  return position.ref.kind === "track" ? "Coordinate Viewer position" : "DR position";
+  return position.ref.kind === "track" ? "recorded position" : "DR position";
 }

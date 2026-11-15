@@ -129,10 +129,12 @@ export function drawChart() {
   if (activeChart().layers.winds) drawWinds(palette);
   drawSavedRoutes(palette);
   drawRoute(palette);
-  // Coordinate Viewer positions sit above route lines, which often run along them.
-  if (activeChart().layers.track) drawTrack(palette);
+  // Recorded positions sit above route lines, which often run along them.
+  const lastPosition = activeChart().layers.track ? drawTrack(palette) : null;
   if (activeChart().layers.deadReckoning) drawDrPositions(palette);
   drawFeatures(palette);
+  // Where you are now stays in sight above islands and locations.
+  if (lastPosition) drawLastPosition(lastPosition, palette);
   overlay(palette);
   drawCompassRose(width - 56, height - 64, palette);
   updateZoomLabel();
@@ -227,10 +229,11 @@ const TRACK_WIND_SPACING_PX = 70;
 
 // Each stretch of the track is drawn on its own, so a reload or a jump leaves a gap instead of a false
 // line. A stretch that crosses the chart's east or west edge is drawn again from the other side.
+// Returns the last position and the one before it in its stretch, for drawLastPosition.
 function drawTrack(palette) {
   const chart = activeChart();
   const track = shownItems(chart, "track");
-  if (!track.length) return;
+  if (!track.length) return null;
   const { width, height } = canvas.getBoundingClientRect();
   const project = projector();
   context.save();
@@ -272,10 +275,15 @@ function drawTrack(palette) {
     context.fill();
     if (selected) selectionHalo(screen, palette);
   }
+  context.restore();
   const lastSegment = segments.at(-1);
-  const last = lastSegment.at(-1);
-  const previous = lastSegment.at(-2);
+  return { last: lastSegment.at(-1), previous: lastSegment.at(-2) };
+}
+
+// The arrow at the last position, pointing along the last leg, with its label.
+function drawLastPosition({ last, previous }, palette) {
   const screen = worldToScreen(last);
+  context.save();
   context.translate(screen.x, screen.y);
   context.rotate(previous ? trackBearing(previous, last) * Math.PI / 180 : 0);
   context.fillStyle = palette.track;
@@ -287,17 +295,29 @@ function drawTrack(palette) {
   if (activeChart().layers.labels && labelVisible("track", "last")) labelText(`Last position${last.day ? ` · day ${last.day}` : ""}${last.time ? ` ${last.time}` : ""}`, screen.x, screen.y + 11, palette);
 }
 
-// A small faded arrow for the wind Coordinate Viewer recorded, pointing where it blew toward.
+// The wind recorded with a track position, pointing where it blew toward.
 function drawTrackWind(screen, degrees, palette) {
-  const { start, end } = centredArrowEnds(screen, degrees, 16);
+  // A wind vane: feathered tail where the wind comes from, head where it blows, outlined in the paper
+  // colour so it reads apart from the dashed track beneath it.
+  const { start, end } = centredArrowEnds(screen, degrees, 24);
   context.save();
-  context.strokeStyle = palette.faded;
-  context.fillStyle = palette.faded;
-  context.lineWidth = 1.2;
-  context.beginPath(); context.moveTo(start.x, start.y); context.lineTo(end.x, end.y); context.stroke();
-  context.translate(end.x, end.y);
+  context.translate(start.x, start.y);
   context.rotate(Math.atan2(end.y - start.y, end.x - start.x));
-  context.beginPath(); context.moveTo(0, 0); context.lineTo(-5, -3); context.lineTo(-5, 3); context.closePath(); context.fill();
+  const length = Math.hypot(end.x - start.x, end.y - start.y);
+  const vane = () => {
+    context.beginPath();
+    context.moveTo(0, 0); context.lineTo(length - 4, 0);
+    for (const x of [0, 4]) { context.moveTo(x, 0); context.lineTo(x - 3, -4); context.moveTo(x, 0); context.lineTo(x - 3, 4); }
+    context.stroke();
+    context.beginPath(); context.moveTo(length, 0); context.lineTo(length - 7, -4.5); context.lineTo(length - 7, 4.5); context.closePath();
+  };
+  context.lineCap = "round";
+  context.strokeStyle = palette.paperB;
+  context.lineWidth = 4;
+  vane(); context.stroke();
+  context.strokeStyle = context.fillStyle = palette.wind;
+  context.lineWidth = 1.6;
+  vane(); context.fill();
   context.restore();
 }
 

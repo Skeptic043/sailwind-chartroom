@@ -1,14 +1,26 @@
 // Imports from files the player chooses, and exports written through the host's save dialog.
-import { exportFile, featuresToCsv, importChartData, importScrambledSeas, parseCoordinateViewer } from "./model.mjs";
+import { exportFile, featuresToCsv, importChartData, importScrambledSeas, isVoyageRecorderText, parseTrackText, readVoyageRecorder, revealLayer } from "./model.mjs";
 import { parseScrambledSeasXml } from "./scrambled-seas.mjs";
+import { applyMarks, discoveredMarks } from "./discoveries.mjs";
 import { showToast } from "./dom.mjs";
 import { activeChart, commit, host, persist, resetHistory, workspace } from "./state.mjs";
 import { fitData } from "./render.mjs";
 import { renderEverything } from "./panels.mjs";
 
 export function importTrackText(text) {
-  const points = parseCoordinateViewer(text);
-  commit((chart) => { for (const point of points) chart.track.push(point); });
+  const voyage = isVoyageRecorderText(text) ? readVoyageRecorder(text) : null;
+  const points = voyage ? voyage.points : parseTrackText(text);
+  if (!points.length && !voyage?.ports.length && !voyage?.missions.length) throw new Error("No valid recorded positions were found.");
+  commit((chart) => {
+    for (const point of points) chart.track.push(point);
+    if (points.length) revealLayer(chart, "track", points[0]);
+    // A recording's ports and missions become marks too, as when following it.
+    if (!voyage) return;
+    const marks = discoveredMarks(chart, voyage, { clearReached: workspace.settings.clearReachedAreas });
+    applyMarks(chart, marks);
+    for (const feature of marks.features) revealLayer(chart, "feature", feature);
+    for (const search of marks.searches) revealLayer(chart, "search", search);
+  });
   fitData();
   showToast(`Imported ${points.length} track position${points.length === 1 ? "" : "s"}.`);
 }

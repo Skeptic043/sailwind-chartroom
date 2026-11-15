@@ -62,6 +62,22 @@ test("drags out a search area that snaps to a compass point", async ({ chartroom
   expect(search.distanceNm).toBeGreaterThan(0);
 });
 
+test("search areas snap to the chosen 16, 32 or 64-point compass", async ({ chartroom, page }) => {
+  await chartroom.open();
+  await chartroom.press("s");
+  await expect(page.locator("#search-points")).toHaveValue("16");
+  // About 8.5° east of north: north on a 16-point compass, 11.25° on a 64-point one.
+  await chartroom.dragChart({ x: 500, y: 450 }, { x: 530, y: 250 });
+  await page.keyboard.press("Escape");
+  await chartroom.press("s");
+  await page.locator("#search-points").selectOption("64");
+  await chartroom.dragChart({ x: 300, y: 450 }, { x: 330, y: 250 });
+  const [sixteen, sixtyFour] = (await chartroom.chart()).searches;
+  expect([sixteen.bearing, sixteen.spreadDeg]).toEqual([0, 11.25]);
+  expect([sixtyFour.bearing, sixtyFour.spreadDeg]).toEqual([11.25, 2.8125]);
+  expect((await chartroom.saved()).settings.searchPoints).toBe(64);
+});
+
 test("a location can hide its name on the chart", async ({ chartroom, page }) => {
   await chartroom.open();
   await chartroom.press("l");
@@ -346,10 +362,11 @@ test("Help shows up to date and release notes; the startup check can be turned o
   await expect(page.locator("#update-install")).toBeHidden();
   await page.locator("#update-dialog-close").click();
 
-  await page.evaluate(() => { window.__host.settingsReply = { shortcuts: { select: "v", location: "l", route: "r", measure: "m", area: "a", search: "s", wind: "w", dr: "d" }, checkForUpdates: false, interfaceSize: 0 }; });
+  await page.evaluate(() => { window.__host.settingsReply = { shortcuts: { select: "v", location: "l", route: "r", measure: "m", area: "a", search: "s", wind: "w", dr: "d" }, checkForUpdates: false, clearReachedAreas: false, interfaceSize: 0 }; });
   await page.locator('.app-menu[data-menu="file"] summary').click();
   await page.locator("#open-settings").click();
   await expect.poll(async () => (await chartroom.saved())?.settings.checkForUpdates).toBe(false);
+  expect((await chartroom.saved()).settings.clearReachedAreas).toBe(false);
   await page.evaluate(() => { window.__host.messages.length = 0; });
   await page.reload();
   await expect(page.locator("#app-version")).toHaveText("9.9.9");
@@ -535,7 +552,7 @@ test("a saved route takes new waypoints from its last one", async ({ chartroom, 
 
 test("imports a Scrambled Seas save as a chart of its moved islands", async ({ chartroom, page }) => {
   await chartroom.open();
-  const vectors = Array.from({ length: 43 }, () => "<Vector3><x>90000</x><y>0</y><z>0</z></Vector3>").join("");
+  const vectors = Array.from({ length: 67 }, () => "<Vector3><x>90000</x><y>0</y><z>0</z></Vector3>").join("");
   const xml = `<?xml version="1.0" encoding="utf-8"?><ScrambledSeasSaveContainer><worldScramblerSeed>7</worldScramblerSeed><borderExpander>0</borderExpander><islandOffsets>${vectors}</islandOffsets></ScrambledSeasSaveContainer>`;
   await page.locator("#json-file").setInputFiles({ name: "scramble_0.xml", mimeType: "text/xml", buffer: Buffer.from(xml) });
   await expect(page.locator("#layer-imported-map")).toBeChecked();
@@ -552,8 +569,8 @@ test("follows Coordinate Viewer live into the chart it started on", async ({ cha
   await chartroom.press("l");
   await chartroom.clickChart(500, 400);
   await page.locator('.app-menu[data-menu="file"] > summary').click();
-  await page.locator("#follow-track").click();
-  await expect(page.locator("#follow-track")).toHaveText("Stop following coords_0.txt");
+  await page.locator("#follow-track-cv").click();
+  await expect(page.locator("#follow-track-cv")).toHaveText("Stop following coords_0.txt");
   // Nothing is saved until the first position arrives, so this waits on the host itself.
   await expect.poll(() => page.evaluate(() => window.__host.workspace?.charts?.[0]?.track?.length ?? 0)).toBe(2);
   const [first, second] = (await chartroom.chart()).track;
@@ -565,8 +582,76 @@ test("follows Coordinate Viewer live into the chart it started on", async ({ cha
   expect(undone.features, "undo takes back the location").toHaveLength(0);
   expect(undone.track, "but keeps the live positions").toHaveLength(2);
   await page.locator('.app-menu[data-menu="file"] > summary').click();
+  await page.locator("#follow-track-cv").click();
+  await expect(page.locator("#follow-track-cv")).toHaveText("Follow live (Coordinate Viewer)");
+});
+
+test("follows a Voyage Recorder log live, with its boat, speed and sessions", async ({ chartroom, page }) => {
+  const runs = [
+    '{"type":"position","day":3,"hour":9.5,"lat":40.1,"lon":0.5,"event":"start","boat":"medi medium","course":90,"knots":5.2,"windFrom":180,"windKnots":10}\n',
+    // A load: the session line arrives in one run and its first position in the next.
+    '{"type":"position","day":3,"hour":10,"lat":40.1,"lon":0.6,"boat":"medi medium","course":90,"knots":5.4}\n{"type":"session","day":1,"hour":8}\n',
+    '{"type":"position","day":1,"hour":8,"lat":30,"lon":1}\n{"type":"posi'
+  ];
+  const now = Date.now();
+  const choices = [
+    { id: 0, name: "slot2.jsonl", place: "", modified: new Date(now - 5 * 60000).toISOString() },
+    { id: 1, name: "slot1.jsonl", place: "", modified: new Date(now - 3 * 3600000).toISOString() }
+  ];
+  await chartroom.open(null, { recording: { name: "slot1.jsonl", runs, choices } });
+  await page.locator('.app-menu[data-menu="file"] > summary').click();
   await page.locator("#follow-track").click();
-  await expect(page.locator("#follow-track")).toHaveText("Follow live");
+  // The newest save slot is offered first and selected; the player picks another.
+  await expect(page.locator("#slot-dialog")).toBeVisible();
+  await expect(page.locator("#slot-list label")).toHaveText(["Save slot 2recorded 5 minutes ago", "Save slot 1recorded 3 hours ago"]);
+  await expect(page.locator('#slot-list input[value="0"]')).toBeChecked();
+  await page.locator("#slot-list label").nth(1).click();
+  await page.locator("#slot-form button.primary").click();
+  await expect(page.locator("#follow-track")).toHaveText("Stop following slot1.jsonl");
+  expect(await page.evaluate(() => window.__host.follows.at(-1))).toEqual({ log: 1 });
+  await expect.poll(() => page.evaluate(() => window.__host.workspace?.charts?.[0]?.track?.length ?? 0)).toBe(3);
+  const [first, second, third] = (await chartroom.chart()).track;
+  expect([first.boat, first.knots, first.course, first.event, first.t]).toEqual(["Brig", 5.2, 90, "start", 3 * 24 + 9.5]);
+  // Wind from the south blows north.
+  expect([first.wind, first.windDeg]).toEqual(["N", 0]);
+  // Following starts a new stretch, since what came before the newest position was left out.
+  expect([first.newSession, second.newSession, third.newSession, third.boat]).toEqual([true, undefined, true, undefined]);
+});
+
+test("following a recording joins the chart's track and offers the positions it missed", async ({ chartroom, page }) => {
+  const line = (hour, lat) => `{"type":"position","day":3,"hour":${hour},"lat":${lat},"lon":0.5}\n`;
+  const runs = [line(9, 40) + line(9.5, 40.01) + line(10, 40.02) + line(10.5, 40.03), line(11, 40.04)];
+  await chartroom.open(null, { recording: { name: "slot1.jsonl", runs } });
+  // The chart already has the first two positions, from following earlier.
+  await page.locator('.app-menu[data-menu="file"] > summary').click();
+  await page.locator("#paste-track").click();
+  await page.locator("#paste-text").fill(line(9, 40) + line(9.5, 40.01));
+  await page.locator("#paste-form button.primary").click();
+  await page.locator('.app-menu[data-menu="file"] > summary').click();
+  await page.locator("#follow-track").click();
+  await expect(page.locator("#missing-text")).toHaveText("1 position was recorded since this chart's last one from slot1.jsonl. Add it to the track?");
+  await page.locator("#missing-form button.primary").click();
+  await expect.poll(() => page.evaluate(() => window.__host.workspace?.charts?.[0]?.track?.length ?? 0)).toBe(5);
+  const track = (await chartroom.chart()).track;
+  expect(track.map((point) => point.lat)).toEqual([40, 40.01, 40.02, 40.03, 40.04]);
+  // Filled in, the track runs on without a break.
+  expect(track.slice(2).map((point) => point.newSession ?? false)).toEqual([false, false, false]);
+});
+
+test("ports and missions noted while following become chart marks", async ({ chartroom, page }) => {
+  const runs = [
+    '{"type":"position","day":4,"hour":9,"lat":30.6,"lon":-2.45}\n',
+    '{"type":"port","day":4,"hour":9.5,"port":"Gold Rock City","island":1,"lat":30.5,"lon":-2.5,"portLat":30.6,"portLon":-2.45}\n'
+      + '{"type":"mission","day":4,"hour":10,"origin":"Gold Rock City","originIsland":1,"originLat":30.6,"originLon":-2.45,"destination":"Fort Aestrin","destinationIsland":15,"heading":22.5,"points":16,"miles":214}\n'
+  ];
+  await chartroom.open(null, { recording: { name: "slot1.jsonl", runs } });
+  await page.locator('.app-menu[data-menu="file"] > summary').click();
+  await page.locator("#follow-track").click();
+  await expect(page.locator("#toast")).toContainText("From Voyage Recorder: Gold Rock City, Fort Aestrin.");
+  await expect.poll(() => page.evaluate(() => window.__host.workspace?.charts?.[0]?.searches?.length ?? 0)).toBe(1);
+  const chart = await chartroom.chart();
+  expect(chart.features.map((feature) => [feature.name, feature.islandId])).toEqual([["Gold Rock City", "alankh/gold_rock_city"]]);
+  expect([chart.searches[0].label, chart.searches[0].spreadDeg]).toEqual(["Fort Aestrin", 11.25]);
 });
 
 test("the macOS app offers live following too", async ({ chartroom, page }) => {
@@ -591,7 +676,7 @@ test("a route copies for SailMaster as a web map path", async ({ chartroom, page
 test("a Coordinate Viewer position can be selected, edited and deleted", async ({ chartroom, page }) => {
   await chartroom.open();
   await page.locator('.app-menu[data-menu="file"] > summary').click();
-  await page.locator("#follow-track").click();
+  await page.locator("#follow-track-cv").click();
   // Nothing is saved until the first position arrives, so this waits on the host itself.
   await expect.poll(() => page.evaluate(() => window.__host.workspace?.charts?.[0]?.track?.length ?? 0)).toBe(2);
   await page.keyboard.press("Escape");
@@ -610,6 +695,19 @@ test("a Coordinate Viewer position can be selected, edited and deleted", async (
 });
 
 const seaWith = (items) => ({ activeChartId: "sea", charts: [{ id: "sea", name: "Sea", view: { lat: 20, lon: 0, zoom: 2.5 }, ...items }] });
+
+test("the last recorded position sits above a location at the same spot and is picked first", async ({ chartroom, page }) => {
+  await chartroom.open(seaWith({
+    features: [{ id: "harbour", lat: 20, lon: 0, name: "Harbour" }],
+    track: [{ id: "earlier", lat: 19.5, lon: -0.5 }, { id: "latest", lat: 20, lon: 0 }]
+  }));
+  const spot = await page.evaluate(() => {
+    const canvas = document.querySelector("#chart-canvas").getBoundingClientRect();
+    return { width: canvas.width, height: canvas.height };
+  });
+  await chartroom.clickChart(spot.width / 2, spot.height / 2);
+  await expect(page.locator("#track-inspector")).toBeVisible();
+});
 
 test("a circumnavigation chart routes across the edge the short way", async ({ chartroom, page }) => {
   await chartroom.open(seaWith({ route: [{ id: "a", lat: 20, lon: 170 }, { id: "b", lat: 20, lon: -170 }, { id: "c", lat: 10, lon: -160 }] }));
@@ -679,7 +777,7 @@ test("dead reckoning carries on from the latest position, or from a point clicke
   await chartroom.open(atSea({ track: [{ id: "cv", lat: 30.6, lon: -4.6, t: 3 * 24 + 10, day: "3", time: "10:00", windDeg: 45 }] }));
   await chartroom.press("d");
   await expect(page.locator("#dr-panel")).toBeVisible();
-  await expect(page.locator("#dr-from-label")).toHaveText("Your latest Coordinate Viewer position, day 3 10:00");
+  await expect(page.locator("#dr-from-label")).toHaveText("Your latest recorded position, day 3 10:00");
   await expect(page.locator("#dr-percent").locator("..")).toHaveAttribute("title", /share of the distance sailed/);
   await page.locator("#dr-course").fill("E");
   await page.locator("#dr-speed").fill("6");

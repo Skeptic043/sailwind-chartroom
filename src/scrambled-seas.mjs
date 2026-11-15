@@ -6,7 +6,7 @@ import { ISLAND_CATALOG, VANILLA_ISLANDS, islandById } from "./islands.mjs";
 const METRES_PER_DEGREE = 9000;
 
 // The game's island numbers, from its "island N" scene objects. 14 (Nightcall) and 24 are not on the
-// chart, and 43 is Bottleneck Isle, which Better Ports adds.
+// chart, and 67 is Bottleneck Isle, which Better Ports adds ("island 67 Bottleneck(Clone)").
 const GAME_ISLANDS = Object.freeze({
   1: "alankh/gold_rock_city", 2: "alankh/alnilem", 3: "alankh/neverdin", 4: "alankh/albacore_town",
   5: "alankh/isle_of_clear_mind", 6: "alankh/lions_fang", 7: "alankh/alchemists_island", 8: "alankh/alankh_academy",
@@ -18,8 +18,13 @@ const GAME_ISLANDS = Object.freeze({
   31: "firefish/fire_fish_islands/north_sandbar", 32: "alankh/eleann_island", 33: "aestrin/firefly_grotto",
   34: "aestrin/aestra_abbey", 35: "aestrin/fey_valley", 36: "aestrin/bone_isle", 37: "emerald/dead_cove",
   38: "emerald/turtle_island", 39: "emerald/pondering_peak", 40: "alankh/old_ankh_town", 41: "alankh/mirage_mountain",
-  42: "alankh/saffron", 43: "better-ports/bottleneck"
+  42: "alankh/saffron", 67: "better-ports/bottleneck"
 });
+
+// The chart's island for a game island number, or "" for one it doesn't show.
+export function islandIdForNumber(number) {
+  return GAME_ISLANDS[number] ?? "";
+}
 
 // The other Fire Fish Lagoon islets are not islands of their own in the game. Each moves with the
 // nearest lagoon island, which is an assumption until checked against a scrambled game.

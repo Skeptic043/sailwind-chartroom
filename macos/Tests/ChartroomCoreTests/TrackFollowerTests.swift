@@ -23,11 +23,6 @@ final class TrackFollowerTests: XCTestCase {
         XCTAssertEqual(tail.day, "Day: 4")
     }
 
-    func testFollowingStartsFromTheNewestPosition() {
-        XCTAssertEqual(TrackTail.lastPosition("Day: 3\n40.1 0.5 23.5 90\nDay: 4\n40.2 0.6 0.5 92\n"), "Day: 4\n40.2 0.6 0.5 92\n")
-        XCTAssertNil(TrackTail.lastPosition("Day: 3\n"))
-    }
-
     func testReportsLinesTheGameAppends() throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)

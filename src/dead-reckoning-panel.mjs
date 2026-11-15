@@ -53,7 +53,7 @@ export function pickStart(target) {
   const position = shownItems(chart, "dr").find(at);
   const recorded = shownItems(chart, "track").find(at);
   if (position) reckonFrom(position);
-  else if (recorded) pick({ lat: recorded.lat, lon: recorded.lon, t: hasTime(recorded) ? recorded.t : null, sigmaNm: 0, label: "Coordinate Viewer position" });
+  else if (recorded) pick({ lat: recorded.lat, lon: recorded.lon, t: hasTime(recorded) ? recorded.t : null, sigmaNm: 0, label: "Recorded position" });
   else pick({ lat: target.lat, lon: target.lon, t: null, sigmaNm: 0, label: `${formatCoordinate(target.lat, "lat", 3)} · ${formatCoordinate(target.lon, "lon", 3)}` });
   renderDeadReckoning();
 }

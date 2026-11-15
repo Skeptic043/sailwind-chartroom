@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.8.9
+
+### Added
+- Follows recordings from Voyage Recorder, a new companion mod. `Follow live (Voyage Recorder)` automatically finds and lists your recordings
+- Following a recording picks up where the chart left off and offers to add positions recorded while Chartroom wasn't following
+- Separate `View` options to show or hide Coordinate Viewer and Voyage Recorder positions
+- Search areas can switch between snapping to a 16, 32 or 64-point compass
+- While using Voyage Recorder:
+  - With `Port visits` on in Voyage Recorder, ports you stop at become locations in Chartroom
+  - Reaching a port clears its search areas and rough areas. Turn this off with `Clear search areas and rough areas for ports you reach` in `Settings`
+  - With `Missions` on in Voyage Recorder, `Search area` markers are added automatically as you scroll through the missions in your mission book or on a port's mission board
+  - Recorded positions can show the current boat, its course and speed, wind direction and strength, and hull damage, as chosen in Voyage Recorder's config
+
+### Changed
+- `Coordinate Viewer` in the `File` and `View` menus is now `Recorded track`, since it covers both Coordinate Viewer and Voyage Recorder
+- The last position of a recorded track sits above islands and locations
+- Recorded wind is drawn as a larger feathered arrow on recorded tracks
+
+### Fixed
+- Bottleneck Isle ends up in the right place when importing a Scrambled Seas save map
+
 ## 0.8.0
 
 ### Added

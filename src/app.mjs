@@ -328,3 +328,10 @@ initUpdates();
 initLiveTrack();
 initDeadReckoning();
 initTrackSelection();
+
+// Searches snap to a 16, 32 or 64-point compass, saved with the other settings.
+elements["search-points"].value = String(workspace.settings.searchPoints);
+elements["search-points"].addEventListener("change", () => {
+  workspace.settings.searchPoints = Number(elements["search-points"].value);
+  persist();
+});

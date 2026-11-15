@@ -164,6 +164,8 @@ body.resizing-panels { cursor: col-resize; user-select: none; }
 .panel-section h2 { font-size: 15px; letter-spacing: .01em; margin-bottom: 13px; }
 .eyebrow { color: var(--accent); font-size: 12px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; margin-bottom: 6px; }
 .hint, .fineprint { color: var(--muted); font-size: 12.5px; line-height: 1.5; margin: 10px 0 0; }
+.inline-setting { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 10px 0 0; }
+.inline-setting select { width: auto; }
 
 .tool-grid { display: grid; grid-template-columns: 1fr; gap: 7px; }
 /* Each tool's icon sits at the right of its button and steps aside when the sidebar is too narrow for it. */
@@ -285,10 +287,14 @@ body.resizing-panels { cursor: col-resize; user-select: none; }
 .panel-toggles { display: flex; gap: 4px; }
 .panel-toggle { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; font-size: 12px; color: var(--muted); background: transparent; }
 .panel-toggle[aria-pressed="true"] { color: var(--accent-strong); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
-/* Narrow side panels stack paired fields instead of squeezing them. */
+/* Narrow side panels stack paired fields instead of squeezing them. Short pairs (coordinates, day and time,
+   search figures) stay side by side until the panel is close to its narrowest. */
 .panel-scroll { container-type: inline-size; }
+@container (max-width: 210px) {
+  .two-columns.compact { grid-template-columns: 1fr; }
+}
 @container (max-width: 270px) {
-  .two-columns { grid-template-columns: 1fr; }
+  .two-columns:not(.compact) { grid-template-columns: 1fr; }
   .feature-row { grid-template-columns: 25px minmax(0, 1fr); }
   .feature-row .coords { grid-column: 2; }
 }
@@ -302,6 +308,12 @@ dialog::backdrop { background: var(--backdrop); backdrop-filter: blur(3px); }
 .dialog-card input { background: var(--panel-2); }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
 .dialog-actions .danger-text { margin-right: auto; }
+.dialog-actions .link-button { align-self: center; margin-block: 0; }
+.slot-list { display: grid; gap: 6px; margin-top: 12px; }
+.slot-list label { display: flex; align-items: baseline; gap: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
+.slot-list label:has(input:checked) { border-color: var(--accent); }
+.slot-list strong { font-size: 14px; }
+.slot-list span { color: var(--muted); font-size: 12.5px; }
 .shortcut-list { display: grid; gap: 8px; margin-top: 18px; }
 .shortcut-list div { display: grid; grid-template-columns: 64px 1fr; align-items: center; gap: 12px; color: var(--muted); font-size: 13px; }
 kbd { justify-self: start; padding: 4px 7px; border: 1px solid var(--line-strong); border-bottom-width: 2px; border-radius: 5px; background: var(--panel-2); color: var(--ink); font-size: 12px; }

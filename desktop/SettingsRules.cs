@@ -17,6 +17,9 @@ internal sealed record AppSettings(IReadOnlyList<ToolShortcut> Tools, bool Check
     internal IReadOnlyList<SettingChoice> Appearances { get; init; } = [];
     internal bool Dark { get; init; } = true;
 
+    /// <summary>Whether a port reached with Voyage Recorder clears its search areas and rough areas.</summary>
+    internal bool ClearReachedAreas { get; init; } = true;
+
     /// <summary>Interface sizes offered, in percent. 0 means follow the Windows text size.</summary>
     internal static readonly int[] InterfaceSizes = [0, 100, 125, 150, 175, 200];
 
@@ -40,7 +43,8 @@ internal sealed record AppSettings(IReadOnlyList<ToolShortcut> Tools, bool Check
         {
             Themes = Choices(value, "themes"),
             Appearances = Choices(value, "appearances"),
-            Dark = !value.TryGetProperty("dark", out var dark) || dark.ValueKind != JsonValueKind.False
+            Dark = !value.TryGetProperty("dark", out var dark) || dark.ValueKind != JsonValueKind.False,
+            ClearReachedAreas = !value.TryGetProperty("clearReachedAreas", out var clear) || clear.ValueKind != JsonValueKind.False
         };
     }
 

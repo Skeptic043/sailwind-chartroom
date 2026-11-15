@@ -13,6 +13,7 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
     private let appearance = NSPopUpButton()
     private let interfaceSize = NSPopUpButton()
     private let checkUpdates = NSButton(checkboxWithTitle: "Check for updates when Chartroom starts", target: nil, action: nil)
+    private let clearReachedAreas = NSButton(checkboxWithTitle: "Clear search areas and rough areas for ports you reach", target: nil, action: nil)
 
     /// - Parameter apply: Receives the settings on OK and Apply, after they have been checked.
     init(settings: AppSettings, defaults: [ToolShortcut], apply: @escaping (AppSettings) -> Void) {
@@ -44,6 +45,7 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
             [NSTextField(labelWithString: "Text and interface size"), interfaceSize]
         ]
         checkUpdates.state = settings.checkForUpdates ? .on : .off
+        clearReachedAreas.state = settings.clearReachedAreas ? .on : .off
 
         let ok = NSButton(title: "OK", target: self, action: #selector(confirm))
         ok.keyEquivalent = "\r"
@@ -58,6 +60,7 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
         let layout = NSStackView(views: [
             heading("Tool shortcuts"), grid(shortcutRows), restore,
             heading("Display"), grid(displayRows),
+            heading("Voyage Recorder"), clearReachedAreas,
             heading("Updates"), checkUpdates,
             buttons
         ])
@@ -67,6 +70,7 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
         layout.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
         layout.setCustomSpacing(18, after: restore)
         layout.setCustomSpacing(18, after: layout.views[4])
+        layout.setCustomSpacing(18, after: clearReachedAreas)
         layout.setCustomSpacing(18, after: checkUpdates)
         buttons.trailingAnchor.constraint(equalTo: layout.trailingAnchor, constant: -20).isActive = true
         window.contentView = layout
@@ -131,9 +135,10 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
         func pick(_ popup: NSPopUpButton, _ choices: [SettingChoice], _ fallback: String) -> String {
             choices.indices.contains(popup.indexOfSelectedItem) ? choices[popup.indexOfSelectedItem].id : fallback
         }
-        let applied = AppSettings(tools: tools, checkForUpdates: checkUpdates.state == .on,
+        var applied = AppSettings(tools: tools, checkForUpdates: checkUpdates.state == .on,
                                   interfaceSize: AppSettings.interfaceSizes[max(0, interfaceSize.indexOfSelectedItem)],
                                   theme: pick(theme, current.themes, current.theme), appearance: pick(appearance, current.appearances, current.appearance))
+        applied.clearReachedAreas = clearReachedAreas.state == .on
         apply(applied)
         return true
     }

@@ -25,8 +25,9 @@
           <button id="export-all" type="button">Back up all charts</button>
           <button id="open-folder" type="button" hidden>Open save folder</button>
           <hr>
-          <p class="menu-heading">Coordinate Viewer</p>
-          <button id="follow-track" type="button" hidden>Follow live</button>
+          <p class="menu-heading">Recorded track</p>
+          <button id="follow-track" type="button" hidden>Follow live (Voyage Recorder)</button>
+          <button id="follow-track-cv" type="button" hidden>Follow live (Coordinate Viewer)</button>
           <button id="import-track" type="button">Import file</button>
           <button id="paste-track" type="button">Paste positions</button>
           <button id="clear-track" type="button">Clear track</button>
@@ -69,7 +70,9 @@
           <label class="menu-check"><input id="layer-labels" type="checkbox" checked><span>Chart labels</span></label>
           <label class="menu-check"><input id="layer-boats" type="checkbox" checked><span>Boat markers</span></label>
           <label class="menu-check"><input id="layer-islands" type="checkbox" checked><span>Island outlines</span></label>
-          <label class="menu-check"><input id="layer-track" type="checkbox" checked><span>Coordinate Viewer track</span></label>
+          <label class="menu-check"><input id="layer-track" type="checkbox" checked><span>Recorded track</span></label>
+          <label class="menu-check menu-check-sub"><input id="layer-track-cv" type="checkbox" checked><span>Coordinate Viewer</span></label>
+          <label class="menu-check menu-check-sub"><input id="layer-track-voyage" type="checkbox" checked><span>Voyage Recorder</span></label>
           <label class="menu-check menu-check-sub"><input id="layer-track-winds" type="checkbox" checked><span>Wind along the track</span></label>
           <hr>
           <label class="menu-check"><input id="layer-vanilla" type="checkbox"><span>Vanilla map</span></label>
@@ -134,6 +137,7 @@
           <button class="tool" type="button" data-mode="wind"><b>W</b><span>Add wind</span><svg class="tool-icon icon-wind" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 9h10.5a2.6 2.6 0 1 0-2.6-2.6M3 13h15a2.8 2.8 0 1 1-2.8 2.8M3 17h7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
         </div>
         <p id="mode-hint" class="hint">Drag the chart to pan. Select a mark, waypoint or measure line to edit it.</p>
+        <label id="search-points-row" class="inline-setting" hidden>Compass points <select id="search-points"><option value="16">16</option><option value="32">32</option><option value="64">64</option></select></label>
       </section>
 
       <section id="dr-panel" class="panel-section dr-panel" hidden>
@@ -145,15 +149,15 @@
             <strong id="dr-from-label">Your latest position</strong>
             <button id="dr-from-latest" class="link-button" type="button" hidden>Use your latest position</button>
           </div>
-          <div class="two-columns">
-            <label>Compass course <input id="dr-course" inputmode="decimal" placeholder="NE or 045" required></label>
-            <label>Chip log speed, knots <input id="dr-speed" type="number" min="0" max="40" step="any" required></label>
+          <div class="two-columns compact">
+            <label>Course <input id="dr-course" inputmode="decimal" placeholder="NE or 045" required></label>
+            <label>Speed, knots <input id="dr-speed" type="number" min="0" max="40" step="any" required></label>
           </div>
-          <div class="two-columns">
+          <div class="two-columns compact">
             <label>Hours sailed <input id="dr-hours" inputmode="decimal" placeholder="2.5 or 2:30" required></label>
-            <label title="Your guess at how far off you could be, as a share of the distance sailed. At 10%, after 20 nm you could be 2 nm off. The circle round each DR position shows it.">Error, % of distance <input id="dr-percent" type="number" min="0" max="100" step="1"></label>
+            <label title="Your guess at how far off you could be, as a share of the distance sailed. At 10%, after 20 nm you could be 2 nm off. The circle round each DR position shows it.">Error, % <input id="dr-percent" type="number" min="0" max="100" step="1"></label>
           </div>
-          <div class="two-columns">
+          <div class="two-columns compact">
             <label>Start day <input id="dr-day" maxlength="30" placeholder="Optional"></label>
             <label>Start time <input id="dr-time" maxlength="30" placeholder="Optional"></label>
           </div>
@@ -209,11 +213,11 @@
           </label>
           <label>Name <input id="feature-name" maxlength="100"></label>
           <label class="switch-row"><span>Show name on chart</span><input id="feature-show-name" type="checkbox"></label>
-          <div class="two-columns">
+          <div class="two-columns compact">
             <label>Latitude <input id="feature-lat" inputmode="decimal"></label>
             <label>Longitude <input id="feature-lon" inputmode="decimal"></label>
           </div>
-          <div class="two-columns">
+          <div class="two-columns compact">
             <label>Day <input id="feature-day" maxlength="30" placeholder="Optional"></label>
             <label>Time <input id="feature-time" maxlength="30" placeholder="Optional"></label>
           </div>
@@ -239,11 +243,11 @@
         </div>
         <form id="route-form" class="stack-form">
           <label>Label <input id="route-name" maxlength="100" placeholder="Optional"></label>
-          <div class="two-columns">
+          <div class="two-columns compact">
             <label>Latitude <input id="route-lat" inputmode="decimal"></label>
             <label>Longitude <input id="route-lon" inputmode="decimal"></label>
           </div>
-          <div class="two-columns">
+          <div class="two-columns compact">
             <label>Day <input id="route-day" maxlength="30" placeholder="Optional"></label>
             <label>Time <input id="route-time" maxlength="30" placeholder="Optional"></label>
           </div>
@@ -287,15 +291,15 @@
         </div>
         <form id="search-form" class="stack-form">
           <label>Looking for <input id="search-label" maxlength="100" placeholder="Mission destination"></label>
-          <div class="two-columns">
+          <div class="two-columns compact">
             <label>From latitude <input id="search-lat" inputmode="decimal"></label>
             <label>From longitude <input id="search-lon" inputmode="decimal"></label>
           </div>
-          <div class="two-columns">
+          <div class="two-columns compact">
             <label>Direction <input id="search-direction" inputmode="decimal" placeholder="SSE, SbE or 160"></label>
             <label>Distance nm <input id="search-distance" type="number" min="0.1" step="any"></label>
           </div>
-          <div class="two-columns">
+          <div class="two-columns compact">
             <label>Direction ± ° <input id="search-spread" type="number" min="0" max="90" step="0.25"></label>
             <label>Distance ± % <input id="search-tolerance" type="number" min="0" max="90" step="1"></label>
           </div>
@@ -326,23 +330,24 @@
 
       <section id="track-inspector" class="panel-section inspector" hidden>
         <div class="section-heading">
-          <div><div class="eyebrow">Coordinate Viewer</div><h2>Edit track position</h2></div>
+          <div><div class="eyebrow">Recorded track</div><h2>Edit track position</h2></div>
           <div class="heading-actions"><button class="icon-button lock-button" type="button" data-lock title="Lock in place" aria-label="Lock in place" aria-pressed="false"><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" focusable="false"><rect x="5" y="10.5" width="14" height="10" rx="2" fill="currentColor" fill-opacity=".18" stroke="currentColor" stroke-width="1.6"/><path d="M8.5 10.5V7.8a3.5 3.5 0 0 1 7 0v2.7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button><button id="delete-track" class="danger icon-button" type="button" title="Delete track position" aria-label="Delete track position">×</button></div>
         </div>
         <form id="track-form" class="stack-form">
           <label>Label <input id="track-name" maxlength="100" placeholder="Optional"></label>
-          <div class="two-columns">
+          <div class="two-columns compact">
             <label>Latitude <input id="track-lat" inputmode="decimal"></label>
             <label>Longitude <input id="track-lon" inputmode="decimal"></label>
           </div>
-          <div class="two-columns">
+          <div class="two-columns compact">
             <label>Day <input id="track-day" maxlength="30" placeholder="Optional"></label>
             <label>Time <input id="track-time" maxlength="30" placeholder="Optional"></label>
           </div>
           <label>Recorded wind <input id="track-wind" maxlength="30" placeholder="Optional"></label>
+          <p id="track-recorded" class="leg-detail" hidden></p>
         </form>
         <div id="track-selection" hidden>
-          <h3 class="form-heading">Selected Coordinate Viewer positions</h3>
+          <h3 class="form-heading">Selected track positions</h3>
           <div id="track-selection-detail" class="leg-detail"></div>
           <div class="two-columns">
             <label>Maximum distance from route, nm <input id="track-route-tolerance" type="number" min="0.1" max="50" step="any" value="2"></label>
@@ -359,12 +364,12 @@
         </div>
         <form id="wind-form" class="stack-form">
           <label>Label <input id="wind-label" maxlength="100"></label>
-          <div class="two-columns">
+          <div class="two-columns compact">
             <label>Latitude <input id="wind-lat" inputmode="decimal"></label>
             <label>Longitude <input id="wind-lon" inputmode="decimal"></label>
           </div>
           <label>Wind flows toward <input id="wind-direction" inputmode="decimal" placeholder="E or 090"></label>
-          <div class="two-columns">
+          <div class="two-columns compact">
             <label>Day <input id="wind-day" maxlength="30" placeholder="Optional"></label>
             <label>Time <input id="wind-time" maxlength="30" placeholder="Optional"></label>
           </div>
@@ -393,7 +398,7 @@
     </aside>
   </main>
 
-  <input id="track-file" type="file" accept=".txt,text/plain" hidden>
+  <input id="track-file" type="file" accept=".txt,.jsonl,text/plain" hidden>
   <input id="json-file" type="file" accept=".json,application/json,.xml,text/xml" hidden>
 
   <dialog id="chart-dialog">
@@ -411,11 +416,37 @@
     </form>
   </dialog>
 
+  <dialog id="slot-dialog">
+    <form id="slot-form" method="dialog" class="dialog-card">
+      <div class="eyebrow">Voyage Recorder</div>
+      <h2>Follow a recording</h2>
+      <p>Choose the save slot to follow. The one recorded most recently is selected.</p>
+      <div id="slot-list" class="slot-list" role="radiogroup" aria-label="Recordings"></div>
+      <div class="dialog-actions">
+        <button id="slot-pick-file" class="danger-text link-button" type="button">Choose another file</button>
+        <button type="button" data-close>Cancel</button>
+        <button class="primary" type="submit">Follow</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="missing-dialog">
+    <form id="missing-form" method="dialog" class="dialog-card">
+      <div class="eyebrow">Follow live</div>
+      <h2>Fill in the track?</h2>
+      <p id="missing-text"></p>
+      <div class="dialog-actions">
+        <button type="button" data-close>Leave a gap</button>
+        <button class="primary" type="submit">Add to track</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="paste-dialog">
     <form id="paste-form" method="dialog" class="dialog-card">
-      <div class="eyebrow">Coordinate Viewer</div>
+      <div class="eyebrow">Recorded track</div>
       <h2>Paste positions</h2>
-      <p>Paste lines from a Coordinate Viewer file (<code>latitude longitude [hour wind]</code>, with optional <code>Day: N</code> lines). They are added to this chart's track.</p>
+      <p>Paste lines from a Voyage Recorder log, or from a Coordinate Viewer file (<code>latitude longitude [hour wind]</code>, with optional <code>Day: N</code> lines). They are added to this chart's track.</p>
       <label>Positions <textarea id="paste-text" rows="8" placeholder="Day: 3&#10;35.512 -3.208 9.5 270"></textarea></label>
       <div class="dialog-actions">
         <button type="button" data-close>Cancel</button>
@@ -451,9 +482,9 @@
       <p class="help-note"><strong>Routes:</strong> Save route keeps a finished route on the chart and starts a new one. Saved routes are listed under Chart items. Click a saved route's line to select or drag the whole route, or click one of its waypoints to edit that point. Add waypoints continues a saved route from its last waypoint.</p>
       <p class="help-note"><strong>Distance model:</strong> the original Sailwind map uses a flat chart and approximately 140 nautical miles per degree. Chartroom preserves that convention; it does not treat the game world as a globe.</p>
       <p class="help-note"><strong>Long plots:</strong> while a measurement, search or area is active, hold the pointer against the chart edge briefly to pan in that direction.</p>
-      <p class="help-note"><strong>Without Coordinate Viewer:</strong> Dead reckoning carries your position forward from your last known position, using your compass course, chip log speed and hours sailed. Plot a new DR position whenever you change course or speed. Each circle shows how far that DR position may be off.</p>
+      <p class="help-note"><strong>Without a recording:</strong> Dead reckoning carries your position forward from your last known position, using your compass course, chip log speed and hours sailed. Plot a new DR position whenever you change course or speed. Each circle shows how far that DR position may be off.</p>
       <p class="help-note"><strong>Following your boat:</strong>
- start recording in Coordinate Viewer, then choose File, Coordinate Viewer, Follow live and pick the coords file in Coordinate Viewer's plugin folder. Each position it records joins the chart you started on.</p>
+ press J in game to start recording with Voyage Recorder, then choose File, Recorded track, Follow live. Chartroom finds the recording by itself. When it finds none, it asks for the file instead, such as the coords file in Coordinate Viewer's plugin folder. Each position recorded joins the chart you started on.</p>
       <p class="help-note"><strong>Scrambled Seas:</strong> turn on ExternalSave in Scrambled Seas' settings and save your game, then use File, Import to open the scramble_&lt;slot&gt;.xml file in its plugin folder. Chartroom makes a new chart with the Scrambled Seas map in View, showing where that world's islands are.</p>
       <p class="help-note"><strong>Your charts:</strong> Chartroom saves automatically and keeps a copy from your previous launch. Use File, Back up all charts to keep your own copy, or to move your charts to another computer.</p>
       <p class="help-note"><strong>Layout:</strong> use the two panel buttons at the top to hide either sidebar. Drag a sidebar's inner edge to resize it.</p>

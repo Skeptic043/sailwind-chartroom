@@ -18,6 +18,7 @@ internal sealed class SettingsForm : Form
     private readonly ComboBox appearance = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 190 };
     private readonly ComboBox interfaceSize = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 190 };
     private readonly CheckBox checkUpdates = new() { Text = "Check for updates when Chartroom starts", AutoSize = true };
+    private readonly CheckBox clearReachedAreas = new() { Text = "Clear search areas and rough areas for ports you reach", AutoSize = true };
     private readonly AppSettings current;
     private readonly Action<AppSettings> apply;
 
@@ -77,6 +78,10 @@ internal sealed class SettingsForm : Form
         var updates = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, Padding = new Padding(6, 4, 6, 6) };
         updates.Controls.Add(checkUpdates);
 
+        clearReachedAreas.Checked = current.ClearReachedAreas;
+        var recorder = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, Padding = new Padding(6, 4, 6, 6) };
+        recorder.Controls.Add(clearReachedAreas);
+
         var ok = Button("OK");
         var cancel = Button("Cancel");
         var applyButton = Button("Apply");
@@ -91,6 +96,7 @@ internal sealed class SettingsForm : Form
         var layout = new TableLayoutPanel { ColumnCount = 1, AutoSize = true, Dock = DockStyle.Fill };
         layout.Controls.Add(Group("Tool shortcuts", shortcuts));
         layout.Controls.Add(Group("Display", display));
+        layout.Controls.Add(Group("Voyage Recorder", recorder));
         layout.Controls.Add(Group("Updates", updates));
         layout.Controls.Add(buttons);
         Controls.Add(layout);
@@ -151,7 +157,10 @@ internal sealed class SettingsForm : Form
         string Pick(ComboBox box, IReadOnlyList<SettingChoice> choices, string fallback) =>
             box.SelectedIndex >= 0 && box.SelectedIndex < choices.Count ? choices[box.SelectedIndex].Id : fallback;
         apply(new AppSettings(tools, checkUpdates.Checked, AppSettings.InterfaceSizes[Math.Max(0, interfaceSize.SelectedIndex)],
-            Pick(theme, current.Themes, current.Theme), Pick(appearance, current.Appearances, current.Appearance)));
+            Pick(theme, current.Themes, current.Theme), Pick(appearance, current.Appearances, current.Appearance))
+        {
+            ClearReachedAreas = clearReachedAreas.Checked
+        });
         return true;
     }
 

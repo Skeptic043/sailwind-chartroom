@@ -22,9 +22,10 @@ public sealed class SettingsRulesTests
     [Fact]
     public void ReadsTheSettingsThePageSends()
     {
-        var settings = AppSettings.Parse(JsonDocument.Parse("""{"tools":[{"mode":"select","label":"Select & pan","key":"v"}],"checkForUpdates":false,"interfaceSize":150}""").RootElement)!;
+        var settings = AppSettings.Parse(JsonDocument.Parse("""{"tools":[{"mode":"select","label":"Select & pan","key":"v"}],"checkForUpdates":false,"clearReachedAreas":false,"interfaceSize":150}""").RootElement)!;
         Assert.Equal("v", Assert.Single(settings.Tools).Key);
         Assert.False(settings.CheckForUpdates);
+        Assert.False(settings.ClearReachedAreas);
         Assert.Equal(150, settings.InterfaceSize);
     }
 

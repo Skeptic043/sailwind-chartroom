@@ -46,6 +46,8 @@ test("the track breaks where the record jumps, but not across the chart's edge",
   assert.deepEqual(trackSegments([...sailing, reloaded, teleported, nextDay]).map((segment) => segment.length), [3, 1, 1, 1]);
   const roundTheWorld = [point(10, 179.98, 5), point(10, -179.99, 5.25), point(10, -179.96, 5.5)];
   assert.equal(trackSegments(roundTheWorld).length, 1);
+  const fromVoyageRecorder = point(30.03, -4.97, 100.75, { source: "voyage" });
+  assert.equal(trackSegments([...sailing, fromVoyageRecorder]).length, 2, "Coordinate Viewer and Voyage Recorder positions are separate stretches");
 });
 
 test("dead reckoning runs the course, wraps across the chart's edge, and grows less certain with the distance sailed", () => {
@@ -121,4 +123,16 @@ test("the Dead reckoning shortcut never takes a key the player already uses", ()
   assert.equal(shortcuts.location, "d");
   assert.notEqual(shortcuts.dr, "d");
   assert.equal(sanitizeWorkspace({ charts: [createChart()], settings: { shortcuts: { ...old, location: "l" } } }).settings.shortcuts.dr, "d");
+});
+
+test("a followed recording carries on from the chart's last position from it", async () => {
+  const { joinRecording } = await import("../src/track.mjs");
+  const at = (lat, t, source) => ({ lat, lon: 1, t, ...(source && { source }) });
+  const file = [at(1, 10, "voyage"), at(2, 11, "voyage"), at(3, 12, "voyage"), at(4, 13, "voyage")];
+  const chart = [at(1, 10, "voyage"), at(2, 11, "voyage"), at(9, 5)];
+  // The Coordinate Viewer position after them doesn't count: matching is per kind of recording.
+  assert.deepEqual(joinRecording(chart, file), { fresh: file.slice(2), matched: true });
+  assert.deepEqual(joinRecording([at(4, 13, "voyage")], file), { fresh: [], matched: true });
+  assert.deepEqual(joinRecording([at(7, 2, "voyage")], file), { fresh: file, matched: false });
+  assert.deepEqual(joinRecording([], file), { fresh: file, matched: false });
 });

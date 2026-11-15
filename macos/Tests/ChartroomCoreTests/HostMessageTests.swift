@@ -11,6 +11,9 @@ final class HostMessageTests: XCTestCase {
         XCTAssertEqual(HostMessage.parse(#"{"type":"check-updates"}"#), .checkUpdates(background: false))
         XCTAssertEqual(HostMessage.parse(#"{"type":"follow-track","chartId":"chart-1"}"#), .followTrack(chartId: "chart-1"))
         XCTAssertNil(HostMessage.parse(#"{"type":"follow-track"}"#))
+        XCTAssertEqual(HostMessage.parse(#"{"type":"follow-track","chartId":"chart-1","log":2}"#), .followTrack(chartId: "chart-1", log: 2))
+        XCTAssertEqual(HostMessage.parse(#"{"type":"follow-track","chartId":"chart-1","pick":true}"#), .followTrack(chartId: "chart-1", pick: true))
+        XCTAssertEqual(HostMessage.parse(#"{"type":"follow-track","chartId":"chart-1","log":-1}"#), .followTrack(chartId: "chart-1"))
         XCTAssertEqual(HostMessage.parse(#"{"type":"stop-track"}"#), .stopTrack)
         XCTAssertEqual(HostMessage.parse(#"{"type":"copy-text","text":"route"}"#), .copyText("route"))
     }
@@ -83,9 +86,10 @@ final class AppSettingsTests: XCTestCase {
     }
 
     func testReadsTheSettingsThePageSends() {
-        let settings = parse(#"{"tools":[{"mode":"select","label":"Select","key":"v"}],"checkForUpdates":false,"interfaceSize":150,"theme":"sailwind","appearance":"light","dark":false,"themes":[{"id":"chartroom","label":"Chartroom"},{"id":"sailwind","label":"Sailwind paper"}],"appearances":[{"id":"system","label":"Match macOS"},{"broken":true}]}"#)
+        let settings = parse(#"{"tools":[{"mode":"select","label":"Select","key":"v"}],"checkForUpdates":false,"clearReachedAreas":false,"interfaceSize":150,"theme":"sailwind","appearance":"light","dark":false,"themes":[{"id":"chartroom","label":"Chartroom"},{"id":"sailwind","label":"Sailwind paper"}],"appearances":[{"id":"system","label":"Match macOS"},{"broken":true}]}"#)
         XCTAssertEqual(settings?.tools.first?.key, "v")
         XCTAssertEqual(settings?.checkForUpdates, false)
+        XCTAssertEqual(settings?.clearReachedAreas, false)
         XCTAssertEqual(settings?.interfaceSize, 150)
         XCTAssertEqual(settings?.theme, "sailwind")
         XCTAssertEqual(settings?.appearance, "light")
@@ -98,6 +102,7 @@ final class AppSettingsTests: XCTestCase {
         let settings = parse(#"{"tools":[{"mode":"select","label":"Select","key":"v"}],"interfaceSize":137}"#)
         XCTAssertEqual(settings?.interfaceSize, 0)
         XCTAssertEqual(settings?.checkForUpdates, true)
+        XCTAssertEqual(settings?.clearReachedAreas, true)
     }
 
     func testIncompleteSettingsAreIgnored() {

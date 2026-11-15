@@ -35,17 +35,6 @@ public struct TrackTail: Equatable {
         return (text, TrackTail(offset: from.offset + UInt64(end), day: day))
     }
 
-    /// The last position in `text` with the day before it, or nil.
-    public static func lastPosition(_ text: String) -> String? {
-        var day: String?
-        var last: String?
-        for line in text.split(whereSeparator: \.isNewline).map(String.init) {
-            if isDayLine(line) { day = line } else { last = line }
-        }
-        guard let last else { return nil }
-        return day.map { "\($0)\n\(last)\n" } ?? "\(last)\n"
-    }
-
     private static func isDayLine(_ line: String) -> Bool {
         line.trimmingCharacters(in: .whitespaces).lowercased().hasPrefix("day")
     }
@@ -71,8 +60,9 @@ public final class TrackFollower {
         try queue.sync {
             // Watching starts before the first read, so a position written meanwhile is read next.
             try watch()
-            // The newest position shows at once; the rest of the file is already on the chart or was left out.
-            if let latest = TrackTail.lastPosition(readNew()) { onText(latest) }
+            // The whole file goes first, so the page can join it to the chart's track and offer what it missed.
+            let text = readNew()
+            if !text.isEmpty { onText(text) }
         }
     }
 

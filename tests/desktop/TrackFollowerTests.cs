@@ -42,13 +42,6 @@ public sealed class TrackFollowerTests
     }
 
     [Fact]
-    public void FollowingStartsFromTheNewestPosition()
-    {
-        Assert.Equal("Day: 4\n40.2 0.6 0.5 92\n", TrackTail.LastPosition("Day: 3\n40.1 0.5 23.5 90\nDay: 4\n40.2 0.6 0.5 92\n"));
-        Assert.Null(TrackTail.LastPosition("Day: 3\n"));
-    }
-
-    [Fact]
     public void ReportsLinesTheGameAppends()
     {
         string folder = Directory.CreateTempSubdirectory("chartroom-track-").FullName;
@@ -68,5 +61,32 @@ public sealed class TrackFollowerTests
         {
             Directory.Delete(folder, true);
         }
+    }
+}
+
+public sealed class VoyageLogsTests
+{
+    [Fact]
+    public void ListsSlotLogsNewestFirst()
+    {
+        string folder = Path.Combine(Path.GetTempPath(), "chartroom-voyage-" + Guid.NewGuid());
+        Directory.CreateDirectory(folder);
+        try
+        {
+            Assert.Empty(VoyageLogs.All(folder));
+            string older = Path.Combine(folder, "slot1.jsonl");
+            string newer = Path.Combine(folder, "slot2.jsonl");
+            string other = Path.Combine(folder, "notes.jsonl");
+            foreach (string file in new[] { older, newer, other }) System.IO.File.WriteAllText(file, "{}");
+            System.IO.File.SetLastWriteTimeUtc(older, DateTime.UtcNow.AddHours(-2));
+            System.IO.File.SetLastWriteTimeUtc(newer, DateTime.UtcNow.AddHours(-1));
+            System.IO.File.SetLastWriteTimeUtc(other, DateTime.UtcNow);
+            Assert.Equal(new[] { newer, older }, VoyageLogs.All(folder).Select(file => file.FullName));
+        }
+        finally
+        {
+            Directory.Delete(folder, true);
+        }
+        Assert.Empty(VoyageLogs.All(folder));
     }
 }

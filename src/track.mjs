@@ -1,5 +1,5 @@
 // Recorded positions as continuous stretches. A stretch breaks where the record cannot be one voyage:
-// time running backwards (a reloaded save, or a new game in the same save slot), a jump no boat could
+// a Voyage Recorder session (a load or new game), a switch between Coordinate Viewer and Voyage Recorder, time running backwards (a reloaded save, or a new game in the same save slot), a jump no boat could
 // sail (recovery or teleporting), or a gap of more than a day. Crossing the chart's east and west edges
 // does not break it; distances there take the short way round. Also the figures for selected positions
 // and the route they make.
@@ -46,7 +46,7 @@ export function hasTime(point) {
 }
 
 function isBreak(previous, point) {
-  if (!previous) return true;
+  if (!previous || point.newSession || point.source !== previous.source) return true;
   const nm = trackLegNm(previous, point);
   if (!hasTime(previous) || !hasTime(point)) return nm > UNTIMED_JUMP_NM;
   const hours = point.t - previous.t;
@@ -134,4 +134,17 @@ export function simplifyTrack(points, toleranceNm) {
 // Sailed positions as waypoints for a saved route.
 export function trackToRoutePoints(points, toleranceNm) {
   return simplifyTrack(points, toleranceNm).map((point) => createRoutePoint({ lat: point.lat, lon: point.lon, day: point.day, time: point.time }));
+}
+
+// Where a recording picks up on a chart: the positions after the chart's last one from the same kind of
+// recording, matched by place and game time. Without a match the whole recording is new to the chart.
+export function joinRecording(track, points) {
+  const source = points[0]?.source ?? "";
+  const last = track.findLast((point) => (point.source ?? "") === source);
+  const index = last ? points.findLastIndex((point) => samePosition(point, last)) : -1;
+  return { fresh: index >= 0 ? points.slice(index + 1) : points, matched: index >= 0 };
+}
+
+function samePosition(a, b) {
+  return Math.abs(a.lat - b.lat) < 1e-7 && Math.abs(a.lon - b.lon) < 1e-7 && (hasTime(a) ? hasTime(b) && Math.abs(a.t - b.t) < 1e-6 : !hasTime(b));
 }

@@ -69,6 +69,8 @@ function readPalette(style) {
   return Object.freeze({
     paperA: value("paper-a"), paperB: value("paper-b"), grid: value("grid"), fine: value("fine"), ink: value("ink"),
     faded: value("faded"), route: value("route"), track: value("track"), night: value("night"), bearing: value("bearing"),
+    // The interface's wind colour, as on the Add wind tool, for the wind recorded along the track.
+    wind: style.getPropertyValue("--wind").trim(),
     searchRgb: value("search-rgb"), accent: value("accent"), select: value("select"), areaFill: value("area-fill"),
     boat: value("boat"), boatFill: value("boat-fill"), boatSail: value("boat-sail"),
     boatSelected: value("boat-selected"), boatSelectedFill: value("boat-selected-fill"), boatSelectedSail: value("boat-selected-sail"),
