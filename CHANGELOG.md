@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.11
+
+### Changed
+- Following or importing a Voyage Recorder recording only adds the latest game in that save slot, leaving out the track, ports and search areas of earlier games (needs Voyage Recorder 0.1.9)
+
 ## 0.8.9
 
 ### Added

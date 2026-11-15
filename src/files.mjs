@@ -8,7 +8,8 @@ import { fitData } from "./render.mjs";
 import { renderEverything } from "./panels.mjs";
 
 export function importTrackText(text) {
-  const voyage = isVoyageRecorderText(text) ? readVoyageRecorder(text) : null;
+  // A save slot's log can hold earlier games; only the latest is imported.
+  const voyage = isVoyageRecorderText(text) ? readVoyageRecorder(text, undefined, { latestGame: true }) : null;
   const points = voyage ? voyage.points : parseTrackText(text);
   if (!points.length && !voyage?.ports.length && !voyage?.missions.length) throw new Error("No valid recorded positions were found.");
   commit((chart) => {
@@ -22,7 +23,9 @@ export function importTrackText(text) {
     for (const search of marks.searches) revealLayer(chart, "search", search);
   });
   fitData();
-  showToast(`Imported ${points.length} track position${points.length === 1 ? "" : "s"}.`);
+  const skipped = voyage?.newGames ?? 0;
+  const earlier = skipped ? ` Skipped ${skipped} earlier game${skipped === 1 ? "" : "s"} in this file.` : "";
+  showToast(`Imported ${points.length} track position${points.length === 1 ? "" : "s"}.${earlier}`);
 }
 
 export async function importTrackFile(file) {

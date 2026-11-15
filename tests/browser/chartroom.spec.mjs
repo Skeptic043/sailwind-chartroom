@@ -654,6 +654,37 @@ test("ports and missions noted while following become chart marks", async ({ cha
   expect([chart.searches[0].label, chart.searches[0].spreadDeg]).toEqual(["Fort Aestrin", 11.25]);
 });
 
+test("following a save slot leaves out its earlier games", async ({ chartroom, page }) => {
+  const runs = [
+    '{"type":"session","day":2,"hour":6,"game":"aaaa"}\n{"type":"position","day":2,"hour":6,"lat":20,"lon":5}\n'
+      + '{"type":"port","day":2,"hour":7,"port":"Gold Rock City","island":1,"lat":30.5,"lon":-2.5,"portLat":30.6,"portLon":-2.45}\n'
+      + '{"type":"session","day":1,"hour":8,"game":"bbbb"}\n{"type":"position","day":1,"hour":8,"lat":30,"lon":1}\n',
+    // Another new game while following carries on in the same chart.
+    '{"type":"session","day":1,"hour":8,"game":"cccc"}\n{"type":"position","day":1,"hour":8,"lat":31,"lon":2}\n'
+  ];
+  await chartroom.open(null, { recording: { name: "slot1.jsonl", runs } });
+  await page.locator('.app-menu[data-menu="file"] > summary').click();
+  await page.locator("#follow-track").click();
+  await expect(page.locator("#toast")).toContainText("A new game started in this save slot.");
+  await expect.poll(() => page.evaluate(() => window.__host.workspace?.charts?.[0]?.track?.length ?? 0)).toBe(2);
+  const chart = await chartroom.chart();
+  expect(chart.track.map((point) => [point.lat, point.newSession ?? false])).toEqual([[30, true], [31, true]]);
+  expect(chart.features, "the earlier game's port isn't charted").toHaveLength(0);
+});
+
+test("a new game is noticed after a first run without positions", async ({ chartroom, page }) => {
+  const runs = [
+    '{"type":"session","day":2,"hour":6,"game":"aaaa"}\n{"type":"port","day":2,"hour":7,"port":"Gold Rock City","island":1,"lat":30.5,"lon":-2.5,"portLat":30.6,"portLon":-2.45}\n',
+    '{"type":"session","day":1,"hour":8,"game":"bbbb"}\n{"type":"position","day":1,"hour":8,"lat":30,"lon":1}\n'
+  ];
+  await chartroom.open(null, { recording: { name: "slot1.jsonl", runs } });
+  await page.locator('.app-menu[data-menu="file"] > summary').click();
+  await page.locator("#follow-track").click();
+  await expect(page.locator("#toast")).toContainText("A new game started in this save slot.");
+  await expect.poll(() => page.evaluate(() => window.__host.workspace?.charts?.[0]?.track?.length ?? 0)).toBe(1);
+  expect((await chartroom.chart()).features.map((feature) => feature.name), "the port came while following, so it stays").toEqual(["Gold Rock City"]);
+});
+
 test("the macOS app offers live following too", async ({ chartroom, page }) => {
   await chartroom.open(null, { platform: "mac" });
   await expect(page.locator("#follow-track")).toBeVisible({ visible: false });

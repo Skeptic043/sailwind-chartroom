@@ -1105,11 +1105,17 @@ export function parseVoyageRecorder(text, carry = { newSession: false }) {
 
 // Everything a Voyage Recorder log holds: positions, the ports reached and the missions read from the mission
 // book (FORMAT.md). A run of lines can hold ports or missions without any position.
-export function readVoyageRecorder(text, carry = { newSession: false }) {
-  const points = [];
-  const ports = [];
-  const missions = [];
+// A save slot's log holds every game played in it. Session lines name their game, and newGames counts the
+// changes from one game to another; with latestGame only what follows the last change is kept. Sessions
+// without a game (Voyage Recorder 0.1.8 and earlier) count as one earlier game of their own.
+export function readVoyageRecorder(text, carry = { newSession: false }, { latestGame = false } = {}) {
+  let points = [];
+  let ports = [];
+  let missions = [];
   let newSession = carry.newSession === true;
+  // null until a session line has been read.
+  let game = typeof carry.game === "string" ? carry.game : null;
+  let newGames = 0;
   for (const rawLine of String(text ?? "").split(/\r?\n/)) {
     const line = rawLine.trim();
     if (!line.startsWith("{")) continue;
@@ -1119,7 +1125,19 @@ export function readVoyageRecorder(text, carry = { newSession: false }) {
     } catch {
       continue;
     }
-    if (record?.type === "session") newSession = true;
+    if (record?.type === "session") {
+      newSession = true;
+      const named = typeof record.game === "string" ? record.game : "";
+      if (game !== null && named !== game) {
+        newGames++;
+        if (latestGame) {
+          points = [];
+          ports = [];
+          missions = [];
+        }
+      }
+      game = named;
+    }
     const day = Number.isInteger(record?.day) && record.day >= 0 ? String(record.day) : "";
     const hours = Number(record?.hour);
     const t = day && Number.isFinite(hours) ? parseDayTime(day, hours) : null;
@@ -1174,7 +1192,8 @@ export function readVoyageRecorder(text, carry = { newSession: false }) {
     newSession = false;
   }
   carry.newSession = newSession;
-  return { points, ports, missions };
+  carry.game = game;
+  return { points, ports, missions, newGames };
 }
 
 // Voyage Recorder lines are JSON objects; anything else is read as Coordinate Viewer.

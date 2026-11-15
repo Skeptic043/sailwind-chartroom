@@ -12,6 +12,8 @@ import { renderEverything } from "./panels.mjs";
 let followedChartId = null;
 let fileName = "";
 let awaitingFirst = false;
+// The host's first run of lines is the whole file, which can hold earlier games in the same save slot.
+let wholeFile = false;
 // Carries a Voyage Recorder session across runs of lines.
 const carry = { newSession: false };
 
@@ -31,7 +33,9 @@ export function initLiveTrack() {
     followedChartId = String(chartId ?? "");
     live.following = true;
     awaitingFirst = resumed !== true;
+    wholeFile = resumed !== true;
     carry.newSession = false;
+    carry.game = null;
     fileName = String(name ?? "");
     startedFrom = /\.jsonl$/i.test(fileName) ? "follow-track" : "follow-track-cv";
     renderButton();
@@ -67,13 +71,18 @@ function addPositions(text) {
   // Its chart was deleted, so there is nowhere left to put the positions.
   if (!chart) return host.stopTrack();
   let points;
-  let found = { ports: [], missions: [] };
+  let found = { ports: [], missions: [], newGames: 0 };
+  // Only the latest game in the whole file joins the chart.
+  const firstRun = wholeFile;
+  wholeFile = false;
   try {
-    if (isVoyageRecorderText(text)) ({ points, ...found } = readVoyageRecorder(text, carry));
+    if (isVoyageRecorderText(text)) ({ points, ...found } = readVoyageRecorder(text, carry, { latestGame: firstRun }));
     else points = parseTrackText(text, carry);
   } catch {
     return;
   }
+  // A new game started in the slot while following carries on in this chart, after a break in the track.
+  if (!firstRun && found.newGames) showToast("A new game started in this save slot. Its positions join this chart too.");
   const marks = discoveredMarks(chart, found, { clearReached: workspace.settings.clearReachedAreas });
   if (!points.length && !hasMarks(marks)) return;
   const latest = points.at(-1);

@@ -840,6 +840,44 @@ test("parses Voyage Recorder logs, splitting at sessions and skipping unreadable
   assert.equal(parseTrackText("Day: 3\n40.1 0.5 9.5 90").length, 1);
 });
 
+test("Voyage Recorder logs keep only the latest game in the save slot when asked", async () => {
+  const { readVoyageRecorder } = await import("../src/model.mjs");
+  const at = (day, lat) => `{"type":"position","day":${day},"hour":8,"lat":${lat},"lon":-1}`;
+  const port = (name) => `{"type":"port","day":4,"hour":9,"port":"${name}","island":1,"lat":30,"lon":-2}`;
+  const mission = '{"type":"mission","day":4,"hour":10,"origin":"Old Port","originIsland":1,"originLat":30,"originLon":-2,"destination":"Fort Aestrin","destinationIsland":15,"heading":22.5,"points":16,"miles":214}';
+  const text = [
+    '{"type":"session","day":2,"hour":6,"game":"aaaa"}', at(2, 11), port("Old Port"), mission,
+    '{"type":"session","day":5,"hour":6,"game":"aaaa"}', at(5, 12),
+    '{"type":"session","day":1,"hour":7,"game":"bbbb"}', at(1, 21), port("New Port"),
+    '{"type":"session","day":2,"ho'
+  ].join("\n");
+  const all = readVoyageRecorder(text);
+  assert.equal(all.newGames, 1);
+  assert.deepEqual(all.points.map((point) => point.lat), [11, 12, 21], "without latestGame everything is read");
+  const latest = readVoyageRecorder(text, undefined, { latestGame: true });
+  assert.equal(latest.newGames, 1);
+  assert.deepEqual(latest.points.map((point) => point.lat), [21]);
+  assert.equal(latest.points[0].newSession, true);
+  assert.deepEqual(latest.ports.map((visit) => visit.port), ["New Port"]);
+  assert.deepEqual(latest.missions, [], "the earlier game's missions are left behind");
+  // A log from before game ids, then the first game with one: the sessions without ids are an earlier game.
+  const updated = readVoyageRecorder([
+    '{"type":"session","day":0,"hour":10}', at(0, 10), port("Old Port"),
+    '{"type":"session","day":3,"hour":5}', at(3, 11),
+    '{"type":"session","day":0,"hour":9,"game":"aaaa"}', at(0, 20)
+  ].join("\n"), undefined, { latestGame: true });
+  assert.deepEqual([updated.newGames, updated.points.map((point) => point.lat), updated.ports], [1, [20], []]);
+  // Sessions without ids only, as Voyage Recorder 0.1.8 wrote, are one game.
+  const legacy = readVoyageRecorder([at(1, 10), '{"type":"session","day":1,"hour":6}', at(1, 11)].join("\n"), undefined, { latestGame: true });
+  assert.deepEqual([legacy.newGames, legacy.points.length], [0, 2]);
+  // Following carries the game across runs of lines, so a new game shows in a later run.
+  const carry = { newSession: false };
+  assert.equal(readVoyageRecorder(['{"type":"session","day":2,"hour":6,"game":"aaaa"}', at(2, 11)].join("\n"), carry).newGames, 0);
+  assert.equal(readVoyageRecorder(at(2, 12), carry).newGames, 0);
+  const next = readVoyageRecorder(['{"type":"session","day":1,"hour":6,"game":"bbbb"}', at(1, 30)].join("\n"), carry);
+  assert.deepEqual([next.newGames, next.points[0].newSession], [1, true]);
+});
+
 test("Coordinate Viewer and Voyage Recorder positions show and hide separately", () => {
   const chart = createChart();
   const viewer = parseTrackText("Day: 3\n40.1 0.5 9.5 90");
