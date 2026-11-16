@@ -1,11 +1,11 @@
 // Follows Voyage Recorder or Coordinate Viewer as it records: the desktop host finds or asks for the file,
 // watches it and sends each new run of lines.
 import { isVoyageRecorderText, parseTrackText, readVoyageRecorder, revealLayer } from "./model.mjs";
-import { discoveredMarks, hasMarks, removeAnswered } from "./discoveries.mjs";
+import { addRecordingExtras, discoveredMarks, hasMarks, removeAnswered } from "./discoveries.mjs";
 import { elements, showToast } from "./dom.mjs";
 import { activeChart, appendOutsideHistory, changeOutsideHistory, host, insertOutsideHistory, live, persist, workspace } from "./state.mjs";
 import { joinRecording } from "./track.mjs";
-import { centerOn } from "./render.mjs";
+import { centerOn, drawChart } from "./render.mjs";
 import { renderEverything } from "./panels.mjs";
 
 // The chart that receives the positions, kept when another chart is opened meanwhile.
@@ -71,7 +71,7 @@ function addPositions(text) {
   // Its chart was deleted, so there is nowhere left to put the positions.
   if (!chart) return host.stopTrack();
   let points;
-  let found = { ports: [], missions: [], newGames: 0 };
+  let found = { ports: [], missions: [], notes: [], visits: [], session: null, keys: null, newGames: 0, undone: [] };
   // Only the latest game in the whole file joins the chart.
   const firstRun = wholeFile;
   wholeFile = false;
@@ -84,7 +84,29 @@ function addPositions(text) {
   // A new game started in the slot while following carries on in this chart, after a break in the track.
   if (!firstRun && found.newGames) showToast("A new game started in this save slot. Its positions join this chart too.");
   const marks = discoveredMarks(chart, found, { clearReached: workspace.settings.clearReachedAreas });
-  if (!points.length && !hasMarks(marks)) return;
+  if (found.keys) workspace.settings.recorderKeys = found.keys;
+  const notes = addRecordingExtras(chart, found, {
+    add: (key, items) => appendOutsideHistory(chart, key, items),
+    setRecording: (recording) => changeOutsideHistory(chart, (target) => { target.recording = recording; })
+  });
+  if (notes.length) showToast(`From Voyage Recorder: ${notes.length} note${notes.length === 1 ? "" : "s"}.`);
+  // A mark undone in the game leaves the chart too.
+  const undone = new Set(found.undone ?? []);
+  if (undone.size && chart.track.some((point) => undone.has(point.markId))) {
+    changeOutsideHistory(chart, (target) => { target.track = target.track.filter((point) => !undone.has(point.markId)); });
+    if (!points.length) {
+      persist();
+      if (chart === activeChart()) { renderEverything(); drawChart(); }
+    }
+  }
+  if (!points.length && !hasMarks(marks)) {
+    if (notes.length || found.visits.length || found.session || found.keys) {
+      chart.updatedAt = new Date().toISOString();
+      persist();
+      if (chart === activeChart()) renderEverything();
+    }
+    return;
+  }
   const latest = points.at(-1);
   const first = awaitingFirst && latest;
   if (first) {

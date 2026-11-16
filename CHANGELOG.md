@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.9.7
+
+### Added
+- The `Add note` tool (`N`) places a note on the chart
+- Notes written with Voyage Recorder appear on the chart when following or importing a recording
+- The `Add encounter` tool (`E`) marks Random Encounters sightings: flotsam, whales, dense fog, fishing bonanza, intense storm, and fog or flotsam with whales
+- Locations, encounters and note icons can be tiny, small, normal or large size, with a default icon size in `Settings`
+- `Equipment` in the chart tools can limit recorded positions to what your instruments could reveal, with positions being only hidden until the feature is disabled again
+- `Hotkeys` beside `Tools` and `Items` on the top of the applicaiton shows a small movable panel with Voyage Recorder's keys 
+- `Route` beside `Tools` and `Items` on the top of the applicaiton shows or hides the route panel
+- `Key` beside `Tools` and `Items` on the top of the application, or `View` > `Track key`, shows a movable panel explaining each line, dot, arrow and flag on your track
+- `File` > `Manage charts` shows your charts and folders as a tree, to rename, reorder, delete and move charts between folders
+- `Export voyage` saves part of your Voyage Recorder track as a file
+- Select the beginning and end of a track together (hold shift to select multiple) to `Connect` them together manually into one track
+- Race starts, checkpoints and finishes marked with Voyage Recorder show as colored flags on your track
+- `Compare voyage` draws other players' voyages beside yours with their wind, port visits and notes, `Go to` brings one into view, and `Show location by time elapsed` shows the voyage route at a normal or sped up pace
+- `Share voyage` and `Enter race` send a voyage to [Chartroom Voyages](https://skeptic043.github.io/sailwind-chartroom-voyages/), with race entries checked against their course first
+- `Publish as race` under a planned route, or `Publish route as race` in the `File` menu, turns the route into a race anyone can enter
+- `Browse shared worlds/voyages` adds other players' voyages as comparisons and can show a world's heatmap on the chart
+
+### Changed
+- Search areas now snap to an 8, 16 or 32-point compass instead of 16, 32, or 64.
+- Text is no longer able to be highlighted
+- Very fast sailing, such as with a the [propeller mod](https://github.com/DogEggz01/Propeller), no longer breaks your track into pieces
+- Wind on your track is drawn in the same way as the wind markers for consistency
+- The route panel can now be moved
+
 ## 0.8.11
 
 ### Changed

@@ -30,6 +30,9 @@ public struct AppSettings: Equatable {
     /// The theme and appearance choices the page offers, and whether the page is dark now.
     public var themes: [SettingChoice] = []
     public var appearances: [SettingChoice] = []
+    /// The default icon size for locations, encounters and notes, and the sizes the page offers.
+    public var iconSize = "normal"
+    public var iconSizes: [SettingChoice] = []
     public var dark = true
     /// Whether a port reached with Voyage Recorder clears its search areas and rough areas.
     public var clearReachedAreas = true
@@ -62,6 +65,8 @@ public struct AppSettings: Equatable {
                                    theme: object["theme"] as? String ?? "chartroom", appearance: object["appearance"] as? String ?? "system")
         settings.themes = choices(object["themes"])
         settings.appearances = choices(object["appearances"])
+        settings.iconSize = object["iconSize"] as? String ?? "normal"
+        settings.iconSizes = choices(object["iconSizes"])
         settings.dark = JSONValue.bool(object["dark"]) != false
         settings.clearReachedAreas = JSONValue.bool(object["clearReachedAreas"]) != false
         return settings

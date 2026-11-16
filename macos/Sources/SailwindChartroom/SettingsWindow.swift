@@ -10,6 +10,7 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
     private let apply: (AppSettings) -> Void
     private var shortcutFields: [(tool: ToolShortcut, field: NSTextField)] = []
     private let theme = NSPopUpButton()
+    private let iconSize = NSPopUpButton()
     private let appearance = NSPopUpButton()
     private let interfaceSize = NSPopUpButton()
     private let checkUpdates = NSButton(checkboxWithTitle: "Check for updates when Chartroom starts", target: nil, action: nil)
@@ -39,10 +40,12 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
         fill(theme, settings.themes.map(\.label), selected: settings.themes.firstIndex { $0.id == settings.theme })
         fill(appearance, settings.appearances.map(\.label), selected: settings.appearances.firstIndex { $0.id == settings.appearance })
         fill(interfaceSize, AppSettings.interfaceSizes.map { $0 == 0 ? "Default (100%)" : "\($0)%" }, selected: AppSettings.interfaceSizes.firstIndex(of: settings.interfaceSize))
+        fill(iconSize, settings.iconSizes.map(\.label), selected: settings.iconSizes.firstIndex { $0.id == settings.iconSize })
         let displayRows: [[NSView]] = [
             [NSTextField(labelWithString: "Theme"), theme],
             [NSTextField(labelWithString: "Light or dark"), appearance],
-            [NSTextField(labelWithString: "Text and interface size"), interfaceSize]
+            [NSTextField(labelWithString: "Text and interface size"), interfaceSize],
+            [NSTextField(labelWithString: "Default icon size"), iconSize]
         ]
         checkUpdates.state = settings.checkForUpdates ? .on : .off
         clearReachedAreas.state = settings.clearReachedAreas ? .on : .off
@@ -139,6 +142,7 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
                                   interfaceSize: AppSettings.interfaceSizes[max(0, interfaceSize.indexOfSelectedItem)],
                                   theme: pick(theme, current.themes, current.theme), appearance: pick(appearance, current.appearances, current.appearance))
         applied.clearReachedAreas = clearReachedAreas.state == .on
+        applied.iconSize = pick(iconSize, current.iconSizes, current.iconSize)
         apply(applied)
         return true
     }

@@ -13,7 +13,7 @@ internal sealed class MainForm : Form
     private const string AppOrigin = "https://chartroom.app";
     private const string ContentSecurityPolicy =
         "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; " +
-        "connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'";
+        "connect-src 'self' https://skeptic043.github.io; object-src 'none'; base-uri 'none'; frame-ancestors 'none'";
     private static readonly Dictionary<string, string> ContentTypes = new(StringComparer.OrdinalIgnoreCase)
     {
         [".html"] = "text/html; charset=utf-8",
@@ -79,7 +79,8 @@ internal sealed class MainForm : Form
                 clearReachedAreas = applied.ClearReachedAreas,
                 interfaceSize = applied.InterfaceSize,
                 theme = applied.Theme,
-                appearance = applied.Appearance
+                appearance = applied.Appearance,
+                iconSize = applied.IconSize
             }
         }));
         openSettings = settings;
@@ -199,6 +200,9 @@ internal sealed class MainForm : Form
                 break;
             case HostMessage.OpenReleases:
                 OpenReleasePage();
+                break;
+            case HostMessage.OpenLink link:
+                Process.Start(new ProcessStartInfo(link.Url) { UseShellExecute = true })?.Dispose();
                 break;
             case HostMessage.OpenSettings open:
                 // Shown after this handler returns, so the modal window never runs inside a WebView2 event.

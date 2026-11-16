@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createChart, createDrPosition, importChartData, sanitizeWorkspace, windFromMathAngle } from "../src/model.mjs";
 import { formatGameTime, parseClock, parseDayTime } from "../src/gametime.mjs";
-import { sailedStats, simplifyTrack, trackSegments, trackToRoutePoints } from "../src/track.mjs";
+import { connectionBetween, sailedStats, simplifyTrack, trackSegments, trackToRoutePoints } from "../src/track.mjs";
 import { deadReckon, drSigma, latestPosition } from "../src/dead-reckoning.mjs";
 
 const near = (actual, expected, tolerance, message) => assert.ok(Math.abs(actual - expected) <= tolerance, `${message ?? "value"}: ${actual} is not within ${tolerance} of ${expected}`);
@@ -48,6 +48,18 @@ test("the track breaks where the record jumps, but not across the chart's edge",
   assert.equal(trackSegments(roundTheWorld).length, 1);
   const fromVoyageRecorder = point(30.03, -4.97, 100.75, { source: "voyage" });
   assert.equal(trackSegments([...sailing, fromVoyageRecorder]).length, 2, "Coordinate Viewer and Voyage Recorder positions are separate stretches");
+  // A boat a mod drives at 300 knots stays one stretch.
+  const fast = [point(10, 0, 5), point(10, 1.25, 5.25), point(10, 2.5, 5.5)];
+  assert.equal(trackSegments(fast).length, 1);
+  // A connected stretch carries on across its gap, even after a new session.
+  const later = point(30.5, -4, 140, { newSession: true });
+  assert.equal(trackSegments([...sailing, later]).length, 2);
+  assert.equal(trackSegments([...sailing, { ...later, joinPrevious: true }]).length, 1);
+  // Only the two sides of one gap connect, and not across another recorder's positions.
+  assert.equal(connectionBetween([...sailing, later], [sailing[2], later]).after, later);
+  assert.match(connectionBetween([...sailing, later], [sailing[1], later]).reason, /last position before a gap/);
+  const between = point(30.3, -4.5, 120, { source: "voyage" });
+  assert.equal(connectionBetween([...sailing, between, later], [sailing[2], later]).after, undefined);
 });
 
 test("dead reckoning runs the course, wraps across the chart's edge, and grows less certain with the distance sailed", () => {

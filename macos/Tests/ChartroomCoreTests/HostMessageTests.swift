@@ -18,6 +18,18 @@ final class HostMessageTests: XCTestCase {
         XCTAssertEqual(HostMessage.parse(#"{"type":"copy-text","text":"route"}"#), .copyText("route"))
     }
 
+    func testOpenLinkOnlyOpensChartroomVoyages() {
+        let form = "https://github.com/Skeptic043/sailwind-chartroom-voyages/issues/new?template=share-voyage.yml"
+        XCTAssertEqual(HostMessage.parse(#"{"type":"open-link","url":"\#(form)"}"#), .openLink(URL(string: form)!))
+        let page = "https://skeptic043.github.io/sailwind-chartroom-voyages/#world/vanilla"
+        XCTAssertEqual(HostMessage.parse(#"{"type":"open-link","url":"\#(page)"}"#), .openLink(URL(string: page)!))
+        for other in ["https://example.com/sailwind-chartroom-voyages/", "http://skeptic043.github.io/sailwind-chartroom-voyages/",
+                      "https://github.com/Skeptic043/sailwind-chartroom/releases", "https://github.com/Skeptic043/sailwind-chartroom-voyages/actions", "https://user@github.com/Skeptic043/sailwind-chartroom-voyages/issues",
+                      "file:///Applications/Calculator.app"] {
+            XCTAssertNil(HostMessage.parse(#"{"type":"open-link","url":"\#(other)"}"#), other)
+        }
+    }
+
     func testSaveCarriesTheWorkspaceTextUnchanged() {
         let workspace = #"{"charts":[{"name":"Kept","lat":12.3,"z":1,"a":2}],"settings":{}}"#
         XCTAssertEqual(HostMessage.parse(#"{"type":"save","workspace":\#(workspace)}"#), .save(workspace: workspace))

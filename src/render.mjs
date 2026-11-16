@@ -1,14 +1,19 @@
 // Draws the chart canvas and moves its view. Tool previews are drawn by interaction.mjs through setOverlay().
 import { mapPalette, paperTile } from "./theme.mjs";
-import { MAX_ZOOM, MIN_ZOOM, NM_PER_DEGREE, WORLD_BOUNDS, bearingDegrees, clusteredLabelIds, destinationPoint, distanceNm, formatDuration, legPieces, searchChartLabel, searchEvidenceOpacity, searchExtent, searchIconAnchors, searchNameLabelIds, searchOverlapGroups, shownItems, summarizeRoute, tradeWindAt } from "./model.mjs";
+import { MAX_ZOOM, MIN_ZOOM, NM_PER_DEGREE, WORLD_BOUNDS, bearingDegrees, clusteredLabelIds, destinationPoint, distanceNm, formatDuration, legPieces, searchChartLabel, searchEvidenceOpacity, searchExtent, searchIconAnchors, searchNameLabelIds, searchOverlapGroups, shownItems, summarizeRoute, tradeWindAt, iconScale } from "./model.mjs";
 import { islandWorldBounds } from "./islands.mjs";
 import { VANILLA_MAP, importedMapIslands } from "./scrambled-seas.mjs";
 import { assignedBoats, boatMarkerSize, drawBoatSilhouette } from "./boats.mjs";
 import { clamp, formatBearing, formatDirection, formatNm, isNightTime, nearlyMultiple, shortCoordinate } from "./format.mjs";
 import { canvas, context, elements } from "./dom.mjs";
-import { activeChart, isSelected, persist } from "./state.mjs";
+import { activeChart, isSelected, persist, workspace } from "./state.mjs";
 import { trackBearing, trackSegments, unwrapNear, unwrapStretch } from "./track.mjs";
 import { formatGameTime } from "./gametime.mjs";
+import { drawLocationIcon } from "./icons.mjs";
+import { drawNotes, positionNotePopout } from "./notes.mjs";
+import { readingKnowledge } from "./equipment.mjs";
+import { drawComparisons } from "./compare.mjs";
+import { drawExportRange, drawHeatmap } from "./share.mjs";
 import { boatRowAt, chartIsland, chartSearchIsland, featureBoats, centredArrowEnds, islandPixelSpan, projector, screenToWorld, symbolSize, windArrowEnds, worldToScreen } from "./viewport.mjs";
 
 let visibleChartLabels = new Set();
@@ -123,6 +128,7 @@ export function drawChart() {
     context.restore();
   }
   drawVanillaMap(width, height, palette);
+  drawHeatmap(palette);
   drawLines(palette);
   drawAreas(palette);
   drawSearches(palette);
@@ -130,14 +136,18 @@ export function drawChart() {
   drawSavedRoutes(palette);
   drawRoute(palette);
   // Recorded positions sit above route lines, which often run along them.
+  drawComparisons(palette);
+  drawExportRange(palette);
   const lastPosition = activeChart().layers.track ? drawTrack(palette) : null;
   if (activeChart().layers.deadReckoning) drawDrPositions(palette);
   drawFeatures(palette);
+  drawNotes(palette);
   // Where you are now stays in sight above islands and locations.
   if (lastPosition) drawLastPosition(lastPosition, palette);
   overlay(palette);
   drawCompassRose(width - 56, height - 64, palette);
   updateZoomLabel();
+  positionNotePopout();
 }
 
 function drawGrid(width, height, palette) {
@@ -232,6 +242,8 @@ const TRACK_WIND_SPACING_PX = 70;
 // Returns the last position and the one before it in its stretch, for drawLastPosition.
 function drawTrack(palette) {
   const chart = activeChart();
+  const gated = chart.equipment?.enabled === true;
+  if (gated) drawLatitudeLines(palette);
   const track = shownItems(chart, "track");
   if (!track.length) return null;
   const { width, height } = canvas.getBoundingClientRect();
@@ -239,7 +251,12 @@ function drawTrack(palette) {
   context.save();
   context.strokeStyle = palette.track;
   context.lineWidth = 1.5;
-  const segments = trackSegments(track);
+  // With equipment readings on, the known positions are joined within each stretch of the whole recording,
+  // so a day between noon sights stays one line.
+  const shownSet = new Set(track);
+  const segments = gated
+    ? trackSegments(chart.track.filter((point) => chart.layers[point.source === "voyage" ? "trackVoyageRecorder" : "trackCoordinateViewer"])).map((segment) => segment.filter((point) => shownSet.has(point))).filter((segment) => segment.length)
+    : trackSegments(track);
   for (const segment of segments) {
     const line = unwrapStretch(segment);
     const offsets = [0];
@@ -267,17 +284,67 @@ function drawTrack(palette) {
       drawTrackWind(screen, point.windDeg, palette);
       lastWind = screen;
     }
+    if (point.event?.startsWith("race-")) drawRaceFlag(screen, point.event, palette);
+    // Where the player connected two stretches: a ring round the first position after the old gap.
+    if (point.joinPrevious) {
+      context.save();
+      context.strokeStyle = palette.track;
+      context.lineWidth = 1.4;
+      context.beginPath();
+      context.arc(screen.x, screen.y, 5.5, 0, Math.PI * 2);
+      context.stroke();
+      context.restore();
+    }
     if (!selected && lastDot && Math.abs(screen.x - lastDot.x) < TRACK_DOT_SPACING_PX && Math.abs(screen.y - lastDot.y) < TRACK_DOT_SPACING_PX) continue;
     lastDot = screen;
     context.fillStyle = isNightTime(point.time) ? palette.night : palette.track;
     context.beginPath();
     context.arc(screen.x, screen.y, 2.2, 0, Math.PI * 2);
     context.fill();
+    context.globalAlpha = 1;
     if (selected) selectionHalo(screen, palette);
   }
   context.restore();
   const lastSegment = segments.at(-1);
   return { last: lastSegment.at(-1), previous: lastSegment.at(-2) };
+}
+
+// Latitude-only readings (a quadrant at night, or a noon sight without a timekeeper) as short lines of
+// latitude. The longitude wasn't known, so each is centred on the last position the player did know in
+// full before it, or the last DR position; with neither, on the reading itself.
+const LATITUDE_LINE_NM = 20;
+const LATITUDE_LINE_MIN_PX = 10;
+
+function drawLatitudeLines(palette) {
+  const chart = activeChart();
+  if (!chart.layers.track) return;
+  const zoom = chart.view.zoom;
+  const halfPx = Math.max(LATITUDE_LINE_MIN_PX, LATITUDE_LINE_NM / NM_PER_DEGREE * zoom);
+  let lastKnown = null;
+  let lastDrawn = null;
+  context.save();
+  context.strokeStyle = palette.track;
+  context.lineWidth = 1.6;
+  context.lineCap = "round";
+  for (const point of chart.track) {
+    if (!chart.layers[point.source === "voyage" ? "trackVoyageRecorder" : "trackCoordinateViewer"]) continue;
+    const knowledge = readingKnowledge(chart, point);
+    if (knowledge.lat && knowledge.lon) {
+      lastKnown = point;
+      continue;
+    }
+    if (!knowledge.lat) continue;
+    const reckoned = chart.drPositions.findLast((position) => Number.isFinite(position.t) && Number.isFinite(point.t) && position.t <= point.t);
+    const centre = [lastKnown, reckoned].filter(Boolean).sort((a, b) => (b.t ?? -1) - (a.t ?? -1))[0] ?? point;
+    const screen = worldToScreen({ lat: point.lat, lon: centre.lon });
+    if (lastDrawn && Math.abs(screen.y - lastDrawn.y) < 3 && Math.abs(screen.x - lastDrawn.x) < 3) continue;
+    lastDrawn = screen;
+    context.beginPath();
+    context.moveTo(screen.x - halfPx, screen.y);
+    context.lineTo(screen.x + halfPx, screen.y);
+    context.stroke();
+  }
+  context.restore();
 }
 
 // The arrow at the last position, pointing along the last leg, with its label.
@@ -295,29 +362,57 @@ function drawLastPosition({ last, previous }, palette) {
   if (activeChart().layers.labels && labelVisible("track", "last")) labelText(`Last position${last.day ? ` · day ${last.day}` : ""}${last.time ? ` ${last.time}` : ""}`, screen.x, screen.y + 11, palette);
 }
 
-// The wind recorded with a track position, pointing where it blew toward.
-function drawTrackWind(screen, degrees, palette) {
-  // A wind vane: feathered tail where the wind comes from, head where it blows, outlined in the paper
-  // colour so it reads apart from the dashed track beneath it.
+// A race marker from Voyage Recorder's marker menu: a small flag on a pole, green at the start, red at the
+// finish and the accent colour at a checkpoint, always drawn so it never hides behind thinned-out dots.
+function drawRaceFlag(screen, event, palette) {
+  const colour = event === "race-start" ? palette.lines.green : event === "race-finish" ? palette.lines.red : palette.accent;
+  context.save();
+  context.lineCap = "round";
+  context.lineJoin = "round";
+  for (const [stroke, width] of [[palette.paperB, 4], [palette.ink, 1.6]]) {
+    context.strokeStyle = stroke;
+    context.lineWidth = width;
+    context.beginPath();
+    context.moveTo(screen.x, screen.y);
+    context.lineTo(screen.x, screen.y - 18);
+    context.stroke();
+  }
+  context.beginPath();
+  context.moveTo(screen.x, screen.y - 18);
+  context.lineTo(screen.x + 11, screen.y - 14);
+  context.lineTo(screen.x, screen.y - 10);
+  context.closePath();
+  context.fillStyle = colour;
+  context.fill();
+  context.strokeStyle = palette.paperB;
+  context.lineWidth = 1;
+  context.stroke();
+  context.restore();
+}
+
+// The wind recorded with a track position, pointing where it blew toward. A comparison's wind takes its colour.
+export function drawTrackWind(screen, degrees, palette, colour = palette.wind) {
+  // The same arrow as a wind mark: a line with its head where the wind blows, outlined in the paper colour so
+  // it reads apart from the dashed track beneath it.
   const { start, end } = centredArrowEnds(screen, degrees, 24);
   context.save();
   context.translate(start.x, start.y);
   context.rotate(Math.atan2(end.y - start.y, end.x - start.x));
   const length = Math.hypot(end.x - start.x, end.y - start.y);
-  const vane = () => {
+  const arrow = () => {
     context.beginPath();
     context.moveTo(0, 0); context.lineTo(length - 4, 0);
-    for (const x of [0, 4]) { context.moveTo(x, 0); context.lineTo(x - 3, -4); context.moveTo(x, 0); context.lineTo(x - 3, 4); }
     context.stroke();
-    context.beginPath(); context.moveTo(length, 0); context.lineTo(length - 7, -4.5); context.lineTo(length - 7, 4.5); context.closePath();
+    context.beginPath(); context.moveTo(length, 0); context.lineTo(length - 9, -5); context.lineTo(length - 6, 0); context.lineTo(length - 9, 5); context.closePath();
   };
   context.lineCap = "round";
+  context.lineJoin = "round";
   context.strokeStyle = palette.paperB;
   context.lineWidth = 4;
-  vane(); context.stroke();
-  context.strokeStyle = context.fillStyle = palette.wind;
-  context.lineWidth = 1.6;
-  vane(); context.fill();
+  arrow(); context.stroke();
+  context.strokeStyle = context.fillStyle = colour;
+  context.lineWidth = 1.8;
+  arrow(); context.fill();
   context.restore();
 }
 
@@ -718,11 +813,13 @@ function drawFeatures(palette) {
         context.arc(screen.x, screen.y, symbolSize("mark"), 0, Math.PI * 2);
         context.fill();
       }
+    } else if (feature.icon && !feature.rangeNm) {
+      drawLocationIcon(context, feature.icon, screen.x, screen.y, locationIconRadius() * iconScale(feature, workspace.settings.iconSize), palette, selected);
     } else {
       if (selected) selectionHalo(screen, palette);
       context.strokeStyle = palette.accent;
       context.fillStyle = palette.paperA;
-      const markRadius = feature.rangeNm ? 4 : symbolSize("mark");
+      const markRadius = feature.rangeNm ? 4 : symbolSize("mark") * iconScale(feature, workspace.settings.iconSize);
       context.lineWidth = (selected ? 2.5 : 1.8) * Math.min(1, markRadius / 5);
       context.beginPath();
       context.arc(screen.x, screen.y, markRadius, 0, Math.PI * 2);
@@ -738,9 +835,14 @@ function drawFeatures(palette) {
         detail: "marker"
       });
     }
-    if (activeChart().layers.labels && labelVisible("feature", feature.id)) labelText(feature.name, screen.x, screen.y + 13, palette);
+    if (activeChart().layers.labels && labelVisible("feature", feature.id)) labelText(feature.name, screen.x, screen.y + (feature.icon && !feature.rangeNm ? locationIconRadius() * iconScale(feature, workspace.settings.iconSize) * 1.6 + 4 : 9 + symbolSize("mark") * iconScale(feature, workspace.settings.iconSize)), palette);
     context.restore();
   }
+}
+
+// Encounter icons stay big enough to read far out and grow a little closer in.
+function locationIconRadius() {
+  return clamp(symbolSize("mark") * 1.6, 7, 11);
 }
 
 export function drawIslandSilhouette(feature, island, selected, palette, scale = 1) {

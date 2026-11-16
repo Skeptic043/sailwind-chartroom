@@ -1,6 +1,8 @@
 // The page's only connection to where charts are stored. In the desktop apps that is the native host,
 // which writes workspace.json in the player's data folder; opened in a plain browser it is localStorage.
 
+import { isSiteLink } from "./site.mjs";
+
 const STORAGE_KEY = "sailwind-chartroom:v1";
 // The macOS app serves the page under this scheme, so a page loaded from it must reach its host.
 const MAC_APP_SCHEME = "chartroom:";
@@ -109,7 +111,9 @@ async function connectDesktop({ post, listen }) {
     checkUpdates: (background = false) => post({ type: "check-updates", background }),
     installUpdate: () => post({ type: "install-update" }),
     cancelUpdate: () => post({ type: "cancel-update" }),
-    openReleases: () => post({ type: "open-releases" })
+    openReleases: () => post({ type: "open-releases" }),
+    // Opens a Chartroom Voyages page or form in the player's browser. The host opens only that site's links.
+    openLink: (url) => post({ type: "open-link", url })
   };
 }
 
@@ -153,6 +157,9 @@ function connectBrowser() {
     },
     togglePin() {},
     openFolder() {},
+    openLink(url) {
+      if (isSiteLink(url)) window.open(url, "_blank", "noopener");
+    },
     copyText: (text) => navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject(new Error("No clipboard"))
   };
 }

@@ -3,7 +3,7 @@
 // removes the search areas and rough areas for it. A mission read from the mission book becomes a search
 // area, or a rough area when Scrambled Seas gives coordinates. Destinations already charted, and searches
 // already drawn from the same place, are left alone.
-import { NM_PER_DEGREE, createFeature, createSearch, distanceNm } from "./model.mjs";
+import { NM_PER_DEGREE, createFeature, createSearch, distanceNm, newRecorderNotes, newVisits, revealLayer } from "./model.mjs";
 import { islandById } from "./islands.mjs";
 import { islandIdForNumber } from "./scrambled-seas.mjs";
 
@@ -51,6 +51,21 @@ export function discoveredMarks(chart, { ports = [], missions = [] }, { clearRea
     }
   }
   return { features, searches, cleared: [...cleared], answered: [...answered] };
+}
+
+// What else a recording adds to a chart beside its track and marks: notes not seen before, new port visits,
+// and the latest session's game, world and mods. add(key, items) and setRecording(recording) apply them,
+// inside or outside undo as the caller needs. Returns the notes added.
+export function addRecordingExtras(chart, { notes = [], visits = [], session = null }, { add, setRecording }) {
+  const freshNotes = newRecorderNotes(chart, notes);
+  const freshVisits = newVisits(chart, visits);
+  if (freshNotes.length) {
+    add("notes", freshNotes);
+    revealLayer(chart, "note", freshNotes[0]);
+  }
+  if (freshVisits.length) add("visits", freshVisits);
+  if (session) setRecording(session);
+  return freshNotes;
 }
 
 // Applies the marks straight to a chart, inside an undoable edit.

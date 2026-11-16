@@ -5,7 +5,7 @@ const root = new URL("../../", import.meta.url);
 const types = { ".html": "text/html", ".css": "text/css", ".mjs": "text/javascript", ".txt": "text/plain", ".png": "image/png", ".jpg": "image/jpeg" };
 // The same served names and headers as desktop/MainForm.cs, so the page runs under the shipped CSP.
 const served = { "/LICENSE.txt": "LICENSE", "/THIRD-PARTY-NOTICES.txt": "THIRD-PARTY-NOTICES.md" };
-const csp = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'";
+const csp = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' https://skeptic043.github.io; object-src 'none'; base-uri 'none'; frame-ancestors 'none'";
 
 // Stands in for the WebView2 host: answers "ready" with the latest saved workspace and records saves.
 // The workspace survives reloads in sessionStorage, as the real host keeps it in memory. Update checks
@@ -46,6 +46,7 @@ function fakeHost({ seed, updates, platform, recording }) {
         }
         if (data.type === "stop-track") dispatch({ type: "track-stopped" });
         if (data.type === "copy-text") host.copied = data.text;
+        if (data.type === "open-link") (host.links ??= []).push(data.url);
         if (data.type === "set-zoom") host.zooms.push(data.factor);
         if (data.type === "set-appearance") host.appearance = data.dark ? "dark" : "light";
         if (data.type === "open-settings") {

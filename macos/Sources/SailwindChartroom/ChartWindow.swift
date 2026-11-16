@@ -148,6 +148,8 @@ final class ChartWindow: NSObject, NSWindowDelegate, WKScriptMessageHandler, WKN
         case .copyText(let text):
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(text, forType: .string)
+        case .openLink(let url):
+            NSWorkspace.shared.open(url)
         case nil:
             break
         }
@@ -289,7 +291,8 @@ final class ChartWindow: NSObject, NSWindowDelegate, WKScriptMessageHandler, WKN
                 "clearReachedAreas": applied.clearReachedAreas,
                 "interfaceSize": applied.interfaceSize,
                 "theme": applied.theme,
-                "appearance": applied.appearance
+                "appearance": applied.appearance,
+                "iconSize": applied.iconSize
             ] as [String: Any]])
         }
         sheet.window.appearance = window.appearance

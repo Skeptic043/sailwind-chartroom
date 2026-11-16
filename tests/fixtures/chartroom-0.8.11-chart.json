@@ -1,0 +1,126 @@
+{
+  "format": "sailwind-chartroom",
+  "version": 3,
+  "exportedAt": "2026-11-15T10:00:00.000Z",
+  "charts": [
+    {
+      "id": "chart-0811",
+      "name": "Old voyage",
+      "seed": "",
+      "createdAt": "2026-11-15T10:00:00.000Z",
+      "updatedAt": "2026-11-15T10:00:00.000Z",
+      "view": {
+        "lat": 10,
+        "lon": 0,
+        "zoom": 5
+      },
+      "layers": {
+        "locations": true,
+        "locationIslands": true,
+        "routes": true,
+        "routeDistances": true,
+        "savedRoutes": true,
+        "measure": true,
+        "redLines": true,
+        "blueLines": true,
+        "greenLines": true,
+        "areas": true,
+        "areaIslands": true,
+        "searches": true,
+        "searchLines": true,
+        "searchIslands": true,
+        "deadReckoning": true,
+        "winds": true,
+        "grid": true,
+        "labels": true,
+        "boats": true,
+        "islands": true,
+        "track": true,
+        "trackCoordinateViewer": true,
+        "trackVoyageRecorder": true,
+        "trackWinds": true,
+        "vanillaMap": false,
+        "importedMap": true,
+        "secretIslands": false,
+        "tradeWinds": false,
+        "expandedWinds": false
+      },
+      "circumnavigation": false,
+      "speedKn": 6,
+      "features": [
+        {
+          "id": "feature-grc",
+          "lat": 30.2,
+          "lon": -2.45,
+          "name": "Gold Rock City",
+          "notes": "home port",
+          "day": "",
+          "time": "",
+          "rangeNm": 0,
+          "showIsland": true
+        }
+      ],
+      "route": [],
+      "savedRoutes": [],
+      "track": [
+        {
+          "id": "track-0",
+          "lat": 30.3,
+          "lon": -2.4,
+          "name": "",
+          "day": "3",
+          "time": "09:30",
+          "wind": "N",
+          "t": 81.5,
+          "windDeg": 0,
+          "boat": "Brig",
+          "course": 90,
+          "knots": 5.2,
+          "event": "start",
+          "newSession": true,
+          "source": "voyage"
+        },
+        {
+          "id": "track-1",
+          "lat": 30.3,
+          "lon": -2.3,
+          "name": "",
+          "day": "3",
+          "time": "10:00",
+          "wind": "",
+          "t": 82,
+          "windDeg": null,
+          "boat": "Brig",
+          "course": 90,
+          "knots": 5.4,
+          "source": "voyage"
+        }
+      ],
+      "measures": [],
+      "winds": [],
+      "searches": [],
+      "segments": [],
+      "drPositions": [
+        {
+          "id": "dr-1",
+          "lat": 30.3,
+          "lon": -2.2,
+          "t": 82,
+          "sigmaNm": 0,
+          "label": "",
+          "course": 90,
+          "speedKn": 5,
+          "hours": 1,
+          "percent": 10,
+          "from": {
+            "lat": 30.3,
+            "lon": -2.3,
+            "label": "x"
+          },
+          "createdAt": "2026-11-15T10:00:00.000Z"
+        }
+      ],
+      "drPercent": 10
+    }
+  ]
+}

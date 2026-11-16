@@ -7,6 +7,10 @@ import {
   clusteredLabelIds,
   compassPoint,
   createChart,
+  SCHEMA_VERSION,
+  defaultOverlay,
+  defaultRoutePanel,
+  defaultTrackKeyPanel,
   createFeature,
   createLine,
   createMeasure,
@@ -657,7 +661,7 @@ test("labelled exports round-trip every chart item", async () => {
 });
 
 test("refuses files from a newer Chartroom instead of dropping what it cannot read", () => {
-  assert.throws(() => importChartData({ format: "sailwind-chartroom", version: 4, charts: [createChart()] }), /newer version of Chartroom/);
+  assert.throws(() => importChartData({ format: "sailwind-chartroom", version: SCHEMA_VERSION + 1, charts: [createChart()] }), /newer version of Chartroom/);
   assert.throws(() => importChartData({ format: "sailwind-chartroom", version: 1, charts: [] }), /no charts/);
 });
 
@@ -674,8 +678,10 @@ test("tool shortcuts are single unique keys that leave Fit and Islands alone", a
   assert.throws(() => validateShortcuts({ ...defaultShortcuts(), wind: "f" }), /fit the chart/);
   assert.throws(() => validateShortcuts({ ...defaultShortcuts(), wind: "" }), /Add wind/);
   const restored = sanitizeWorkspace({ charts: [createChart()], settings: { shortcuts: { location: "r" }, checkForUpdates: false, skippedUpdate: "0.6", interfaceSize: 137, theme: "neon", appearance: "dusk", searchPoints: 12 } });
-  assert.deepEqual(restored.settings, { shortcuts: defaultShortcuts(), checkForUpdates: false, skippedUpdate: "0.6", interfaceSize: 0, theme: "chartroom", appearance: "system", searchPoints: 16, clearReachedAreas: true });
-  assert.equal(sanitizeWorkspace({ charts: [createChart()], settings: { searchPoints: 64 } }).settings.searchPoints, 64);
+  assert.deepEqual(restored.settings, { shortcuts: defaultShortcuts(), checkForUpdates: false, skippedUpdate: "0.6", interfaceSize: 0, theme: "chartroom", appearance: "system", searchPoints: 16, clearReachedAreas: true, iconSize: "normal", trackKey: false, recorderKeys: null, overlay: defaultOverlay(), routePanel: defaultRoutePanel(), trackKeyPanel: defaultTrackKeyPanel() });
+  assert.equal(sanitizeWorkspace({ charts: [createChart()], settings: { searchPoints: 8 } }).settings.searchPoints, 8);
+  // 64 was a choice before 0.9.0.
+  assert.equal(sanitizeWorkspace({ charts: [createChart()], settings: { searchPoints: 64 } }).settings.searchPoints, 32);
   assert.equal(sanitizeWorkspace({ charts: [createChart()], settings: { theme: "sailwind", appearance: "dark" } }).settings.theme, "sailwind");
   assert.equal(sanitizeWorkspace({ charts: [createChart()], settings: { interfaceSize: 150 } }).settings.interfaceSize, 150);
 });

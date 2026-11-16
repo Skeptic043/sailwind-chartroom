@@ -1,12 +1,14 @@
 // Recorded positions as continuous stretches. A stretch breaks where the record cannot be one voyage:
 // a Voyage Recorder session (a load or new game), a switch between Coordinate Viewer and Voyage Recorder, time running backwards (a reloaded save, or a new game in the same save slot), a jump no boat could
-// sail (recovery or teleporting), or a gap of more than a day. Crossing the chart's east and west edges
+// sail (recovery or teleporting), or a gap of more than a day. A stretch the player connected to the one before it
+// carries on across its gap. Crossing the chart's east and west edges
 // does not break it; distances there take the short way round. Also the figures for selected positions
 // and the route they make.
 import { NM_PER_DEGREE, bearingDegrees, createRoutePoint } from "./model.mjs";
 
-// Faster than any boat sails, so only a jump exceeds it.
-const MAX_PLAUSIBLE_KN = 40;
+// Far faster than any boat sails, even with a mod that drives it at many times its usual speed, so a fast
+// race stays one stretch and only a jump exceeds it.
+const MAX_PLAUSIBLE_KN = 1000;
 const MAX_GAP_HOURS = 24;
 // Positions this close together never break, whatever the clock says.
 const NEAR_NM = 2;
@@ -46,13 +48,39 @@ export function hasTime(point) {
 }
 
 function isBreak(previous, point) {
-  if (!previous || point.newSession || point.source !== previous.source) return true;
+  if (!previous || point.source !== previous.source) return true;
+  if (point.joinPrevious) return false;
+  if (point.newSession) return true;
   const nm = trackLegNm(previous, point);
   if (!hasTime(previous) || !hasTime(point)) return nm > UNTIMED_JUMP_NM;
   const hours = point.t - previous.t;
   if (hours < 0 || hours > MAX_GAP_HOURS) return true;
   if (nm <= NEAR_NM) return false;
   return hours === 0 || nm / hours > MAX_PLAUSIBLE_KN;
+}
+
+// The two positions to connect, ordered as recorded, when they are the last before a gap and the first
+// after it, with no other recorder's positions between; otherwise why they can't be, for the player.
+export function connectionBetween(track, picked) {
+  if (picked.length !== 2) return { reason: "" };
+  if ((picked[0].source ?? "") !== (picked[1].source ?? "")) return { reason: "Coordinate Viewer and Voyage Recorder positions can't be connected." };
+  const segments = trackSegments(track);
+  const [a, b] = picked.map((point) => segments.findIndex((segment) => segment.includes(point)));
+  if (a === b) return { reason: "Both positions are already in the same stretch of track." };
+  const [first, second] = a < b ? picked : [picked[1], picked[0]];
+  const [early, late] = a < b ? [a, b] : [b, a];
+  if (late !== early + 1 || segments[early].at(-1) !== first || segments[late][0] !== second) return { reason: "Pick the last position before a gap and the first one after it." };
+  return { before: first, after: second };
+}
+
+// Whether a position sits at a gap that can be connected: the last before one or the first after one, with the
+// same recorder on the other side.
+export function besideGap(track, point) {
+  const segments = trackSegments(track);
+  const index = segments.findIndex((segment) => segment.includes(point));
+  const sameSource = (other) => (other?.[0].source ?? "") === (point.source ?? "");
+  return (index < segments.length - 1 && segments[index].at(-1) === point && sameSource(segments[index + 1]))
+    || (index > 0 && segments[index][0] === point && sameSource(segments[index - 1]));
 }
 
 // The track split into its stretches, each an array of points in recorded order.

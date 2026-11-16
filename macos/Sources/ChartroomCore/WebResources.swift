@@ -8,7 +8,7 @@ public struct WebResources {
     /// The same policy as desktop/MainForm.cs.
     public static let contentSecurityPolicy =
         "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; " +
-        "connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+        "connect-src 'self' https://skeptic043.github.io; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
 
     private static let contentTypes = [
         "html": "text/html; charset=utf-8",

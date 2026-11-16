@@ -36,6 +36,7 @@ function findHits(x, y) {
     consider("feature", feature.id, feature, inside || insideBoat ? 0 : null);
   }
   for (const point of shownItems(chart, "route")) consider("route", point.id, point);
+  for (const note of shownItems(chart, "note")) consider("note", note.id, note);
   for (const route of shownItems(chart, "saved-route")) {
     for (const point of route.points) consider("saved-point", point.id, point);
     // Clicking a saved route's line picks the whole route; its waypoints win when they are as close.

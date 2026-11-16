@@ -18,6 +18,7 @@
           <button id="new-chart" type="button">New chart</button>
           <button id="save-chart" type="button">Save chart</button>
           <button id="chart-settings" type="button">Chart details</button>
+          <button id="manage-charts" type="button">Manage charts</button>
           <hr>
           <button id="import-json" type="button">Import chart, map or Scrambled Seas world</button>
           <button id="export-json" type="button">Export this chart</button>
@@ -31,6 +32,14 @@
           <button id="import-track" type="button">Import file</button>
           <button id="paste-track" type="button">Paste positions</button>
           <button id="clear-track" type="button">Clear track</button>
+          <hr>
+          <p class="menu-heading">Voyages</p>
+          <button id="export-voyage" type="button">Export voyage</button>
+          <button id="compare-voyage" type="button">Compare voyage</button>
+          <button id="share-voyage" type="button">Share voyage</button>
+          <button id="enter-race" type="button">Enter race</button>
+          <button id="publish-course" type="button">Publish route as race</button>
+          <button id="browse-voyages" type="button">Browse shared worlds/voyages</button>
           <hr>
           <button id="open-settings" type="button" hidden>Settings</button>
           <p id="storage-note" class="menu-note">Everything stays in this browser unless you export it.</p>
@@ -74,6 +83,8 @@
           <label class="menu-check menu-check-sub"><input id="layer-track-cv" type="checkbox" checked><span>Coordinate Viewer</span></label>
           <label class="menu-check menu-check-sub"><input id="layer-track-voyage" type="checkbox" checked><span>Voyage Recorder</span></label>
           <label class="menu-check menu-check-sub"><input id="layer-track-winds" type="checkbox" checked><span>Wind along the track</span></label>
+          <label class="menu-check menu-check-sub"><input id="layer-track-key" type="checkbox"><span>Track key</span></label>
+          <label class="menu-check"><input id="layer-key-overlay" type="checkbox"><span>Voyage Recorder hotkeys</span></label>
           <hr>
           <label class="menu-check"><input id="layer-vanilla" type="checkbox"><span>Vanilla map</span></label>
           <label id="layer-imported-row" class="menu-check" hidden><input id="layer-imported-map" type="checkbox" checked><span>Imported map</span></label>
@@ -109,6 +120,9 @@
       <div class="panel-toggles" role="group" aria-label="Side panels">
         <button id="show-left-panel" class="panel-toggle" type="button" aria-pressed="true" title="Show or hide the Tools panel"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><rect x="3.5" y="5" width="17" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="3.5" y="5" width="6" height="14" rx="1.5" fill="currentColor" fill-opacity=".45"/></svg><span>Tools</span></button>
         <button id="show-right-panel" class="panel-toggle" type="button" aria-pressed="true" title="Show or hide the Items panel"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><rect x="3.5" y="5" width="17" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="14.5" y="5" width="6" height="14" rx="1.5" fill="currentColor" fill-opacity=".45"/></svg><span>Items</span></button>
+        <button id="show-route-panel" class="panel-toggle" type="button" aria-pressed="true" title="Show or hide the route panel"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path d="M4.5 18 11.5 7.5 19.5 15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2 2.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="4.5" cy="18" r="2.2" fill="currentColor"/><circle cx="11.5" cy="7.5" r="2.2" fill="currentColor"/><circle cx="19.5" cy="15" r="2.2" fill="currentColor"/></svg><span>Route</span></button>
+        <button id="show-track-key" class="panel-toggle" type="button" aria-pressed="false" title="Show or hide the track key"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path d="M3.5 8h4M3.5 16h4" stroke="currentColor" stroke-width="1.6" stroke-dasharray="1.6 1.8" stroke-linecap="round"/><path d="M10.5 8h10M10.5 16h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span>Key</span></button>
+        <button id="show-key-overlay" class="panel-toggle" type="button" aria-pressed="false" title="Show or hide Voyage Recorder's hotkeys"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><rect x="2.5" y="6" width="19" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M6 10h1.5M10 10h1.5M14 10h1.5M18 10h.5M7 14h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span>Hotkeys</span></button>
       </div>
       <span id="app-version" class="app-version"></span>
       <span id="save-status" class="save-status"><i></i> Saved</span>
@@ -129,6 +143,8 @@
         <div class="tool-grid" role="toolbar" aria-label="Chart tools">
           <button class="tool active" type="button" data-mode="select"><b>V</b><span>Select & pan</span><svg class="tool-icon icon-select" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 3.5v15.2l4.1-3.9 2.6 5.7 2.6-1.2-2.6-5.6 5.6-.4z" fill="currentColor" fill-opacity=".18" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg></button>
           <button class="tool" type="button" data-mode="location"><b>L</b><span>Add location</span><svg class="tool-icon icon-location" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 21.5s-6.2-6.4-6.2-11.2a6.2 6.2 0 0 1 12.4 0c0 4.8-6.2 11.2-6.2 11.2z" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><circle cx="12" cy="10.2" r="2.3" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button>
+          <button class="tool" type="button" data-mode="note"><b>N</b><span>Add note</span><svg class="tool-icon icon-note" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 3.5h9.5l3 3v14H6z" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M9 9.5h6.5M9 13h6.5M9 16.5h4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></button>
+          <button class="tool" type="button" data-mode="encounter"><b>E</b><span>Add encounter</span><svg class="tool-icon icon-encounter" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 16.5c.2-2.6.1-4.6 0-5.6-2.4-.2-5.6-1.6-7.6-4.4 1 3.6 3.6 5.7 7.6 5.7s6.6-2.1 7.6-5.7c-2 2.8-5.2 4.2-7.6 4.4" fill="currentColor" fill-opacity=".2" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M4 19c1.3-1 2.7-1 4 0s2.7 1 4 0 2.7-1 4 0 2.7 1 4 0" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
           <button class="tool" type="button" data-mode="route"><b>R</b><span>Plot route</span><svg class="tool-icon icon-route" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4.5 18 11.5 7.5 19.5 15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2 2.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="4.5" cy="18" r="2.4" fill="currentColor"/><circle cx="11.5" cy="7.5" r="2.4" fill="currentColor"/><circle cx="19.5" cy="15" r="2.4" fill="currentColor"/></svg></button>
           <button class="tool" type="button" data-mode="measure"><b>M</b><span>Measure</span><svg class="tool-icon icon-measure" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><g transform="rotate(-35 12 12)"><rect x="2" y="8.5" width="20" height="7" rx="1.2" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 8.5v3M9 8.5v2M12.5 8.5v3M16 8.5v2M19.5 8.5v3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></g></svg></button>
           <button class="tool" type="button" data-mode="dr"><b>D</b><span>Dead reckoning</span><svg class="tool-icon icon-dr" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 7.5 10.5 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="2 2.2" stroke-linecap="round"/><path d="M8.5 16a6 6 0 0 1 12 0z" fill="currentColor" fill-opacity=".18" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><circle cx="14.5" cy="16" r="1.6" fill="currentColor"/><circle cx="4" cy="7.5" r="1.8" fill="currentColor"/></svg></button>
@@ -137,7 +153,13 @@
           <button class="tool" type="button" data-mode="wind"><b>W</b><span>Add wind</span><svg class="tool-icon icon-wind" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 9h10.5a2.6 2.6 0 1 0-2.6-2.6M3 13h15a2.8 2.8 0 1 1-2.8 2.8M3 17h7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
         </div>
         <p id="mode-hint" class="hint">Drag the chart to pan. Select a mark, waypoint or measure line to edit it.</p>
-        <label id="search-points-row" class="inline-setting" hidden>Compass points <select id="search-points"><option value="16">16</option><option value="32">32</option><option value="64">64</option></select></label>
+        <label id="search-points-row" class="inline-setting" hidden>Compass points <select id="search-points"><option value="8">8</option><option value="16">16</option><option value="32">32</option></select></label>
+      </section>
+
+      <section id="track-connect-panel" class="panel-section" hidden>
+        <h2>Connect track</h2>
+        <p id="track-connect-detail" class="fineprint"></p>
+        <button id="track-connect" class="primary" type="button">Connect</button>
       </section>
 
       <section id="dr-panel" class="panel-section dr-panel" hidden>
@@ -166,6 +188,12 @@
         </form>
       </section>
 
+      <details id="equipment-panel" class="panel-section equipment-panel">
+        <summary><h2>Equipment</h2><span id="equipment-state" class="count">Off</span></summary>
+        <label class="switch-row"><span>Require equipment for accurate readings</span><input id="equipment-enabled" type="checkbox"></label>
+        <div id="equipment-items" class="equipment-items"></div>
+      </details>
+
       <div id="inspector-host"></div>
     </aside>
 
@@ -177,7 +205,7 @@
         <span id="hover-info" hidden></span>
       </div>
       <div id="route-summary" class="route-summary" aria-live="polite" hidden>
-        <div><span id="route-summary-title">Route</span><strong id="route-distance">0 nm</strong></div>
+        <div id="route-summary-heading" class="floating-handle" title="Drag to move"><span id="route-summary-title">Route</span><strong id="route-distance">0 nm</strong></div>
         <div><label for="route-speed">Speed kn</label><input id="route-speed" type="number" max="30" step="0.5"></div>
         <div><span>Passage</span><strong id="route-eta">—</strong></div>
         <div title="Routes on this chart take the short way around the world, across its east and west edges."><label for="route-circumnavigation">Circumnavigation</label><input id="route-circumnavigation" type="checkbox"></div>
@@ -185,7 +213,21 @@
           <button id="save-route" type="button">Save route</button>
           <button id="clear-route" type="button">Clear route</button>
         </div>
+        <button id="publish-route-course" class="route-copy" type="button" title="Turns this route into a race on Chartroom Voyages.">Publish as race</button>
         <button id="copy-sailmaster" class="route-copy" type="button" title="Copies this route for SailMaster's autopilot. Paste it into SailMaster's route box.">Copy for SailMaster</button>
+      </div>
+      <div id="track-key" class="track-key" role="region" aria-label="Track key" hidden>
+        <div id="track-key-heading" class="key-overlay-heading" title="Drag to move"><strong>Track key</strong></div>
+        <table><tbody id="track-key-rows"></tbody></table>
+      </div>
+      <div id="key-overlay" class="key-overlay" aria-label="Keybinding reference" hidden>
+        <div id="key-overlay-heading" class="key-overlay-heading" title="Drag to move"><strong>Voyage Recorder hotkeys</strong></div>
+        <table><tbody id="key-overlay-rows"></tbody></table>
+      </div>
+      <div id="note-popout" class="note-popout" role="dialog" aria-label="Note" hidden>
+        <div class="note-popout-heading"><input id="note-popout-title" maxlength="100" placeholder="Note" aria-label="Note name" title="Click to name this note"><button id="note-popout-type" class="icon-button popout-type" type="button" aria-haspopup="menu" aria-expanded="false" title="Change encounter" aria-label="Change encounter" hidden></button><button id="note-popout-close" class="icon-button" type="button" title="Close note" aria-label="Close note">×</button></div>
+        <div id="note-popout-types" class="popout-types" role="menu" aria-label="Encounters" hidden></div>
+        <textarea id="note-popout-text" maxlength="20000" placeholder="Write about this place…" aria-label="Note text"></textarea>
       </div>
       <div id="toast" class="toast" role="status" aria-live="polite"></div>
     </section>
@@ -211,6 +253,8 @@
               <option value="area">Rough area</option>
             </select>
           </label>
+          <label id="feature-icon-row">Encounter <select id="feature-icon"></select></label>
+          <label id="feature-size-row">Size <select id="feature-size"><option value="">Default</option><option value="tiny">Tiny</option><option value="small">Small</option><option value="normal">Normal</option><option value="large">Large</option></select></label>
           <label>Name <input id="feature-name" maxlength="100"></label>
           <label class="switch-row"><span>Show name on chart</span><input id="feature-show-name" type="checkbox"></label>
           <div class="two-columns compact">
@@ -346,6 +390,8 @@
           <label>Recorded wind <input id="track-wind" maxlength="30" placeholder="Optional"></label>
           <p id="track-recorded" class="leg-detail" hidden></p>
         </form>
+        <button id="track-join" type="button" hidden>Remove connection to previous position</button>
+        <button id="track-compare-start" type="button" hidden>Count elapsed time from here</button>
         <div id="track-selection" hidden>
           <h3 class="form-heading">Selected track positions</h3>
           <div id="track-selection-detail" class="leg-detail"></div>
@@ -377,6 +423,27 @@
         <p class="fineprint">The arrow points in the direction the wind is blowing toward.</p>
       </section>
 
+      <section id="note-inspector" class="panel-section inspector" hidden>
+        <div class="section-heading">
+          <div><div id="note-kind" class="eyebrow">Selected note</div><h2>Note</h2></div>
+          <div class="heading-actions"><button class="icon-button lock-button" type="button" data-lock title="Lock in place" aria-label="Lock in place" aria-pressed="false"><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" focusable="false"><rect x="5" y="10.5" width="14" height="10" rx="2" fill="currentColor" fill-opacity=".18" stroke="currentColor" stroke-width="1.6"/><path d="M8.5 10.5V7.8a3.5 3.5 0 0 1 7 0v2.7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button><button id="delete-note" class="danger icon-button" type="button" title="Delete note" aria-label="Delete note">×</button></div>
+        </div>
+        <form id="note-form" class="stack-form">
+          <label>Name <input id="note-name" maxlength="100" placeholder="Optional"></label>
+          <label>Size <select id="note-size"><option value="">Default</option><option value="tiny">Tiny</option><option value="small">Small</option><option value="normal">Normal</option><option value="large">Large</option></select></label>
+          <div class="two-columns compact">
+            <label>Latitude <input id="note-lat" inputmode="decimal"></label>
+            <label>Longitude <input id="note-lon" inputmode="decimal"></label>
+          </div>
+          <div class="two-columns compact">
+            <label>Day <input id="note-day" maxlength="30" placeholder="Optional"></label>
+            <label>Time <input id="note-time" maxlength="30" placeholder="Optional"></label>
+          </div>
+        </form>
+        <div id="note-recorded" class="leg-detail" hidden></div>
+        <button id="open-note" type="button">Open note</button>
+      </section>
+
       <section id="dr-inspector" class="panel-section inspector" hidden>
         <div class="section-heading">
           <div><div class="eyebrow">Dead reckoning</div><h2>DR position</h2></div>
@@ -389,15 +456,31 @@
         <button id="dr-reckon-from" type="button">Start dead reckoning here</button>
       </section>
 
+      <section id="compare-section" class="panel-section compare-section" hidden>
+        <div class="section-heading"><h2>Comparisons</h2><span id="compare-count" class="count">0</span></div>
+        <div id="compare-list" class="compare-list"></div>
+        <label class="switch-row"><span>Show location by time elapsed</span><input id="compare-align" type="checkbox"></label>
+        <div id="compare-scrub-row" class="compare-scrub" hidden>
+          <div class="compare-playback">
+            <button id="compare-play" type="button" title="Play" aria-label="Play">▶</button>
+            <label class="compare-speed">Speed <input id="compare-speed" type="range" min="0" max="8" step="1" value="6" aria-label="Playback speed, as a multiple of game time"><output id="compare-speed-label">100×</output></label>
+          </div>
+          <input id="compare-scrub" type="range" min="0" step="any" value="0" aria-label="Time elapsed">
+          <div class="compare-times"><span id="compare-elapsed">0m</span><span id="compare-total">0m</span></div>
+        </div>
+        <div id="compare-point" class="leg-detail" hidden></div>
+      </section>
+
       <section class="panel-section locations-section">
         <div class="section-heading"><h2>Chart items</h2><span id="feature-count" class="count">0</span></div>
-        <div class="list-actions"><select id="item-filter" aria-label="Filter chart items"><option value="all">All chart items</option><option value="feature">Locations</option><option value="route">Waypoints</option><option value="saved-route">Saved routes</option><option value="search">Search areas</option><option value="measure">Measure line</option><option value="line">Kept lines</option><option value="wind">Wind</option><option value="dr">Dead reckoning</option></select></div>
+        <div class="list-actions"><select id="item-filter" aria-label="Filter chart items"><option value="all">All chart items</option><option value="feature">Locations</option><option value="route">Waypoints</option><option value="saved-route">Saved routes</option><option value="search">Search areas</option><option value="measure">Measure line</option><option value="line">Kept lines</option><option value="wind">Wind</option><option value="dr">Dead reckoning</option><option value="note">Notes</option></select></div>
         <input id="feature-search" class="search" type="search" placeholder="Search chart items" aria-label="Search chart items">
         <div id="feature-list" class="feature-list"></div>
       </section>
     </aside>
   </main>
 
+  <input id="voyage-file" type="file" accept=".json,application/json" multiple hidden>
   <input id="track-file" type="file" accept=".txt,.jsonl,text/plain" hidden>
   <input id="json-file" type="file" accept=".json,application/json,.xml,text/xml" hidden>
 
@@ -414,6 +497,92 @@
         <button class="primary" value="save" type="submit">Save chart</button>
       </div>
     </form>
+  </dialog>
+
+  <dialog id="export-voyage-dialog" class="floating-dialog" aria-labelledby="export-title">
+    <form id="export-voyage-form" method="dialog" class="dialog-card">
+      <div class="eyebrow">Share a trip</div>
+      <h2 id="export-title">Export voyage</h2>
+      <p id="export-intro">Choose the part of your Voyage Recorder track to share. It's highlighted on the chart. Your save slot and file paths are never included.</p>
+      <label id="export-course-row" hidden>Course <select id="export-course"></select></label>
+      <button id="export-race-markers" type="button" hidden>Use my race start and finish</button>
+      <div class="range-picker">
+        <div class="range-end"><span>Start</span><button type="button" data-step="export-from" data-by="-1" aria-label="Start one position earlier">◀</button><input id="export-from" type="range" min="0" step="1" aria-label="Start"><button type="button" data-step="export-from" data-by="1" aria-label="Start one position later">▶</button></div>
+        <p id="export-from-text" class="range-time"></p>
+        <div class="range-end"><span>End</span><button type="button" data-step="export-to" data-by="-1" aria-label="End one position earlier">◀</button><input id="export-to" type="range" min="0" step="1" aria-label="End"><button type="button" data-step="export-to" data-by="1" aria-label="End one position later">▶</button></div>
+        <p id="export-to-text" class="range-time"></p>
+      </div>
+      <div id="export-summary" class="stat-chips"></div>
+      <label>Name <input id="export-name" maxlength="80" placeholder="Optional, such as Gold Rock City to Fort Aestrin"></label>
+      <label>Note <textarea id="export-note" rows="2" maxlength="500" placeholder="Optional"></textarea></label>
+      <fieldset class="share-options"><legend>Include</legend><div id="export-share"></div></fieldset>
+      <p id="export-world" class="fineprint"></p>
+      <div id="export-check" class="leg-detail" hidden></div>
+      <div class="dialog-actions">
+        <button type="button" data-close>Cancel</button>
+        <button id="export-submit" class="primary" type="submit">Export</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="course-dialog" class="wide-dialog">
+    <form id="course-form" method="dialog" class="dialog-card">
+      <div class="eyebrow">Chartroom Voyages</div>
+      <h2>Publish route as race</h2>
+      <p>Turn the route into a race anyone can enter. Waypoints on islands become those islands, while every other waypoint becomes a mark 3 miles wide. The first waypoint is the start, and a route that returns there also finishes there.</p>
+      <div id="course-summary" class="leg-detail"></div>
+      <label>Name <input id="course-name" maxlength="80" required placeholder="Such as Gold Rock City to Fort Aestrin"></label>
+      <label>Description <textarea id="course-description" rows="2" maxlength="1000" placeholder="Optional"></textarea></label>
+      <label>Checkpoints <select id="course-order"><option value="fixed">In this order</option><option value="any">In any order</option></select></label>
+      <label>Board sorts by <select id="course-sort"><option value="game">Game time</option><option value="irl">Real time</option></select></label>
+      <label>Mods <select id="course-mods"><option value="any">Any mods</option><option value="block">Not these mods</option><option value="require">Require these mods</option><option value="only">No other mods except these</option></select></label>
+      <label id="course-plugins-row" hidden>Plugin ids, one per line <textarea id="course-plugins" rows="3" placeholder="com.example.sailwind.mod"></textarea></label>
+      <label>Boats <input id="course-boats" maxlength="300" placeholder="Optional, such as Brig, Junk"></label>
+      <label class="switch-row"><span>One boat for the whole run</span><input id="course-one-boat" type="checkbox"></label>
+      <label>Maximum hull damage (%) <input id="course-max-hull" type="number" min="0" max="100" step="1" placeholder="Optional"></label>
+      <label>Honour rules <textarea id="course-honour" rows="2" maxlength="500" placeholder="Optional, shown on the board, such as no cargo"></textarea></label>
+      <p class="fineprint">A race can't be changed once runs have been entered. GitHub opens with the race filled in. Submit the form there to publish it.</p>
+      <div class="dialog-actions">
+        <button type="button" data-close>Cancel</button>
+        <button class="primary" type="submit">Open the form</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="browse-dialog" class="wide-dialog">
+    <div class="dialog-card">
+      <div class="eyebrow">Chartroom Voyages</div>
+      <h2>Browse shared worlds/voyages</h2>
+      <p id="browse-status">Loading…</p>
+      <label id="browse-world-row" hidden>World <select id="browse-world"></select></label>
+      <p id="browse-world-summary" class="fineprint"></p>
+      <label id="browse-heatmap-row" class="switch-row" hidden><span>Show this world's heatmap on the chart</span><input id="browse-heatmap" type="checkbox"></label>
+      <div id="browse-list" class="compare-list"></div>
+      <div class="dialog-actions">
+        <button id="browse-open-site" type="button">Open the website</button>
+        <button class="primary" type="button" data-close>Done</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="manage-dialog" class="wide-dialog">
+    <div class="dialog-card">
+      <div class="eyebrow">Your charts</div>
+      <h2>Manage charts</h2>
+      <div class="manage-toolbar" role="toolbar" aria-label="Chart and folder actions">
+        <button id="manage-new-folder" type="button">New folder</button>
+        <button id="manage-rename" type="button" title="Rename (F2)">Rename</button>
+        <label class="manage-move-label">Move to <select id="manage-move" aria-label="Move the chart to a folder"></select></label>
+        <button id="manage-up" type="button" title="Move up" aria-label="Move up">↑</button>
+        <button id="manage-down" type="button" title="Move down" aria-label="Move down">↓</button>
+        <button id="manage-delete" class="danger-text" type="button" title="Delete (Del)">Delete</button>
+      </div>
+      <div id="manage-list" class="manage-list" role="tree" aria-label="Charts and folders"></div>
+      <p id="manage-path" class="manage-path"></p>
+      <div class="dialog-actions">
+        <button class="primary" type="button" data-close>Done</button>
+      </div>
+    </div>
   </dialog>
 
   <dialog id="slot-dialog">

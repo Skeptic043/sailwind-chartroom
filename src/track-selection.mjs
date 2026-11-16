@@ -1,13 +1,45 @@
 // Two or more selected Coordinate Viewer positions: their distance and average speed in the track
-// position inspector, and Save route, which keeps them as a saved route.
+// position inspector, and Save route, which keeps them as a saved route. Two positions either side of a gap
+// can be connected from the Connect track panel under the tools, making the stretches one.
 import { formatDuration, makeId, revealLayer } from "./model.mjs";
-import { sailedStats, trackToRoutePoints } from "./track.mjs";
+import { besideGap, connectionBetween, sailedStats, trackToRoutePoints } from "./track.mjs";
 import { formatNm } from "./format.mjs";
 import { elements, showToast } from "./dom.mjs";
 import { activeChart, commit, replaceSelectionState, selectedRefs } from "./state.mjs";
 
 export function initTrackSelection() {
   elements["track-to-route"].addEventListener("click", trackSelectionToRoute);
+  elements["track-connect"].addEventListener("click", connectSelection);
+}
+
+// Shown for a position beside a gap, saying how to pick the other side, and for two selected positions,
+// saying why they can't be connected when they can't.
+export function renderTrackConnect() {
+  const chart = activeChart();
+  const points = selectedTrackPoints(chart);
+  const single = points.length === 1 && selectedRefs().length === 1 && besideGap(chart.track, points[0]);
+  const shown = single || (points.length === 2 && selectedRefs().length === 2);
+  elements["track-connect-panel"].hidden = !shown;
+  if (!shown) return;
+  const connection = single ? {} : connectionBetween(chart.track, points);
+  elements["track-connect"].disabled = !connection.after;
+  elements["track-connect-detail"].textContent = single
+    ? "This position is beside a gap in your track. Shift-click the position on the other side to connect them."
+    : connection.after
+    ? "Joins the two stretches of track into one, marked with a ring where they meet."
+    : connection.reason;
+}
+
+function connectSelection() {
+  const chart = activeChart();
+  const { after } = connectionBetween(chart.track, selectedTrackPoints(chart));
+  if (!after) return;
+  const id = after.id;
+  commit((target) => {
+    const point = target.track.find((candidate) => candidate.id === id);
+    if (point) point.joinPrevious = true;
+  });
+  showToast("Connected. Select the ringed position to take the connection out again.");
 }
 
 function selectedTrackPoints(chart) {

@@ -43,11 +43,13 @@ export function setSaveStatus(ok) {
 // Snapshots copy everything but the track, which can hold tens of thousands of positions. Each
 // snapshot keeps its own list of the same position objects instead. Only selected positions are ever
 // changed in place, so before an edit each snapshot is given its own copy of those (protectSelected).
+// Comparison voyages are read-only and change outside history, so snapshots share them too.
 function snapshotChart() {
   const chart = activeChart();
-  const { track, ...rest } = chart;
+  const { track, comparisons, ...rest } = chart;
   const snapshot = structuredClone(rest);
   snapshot.track = track.slice();
+  snapshot.comparisons = comparisons.slice();
   return snapshot;
 }
 

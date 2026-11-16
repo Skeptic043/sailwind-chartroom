@@ -1,6 +1,10 @@
 import { islandById } from "./islands.mjs";
 import { scrambledIslands } from "./scrambled-seas.mjs";
 import { clockText, parseDayTime } from "./gametime.mjs";
+import { isLocationIcon } from "./icons.mjs";
+import { defaultEquipment, fullyKnown, sanitizeEquipment } from "./equipment.mjs";
+import { sanitizeFolders, settleChartFolders } from "./folders.mjs";
+import { parseVoyageFile } from "./voyages.mjs";
 
 // Exported files are { format, version, exportedAt, charts }. The version counts changes to the saved
 // shape of a chart; when it increases, upgrade older files in importChartData before they are sanitized.
@@ -8,7 +12,10 @@ export const FILE_FORMAT = "sailwind-chartroom";
 // 2: lines run from lat and lon to end, like the measure line, instead of from a to b.
 // 3: track positions keep their game time and wind in degrees; earlier wind labels were read from
 //    Coordinate Viewer's mathematical angle as if it were a compass bearing and are corrected on load.
-export const SCHEMA_VERSION = 3;
+// 4: notes, location icons, Voyage Recorder visits and session details, equipment readings, comparison
+//    voyages and chart folders. All are new fields, so older charts load unchanged; an older Chartroom would
+//    drop them, so it refuses a version 4 file instead.
+export const SCHEMA_VERSION = 4;
 export const NM_PER_DEGREE = 140;
 // Longitude reaches all the way round, so Scrambled Seas worlds as wide as the globe fit on a chart.
 export const WORLD_BOUNDS = Object.freeze({ minLat: -90, maxLat: 90, minLon: -180, maxLon: 180 });
@@ -45,7 +52,20 @@ export function createChart({ name = "Uncharted Sea", seed = "" } = {}) {
     segments: [],
     // Dead reckoning positions, and the error percentage the next one starts with.
     drPositions: [],
-    drPercent: 10
+    drPercent: 10,
+    // Notes about places, written here or with Voyage Recorder's note key.
+    notes: [],
+    // Voyage Recorder notes deleted from this chart, by their id, so following or importing again leaves them out.
+    dismissedNotes: [],
+    // From Voyage Recorder: the latest session's game, world and mods, and every port arrival and departure.
+    recording: null,
+    visits: [],
+    // Optional: show recorded positions only as the player's instruments could find them (equipment.mjs).
+    equipment: defaultEquipment(),
+    // Other players' voyages imported to compare with this chart's track (voyages.mjs). Read-only.
+    comparisons: [],
+    // The recorded position this chart's own voyage counts elapsed time from when comparing, if picked.
+    compareStartId: ""
   };
 }
 
@@ -58,6 +78,7 @@ const LAYER_DEFAULTS = Object.freeze({
   areas: true, areaIslands: true,
   searches: true, searchLines: true, searchIslands: true,
   deadReckoning: true,
+  notes: true,
   winds: true,
   grid: true, labels: true, boats: true, islands: true, track: true, trackCoordinateViewer: true, trackVoyageRecorder: true, trackWinds: true,
   vanillaMap: false, importedMap: true, secretIslands: false, tradeWinds: false, expandedWinds: false
@@ -77,8 +98,11 @@ export function itemShown(chart, kind, item) {
   if (kind === "wind") return layers.winds;
   if (kind === "measure") return layers.measure;
   if (kind === "line") return layers.measure && layers[`${item.color}Lines`];
-  if (kind === "track") return layers.track && layers[trackSourceLayer(item)];
+  // With equipment readings on, a position whose place the player couldn't have found stays hidden until
+  // equipment readings are turned off again. Latitude-only readings are drawn as lines of latitude instead.
+  if (kind === "track") return layers.track && layers[trackSourceLayer(item)] && (!chart.equipment?.enabled || fullyKnown(chart, item));
   if (kind === "dr") return layers.deadReckoning;
+  if (kind === "note") return layers.notes;
   if (kind === "map-island") return layers.importedMap && (layers.secretIslands || !islandById(item.id)?.secret);
   return true;
 }
@@ -109,6 +133,7 @@ export function revealLayer(chart, kind, item) {
   if (kind === "measure") layers.measure = true;
   if (kind === "line") layers.measure = layers[`${item.color}Lines`] = true;
   if (kind === "dr") layers.deadReckoning = true;
+  if (kind === "note") layers.notes = true;
   if (kind === "track") layers.track = layers[trackSourceLayer(item)] = true;
 }
 
@@ -124,6 +149,7 @@ export function createWorkspace() {
     activeChartId: chart.id,
     layout: defaultLayout(),
     settings: defaultSettings(),
+    folders: [],
     charts: [chart]
   };
 }
@@ -132,6 +158,8 @@ export function createWorkspace() {
 export const CHART_TOOLS = Object.freeze([
   { mode: "select", label: "Select & pan", key: "v" },
   { mode: "location", label: "Add location", key: "l" },
+  { mode: "note", label: "Add note", key: "n" },
+  { mode: "encounter", label: "Add encounter", key: "e" },
   { mode: "route", label: "Plot route", key: "r" },
   { mode: "measure", label: "Measure", key: "m" },
   { mode: "dr", label: "Dead reckoning", key: "d" },
@@ -168,7 +196,7 @@ export const APPEARANCE_IDS = Object.freeze(["system", "light", "dark"]);
 
 // App settings live in the workspace so the host saves them with the charts.
 export function defaultSettings() {
-  return { shortcuts: defaultShortcuts(), checkForUpdates: true, skippedUpdate: "", interfaceSize: 0, theme: "chartroom", appearance: "system", searchPoints: DEFAULT_SEARCH_POINTS, clearReachedAreas: true };
+  return { shortcuts: defaultShortcuts(), checkForUpdates: true, skippedUpdate: "", interfaceSize: 0, theme: "chartroom", appearance: "system", searchPoints: DEFAULT_SEARCH_POINTS, clearReachedAreas: true, iconSize: "normal", trackKey: false, recorderKeys: null, overlay: defaultOverlay(), routePanel: defaultRoutePanel(), trackKeyPanel: defaultTrackKeyPanel() };
 }
 
 function sanitizeSettings(value) {
@@ -179,13 +207,23 @@ function sanitizeSettings(value) {
     interfaceSize: INTERFACE_SIZES.includes(value?.interfaceSize) ? value.interfaceSize : 0,
     theme: THEME_IDS.includes(value?.theme) ? value.theme : "chartroom",
     appearance: APPEARANCE_IDS.includes(value?.appearance) ? value.appearance : "system",
-    searchPoints: SEARCH_POINT_CHOICES.includes(value?.searchPoints) ? value.searchPoints : DEFAULT_SEARCH_POINTS,
-    clearReachedAreas: value?.clearReachedAreas !== false
+    // Before 0.9.0 the choices were 16, 32 and 64; 64 becomes the nearest, 32.
+    searchPoints: SEARCH_POINT_CHOICES.includes(value?.searchPoints) ? value.searchPoints : value?.searchPoints === 64 ? 32 : DEFAULT_SEARCH_POINTS,
+    clearReachedAreas: value?.clearReachedAreas !== false,
+    // How big locations, encounters and notes are drawn unless one has its own size.
+    iconSize: Object.hasOwn(ICON_SIZES, value?.iconSize) ? value.iconSize : "normal",
+    // Whether the track key panel is shown over the chart.
+    trackKey: value?.trackKey === true,
+    // Voyage Recorder's keys as its latest recording gave them, for the keybinding overlay.
+    recorderKeys: sanitizeRecorderKeys(value?.recorderKeys),
+    overlay: sanitizeOverlay(value?.overlay),
+    routePanel: sanitizeRoutePanel(value?.routePanel),
+    trackKeyPanel: sanitizeTrackKeyPanel(value?.trackKeyPanel)
   };
 }
 
 // Tools added after 0.7.1, whose shortcuts settings saved before then lack.
-const ADDED_TOOLS = new Set(["dr"]);
+const ADDED_TOOLS = new Set(["dr", "note", "encounter"]);
 
 // A missing tool takes its default key. An added tool whose default the player already gave to another
 // tool takes the first free key instead, so their own choices survive the update.
@@ -215,13 +253,16 @@ export function sanitizeWorkspace(value) {
   const activeChartId = charts.some((chart) => chart.id === value.activeChartId)
     ? value.activeChartId
     : charts[0].id;
-  return {
+  const workspace = {
     version: SCHEMA_VERSION,
     activeChartId,
     layout: sanitizeLayout(value.layout),
     settings: sanitizeSettings(value.settings),
+    folders: sanitizeFolders(value.folders),
     charts
   };
+  settleChartFolders(workspace);
+  return workspace;
 }
 
 // legacyWind marks charts saved before version 3, whose recorded wind labels need correcting.
@@ -247,6 +288,16 @@ export function sanitizeChart(value, { legacyWind = false } = {}) {
   // The 0.8.0 test build kept DR positions among other plotted positions, as fixes of kind "dr".
   base.drPositions = arrayOf(value.drPositions ?? (value.fixes ?? []).filter((fix) => fix?.kind === "dr"), sanitizeDrPosition);
   base.drPercent = clampNumber(value.drPercent, 0, 100, base.drPercent);
+  base.notes = arrayOf(value.notes, sanitizeNote);
+  base.recording = sanitizeRecording(value.recording);
+  base.visits = arrayOf(value.visits, sanitizeVisit);
+  base.equipment = sanitizeEquipment(value.equipment);
+  base.comparisons = arrayOf(value.comparisons, sanitizeComparison).slice(0, MAX_COMPARISONS);
+  base.compareStartId = cleanText(value.compareStartId, 120);
+  // The folder it sits in under Manage charts; checked against the workspace's folders when it loads.
+  const folderId = cleanText(value.folderId, 120);
+  if (folderId) base.folderId = folderId;
+  base.dismissedNotes = [...new Set(arrayOf(value.dismissedNotes, (id) => cleanText(id, 40) || null))].slice(-MAX_DISMISSED_NOTES);
   // A chart keeps one measure line; a new measurement replaces it.
   base.measures = arrayOf(value.measures, sanitizeMeasure).slice(-1);
   base.winds = arrayOf(value.winds, sanitizeWind);
@@ -277,8 +328,8 @@ function sanitizeLayout(value) {
   };
 }
 
-export function createFeature({ lat, lon, name = "New location", notes = "", day = "", time = "", rangeNm = 0, islandId = "", showIsland = true, boatIds = [] }) {
-  return sanitizeFeature({ id: makeId("feature"), lat, lon, name, notes, day, time, rangeNm, islandId, showIsland, boatIds });
+export function createFeature({ lat, lon, name = "New location", notes = "", day = "", time = "", rangeNm = 0, islandId = "", showIsland = true, boatIds = [], icon = "", size = "" }) {
+  return sanitizeFeature({ id: makeId("feature"), lat, lon, name, notes, day, time, rangeNm, islandId, showIsland, boatIds, icon, size });
 }
 
 export function locationRangeForType(type, rangeNm) {
@@ -338,9 +389,9 @@ export function savedRouteForPoint(chart, pointId) {
 
 // A search area is a rough heading and distance from where it was given: "about 120 nm SSE".
 // A direction covers half the gap to the next either side (11.25° on a 16-point compass), and the
-// distance is trusted to within a percentage. Searches are drawn on a 16, 32 or 64-point compass, as the
-// player chooses to match how their directions are given.
-export const SEARCH_POINT_CHOICES = [16, 32, 64];
+// distance is trusted to within a percentage. Searches are drawn on an 8, 16 or 32-point compass, the choices
+// Scrambled Seas gives its mission directions on.
+export const SEARCH_POINT_CHOICES = [8, 16, 32];
 export const DEFAULT_SEARCH_POINTS = 16;
 export const DEFAULT_SPREAD_DEG = 11.25;
 export const DEFAULT_TOLERANCE_PCT = 10;
@@ -372,7 +423,7 @@ export function followAnchors(chart) {
 }
 
 // Every kind of item a selection can hold. A saved route owns its waypoints, which can also be selected alone.
-const ITEM_LISTS = { feature: "features", route: "route", measure: "measures", line: "segments", wind: "winds", search: "searches", track: "track", dr: "drPositions" };
+const ITEM_LISTS = { feature: "features", route: "route", measure: "measures", line: "segments", wind: "winds", search: "searches", track: "track", dr: "drPositions", note: "notes" };
 // An imported Scrambled Seas map's islands can be selected, noted and deleted, but never moved.
 export const ITEM_KINDS = Object.freeze([...Object.keys(ITEM_LISTS), "saved-route", "saved-point", "map-island"]);
 // Kinds that stay where they were worked out or imported: a DR position is where its course, speed and
@@ -399,6 +450,8 @@ function pointRefs(chart, refs) {
 
 export function removeChartItems(chart, refs) {
   const idsOf = (kind) => new Set(refs.filter((ref) => ref.kind === kind).map((ref) => ref.id));
+  const removedNotes = idsOf("note");
+  dismissNotes(chart, chart.notes.filter((note) => removedNotes.has(note.id) && note.recorderId).map((note) => note.recorderId));
   for (const [kind, key] of Object.entries(ITEM_LISTS)) {
     const ids = idsOf(kind);
     if (ids.size) chart[key] = chart[key].filter((item) => !ids.has(item.id));
@@ -752,6 +805,14 @@ export function searchChartLabel(search, showName = true) {
   return showName ? cleanText(search?.label, 100) : "";
 }
 
+// A location's or encounter's notes, written in its inspector or an encounter's popout.
+export const MAX_ENCOUNTER_NOTES = 1000;
+
+// An encounter is a location drawn with what was seen there; a rough area with an icon is still an area.
+export function isEncounter(feature) {
+  return Boolean(feature?.icon) && !(feature.rangeNm > 0);
+}
+
 function sanitizeFeature(value) {
   if (!value || !isFiniteCoordinate(value.lat, value.lon)) return null;
   const islandId = cleanText(value.islandId, 120);
@@ -761,7 +822,7 @@ function sanitizeFeature(value) {
     lat: Number(value.lat),
     lon: Number(value.lon),
     name: cleanText(value.name, 100),
-    notes: cleanText(value.notes, 1000),
+    notes: cleanText(value.notes, MAX_ENCOUNTER_NOTES),
     day: cleanText(value.day, 30),
     time: cleanText(value.time, 30),
     rangeNm: clampNumber(value.rangeNm, 0, MAX_RANGE_NM, 0),
@@ -769,6 +830,9 @@ function sanitizeFeature(value) {
     showIsland: value.showIsland !== false,
     ...(value.showName === false && { showName: false }),
     ...(boatIds.length && { boatIds }),
+    // An icon for what was seen there, drawn instead of the plain mark (icons.mjs).
+    ...(isLocationIcon(value.icon) && { icon: value.icon }),
+    ...sizeField(value),
     ...lockedFlag(value)
   };
 }
@@ -821,6 +885,70 @@ function sanitizeWind(value) {
   };
 }
 
+// A note about a place: free text, with the details of where and when it was written. A note from Voyage
+// Recorder keeps its id there as recorderId, and what the recorder noted beside it.
+export const MAX_NOTE_LENGTH = 20000;
+const MAX_DISMISSED_NOTES = 5000;
+
+export function createNote(values) {
+  return sanitizeNote({ ...values, id: makeId("note") });
+}
+
+function sanitizeNote(value) {
+  const point = sanitizePoint(value, "note");
+  if (!point) return null;
+  const recorderId = cleanText(value.recorderId, 40);
+  const boat = cleanText(value.boat, 60);
+  return {
+    ...point,
+    text: String(value.text ?? "").slice(0, MAX_NOTE_LENGTH),
+    day: cleanText(value.day, 30),
+    time: cleanText(value.time, 30),
+    t: Number.isFinite(value.t) && value.t >= 0 ? Number(value.t) : null,
+    ...(recorderId && { recorderId }),
+    ...(boat && { boat }),
+    ...(Number.isFinite(value.course) && { course: normalizeDegrees(value.course) }),
+    ...(Number.isFinite(value.knots) && value.knots >= 0 && { knots: Number(value.knots) }),
+    ...(Number.isFinite(value.hull) && value.hull >= 0 && value.hull <= 100 && { hull: Math.round(value.hull) }),
+    ...(Number.isFinite(value.windDeg) && { windDeg: normalizeDegrees(value.windDeg) }),
+    ...sizeField(value),
+    ...lockedFlag(value)
+  };
+}
+
+// How big a location's mark, an encounter or a note's icon is drawn. An item without its own size follows the
+// default icon size in Settings.
+export const ICON_SIZES = Object.freeze({ tiny: 0.55, small: 0.75, normal: 1, large: 1.4 });
+export const ICON_SIZE_CHOICES = Object.freeze([
+  { id: "tiny", label: "Tiny" }, { id: "small", label: "Small" }, { id: "normal", label: "Normal" }, { id: "large", label: "Large" }
+]);
+
+export function iconScale(item, defaultSize = "normal") {
+  return ICON_SIZES[item?.size] ?? ICON_SIZES[defaultSize] ?? 1;
+}
+
+function sizeField(value) {
+  return Object.hasOwn(ICON_SIZES, value?.size) ? { size: value.size } : {};
+}
+
+function dismissNotes(chart, recorderIds) {
+  if (!recorderIds.length) return;
+  chart.dismissedNotes = [...new Set([...chart.dismissedNotes, ...recorderIds])].slice(-MAX_DISMISSED_NOTES);
+}
+
+// The Voyage Recorder notes not yet on the chart and not deleted from it, as chart notes.
+export function newRecorderNotes(chart, recorded) {
+  const known = new Set([...chart.notes.map((note) => note.recorderId).filter(Boolean), ...chart.dismissedNotes]);
+  const notes = [];
+  for (const entry of recorded) {
+    if (!entry.recorderId || known.has(entry.recorderId)) continue;
+    known.add(entry.recorderId);
+    const note = createNote(entry);
+    if (note) notes.push(note);
+  }
+  return notes;
+}
+
 function sanitizePoint(value, prefix) {
   if (!value || !isFiniteCoordinate(value.lat, value.lon)) return null;
   return {
@@ -848,7 +976,8 @@ function sanitizeSavedRoute(value) {
   };
 }
 
-const TRACK_EVENTS = ["start", "stop", "sleep", "wake", "mark"];
+// Race markers come from Voyage Recorder's marker menu (0.2.1 on).
+const TRACK_EVENTS = ["start", "stop", "sleep", "wake", "mark", "race-start", "race-checkpoint", "race-finish"];
 
 // A recorded position. t is absolute game hours (see gametime.mjs) and windDeg the direction the wind
 // blows toward, in degrees; day, time and wind are their display text. Positions from charts saved
@@ -880,7 +1009,17 @@ function sanitizeTrackPoint(value, legacyWind = false) {
     ...(Number.isFinite(value.hull) && value.hull >= 0 && value.hull <= 100 && { hull: Math.round(value.hull) }),
     ...(event && { event }),
     ...(value.newSession === true && { newSession: true }),
+    // The first position of another game in the same save slot. What the chart knows of the game (its world,
+    // mods and id) is the latest game's, so voyages are exported from the latest game only.
+    ...(value.newGame === true && { newGame: true }),
+    // The player connected this position to the one before it across a gap in the track, drawn solid.
+    ...(value.joinPrevious === true && { joinPrevious: true }),
+    // A recorded location or race marker's id from Voyage Recorder, so its undo can find it.
+    ...(cleanText(value.markId, 40) && { markId: cleanText(value.markId, 40) }),
     ...(value.source === "voyage" && { source: "voyage" }),
+    // Real time (Unix seconds) and wind strength, from Voyage Recorder 0.2.0 on.
+    ...(Number.isFinite(value.utc) && value.utc > 0 && { utc: Number(value.utc) }),
+    ...(Number.isFinite(value.windKnots) && value.windKnots >= 0 && { windKnots: Number(value.windKnots) }),
     ...lockedFlag(value)
   };
 }
@@ -1112,10 +1251,21 @@ export function readVoyageRecorder(text, carry = { newSession: false }, { latest
   let points = [];
   let ports = [];
   let missions = [];
+  let notes = [];
+  // Every arrival and departure, timed, for comparing and sharing voyages.
+  let visits = [];
+  // What the latest session line says about the game: its world, loaded mods and Voyage Recorder's keys.
+  let session = null;
+  // Voyage Recorder's keys as last written, on a session line or a keys line.
+  let keys = null;
   let newSession = carry.newSession === true;
   // null until a session line has been read.
   let game = typeof carry.game === "string" ? carry.game : null;
   let newGames = 0;
+  // The next position is the first of a different game from the one before it.
+  let newGame = false;
+  // Marks taken back with Voyage Recorder's undo that weren't in this text; the caller removes them from the chart.
+  const undone = [];
   for (const rawLine of String(text ?? "").split(/\r?\n/)) {
     const line = rawLine.trim();
     if (!line.startsWith("{")) continue;
@@ -1130,18 +1280,49 @@ export function readVoyageRecorder(text, carry = { newSession: false }, { latest
       const named = typeof record.game === "string" ? record.game : "";
       if (game !== null && named !== game) {
         newGames++;
+        newGame = true;
         if (latestGame) {
           points = [];
           ports = [];
           missions = [];
+          notes = [];
+          visits = [];
         }
       }
       game = named;
+      session = sanitizeRecording({ ...record, game: named });
+    }
+    if ((record?.type === "session" || record?.type === "keys") && record.keys) keys = sanitizeRecorderKeys(record.keys) ?? keys;
+    if (record?.type === "undo" && cleanText(record.id, 40)) {
+      const id = cleanText(record.id, 40);
+      const index = points.findIndex((point) => point.markId === id);
+      if (index >= 0) points.splice(index, 1); else undone.push(id);
+      continue;
     }
     const day = Number.isInteger(record?.day) && record.day >= 0 ? String(record.day) : "";
     const hours = Number(record?.hour);
     const t = day && Number.isFinite(hours) ? parseDayTime(day, hours) : null;
     const when = { day, time: t === null ? "" : clockText(hours) };
+    const utc = Number.isFinite(record?.utc) && record.utc > 0 ? Number(record.utc) : null;
+    if ((record?.type === "port" || record?.type === "depart") && cleanText(record.port, 100) && t !== null) {
+      visits.push({ kind: record.type === "port" ? "arrive" : "depart", port: cleanText(record.port, 100), island: Number.isInteger(record.island) ? record.island : -1, t, ...(utc && { utc }) });
+    }
+    if (record?.type === "note" && isFiniteCoordinate(record.lat, record.lon) && cleanText(record.id, 40)) {
+      notes.push({
+        ...when,
+        t,
+        recorderId: cleanText(record.id, 40),
+        lat: record.lat,
+        lon: record.lon,
+        text: String(record.text ?? "").slice(0, MAX_NOTE_LENGTH),
+        boat: recordedBoatName(record.boat),
+        course: record.course,
+        knots: record.knots,
+        hull: record.hull,
+        windDeg: Number.isFinite(record.windFrom) ? normalizeDegrees(record.windFrom + 180) : null
+      });
+      continue;
+    }
     if (record?.type === "port" && isFiniteCoordinate(record.lat, record.lon) && cleanText(record.port, 100)) {
       ports.push({
         ...when,
@@ -1185,15 +1366,120 @@ export function readVoyageRecorder(text, carry = { newSession: false }, { latest
       hull: record.hull,
       event: record.event,
       newSession,
-      source: "voyage"
+      newGame,
+      markId: record.id,
+      source: "voyage",
+      utc,
+      windKnots: record.windKnots
     });
     if (!point) continue;
     points.push(point);
     newSession = false;
+    newGame = false;
   }
   carry.newSession = newSession;
   carry.game = game;
-  return { points, ports, missions, newGames };
+  return { points, ports, missions, notes, visits, session, keys, newGames, undone };
+}
+
+// What a Voyage Recorder session line says about the game it records: which game, the world (vanilla or a
+// Scrambled Seas world) and the loaded mods. Recordings from before 0.2.0 have only the game.
+export function sanitizeRecording(value) {
+  if (!value || typeof value !== "object") return null;
+  const world = value.world?.kind === "vanilla" ? { kind: "vanilla" }
+    : value.world?.kind === "scrambled" ? Object.fromEntries(Object.entries(value.world).filter(([key, entry]) => WORLD_FIELDS.has(key) && (Number.isInteger(entry) || typeof entry === "string")).map(([key, entry]) => [key, typeof entry === "string" ? cleanText(entry, 40) : entry]))
+    : null;
+  const plugins = Array.isArray(value.plugins) ? value.plugins.slice(0, 500).map((plugin) => ({
+    guid: cleanText(plugin?.guid, 200), name: cleanText(plugin?.name, 200), version: cleanText(plugin?.version, 40)
+  })).filter((plugin) => plugin.guid) : null;
+  return {
+    game: cleanText(value.game, 40),
+    ...(world && { world }),
+    ...(plugins && { plugins })
+  };
+}
+
+const WORLD_FIELDS = new Set(["kind", "seed", "islandSpread", "minArchipelagoSeparation", "minIslandSeparation", "lonMin", "lonMax", "latMin", "latMax", "borderExpander", "scrambler", "scrambledSeas", "layout"]);
+
+// A comparison voyage: a parsed voyage file plus how this chart shows it.
+export const MAX_COMPARISONS = 12;
+export const COMPARISON_COLOURS = Object.freeze(["#c2410c", "#7c3aed", "#0f766e", "#be185d", "#1d4ed8", "#a16207"]);
+
+export function createComparison(file, index = 0) {
+  return sanitizeComparison({ ...file, id: makeId("compare"), color: COMPARISON_COLOURS[index % COMPARISON_COLOURS.length], shown: true });
+}
+
+function sanitizeComparison(value) {
+  let voyage;
+  try {
+    voyage = parseVoyageFile({ ...value, format: "sailwind-voyage", version: 1 });
+  } catch {
+    return null;
+  }
+  const colour = COMPARISON_COLOURS.includes(value.color) ? value.color : COMPARISON_COLOURS[0];
+  const start = Number.isFinite(value.start) ? Number(value.start) : voyage.points[0].t;
+  // Which of the voyage's own details are drawn beside its track: its wind, its port visits and its notes.
+  const details = { wind: value.details?.wind === true, ports: value.details?.ports !== false, notes: value.details?.notes !== false };
+  return { id: cleanText(value.id, 120) || makeId("compare"), color: colour, shown: value.shown !== false, start, details, ...voyage };
+}
+
+function sanitizeVisit(value) {
+  if (!value || !Number.isFinite(value.t) || !cleanText(value.port, 100)) return null;
+  return {
+    kind: value.kind === "depart" ? "depart" : "arrive",
+    port: cleanText(value.port, 100),
+    island: Number.isInteger(value.island) ? value.island : -1,
+    t: Number(value.t),
+    ...(Number.isFinite(value.utc) && value.utc > 0 && { utc: Number(value.utc) })
+  };
+}
+
+// Recorded visits not already on the chart.
+export function newVisits(chart, visits) {
+  const key = (visit) => `${visit.kind}|${visit.port}|${visit.t.toFixed(4)}`;
+  const known = new Set(chart.visits.map(key));
+  return visits.map(sanitizeVisit).filter((visit) => visit && !known.has(key(visit)) && known.add(key(visit)));
+}
+
+// The keybinding overlay: whether it shows, and where, as fractions of the chart's width and height. It lists
+// Voyage Recorder's keys, which come from its recordings (recorderKeys).
+export function defaultOverlay() {
+  return { shown: false, x: 0.02, y: 0.08 };
+}
+
+function sanitizeOverlay(value) {
+  const fallback = defaultOverlay();
+  if (!value || typeof value !== "object") return fallback;
+  return { shown: value.shown === true, x: clampNumber(value.x, 0, 1, fallback.x), y: clampNumber(value.y, 0, 1, fallback.y) };
+}
+
+// The route panel: whether the Route button has it on, and where it sits over the chart, top right at first.
+// While on, it shows whenever there is a route to show.
+export function defaultRoutePanel() {
+  return { shown: true, x: 1, y: 0.02 };
+}
+
+function sanitizeRoutePanel(value) {
+  const fallback = defaultRoutePanel();
+  if (!value || typeof value !== "object") return fallback;
+  return { shown: value.shown !== false, x: clampNumber(value.x, 0, 1, fallback.x), y: clampNumber(value.y, 0, 1, fallback.y) };
+}
+
+// Where the track key panel sits over the chart, bottom left at first. Whether it shows is settings.trackKey.
+export function defaultTrackKeyPanel() {
+  return { x: 0.02, y: 0.9 };
+}
+
+function sanitizeTrackKeyPanel(value) {
+  const fallback = defaultTrackKeyPanel();
+  return { x: clampNumber(value?.x, 0, 1, fallback.x), y: clampNumber(value?.y, 0, 1, fallback.y) };
+}
+
+// Voyage Recorder's keys as its config sets them: { record, location, note }, each as BepInEx writes it.
+export function sanitizeRecorderKeys(value) {
+  if (!value || typeof value !== "object") return null;
+  const keys = Object.fromEntries(["record", "location", "marker"].map((name) => [name, cleanText(value[name], 40)]).filter(([, key]) => key));
+  return Object.keys(keys).length ? keys : null;
 }
 
 // Voyage Recorder lines are JSON objects; anything else is read as Coordinate Viewer.
@@ -1393,7 +1679,8 @@ function csvCell(value) {
   return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
 
-function freshImport(chart) {
+// An imported chart lands at the top level; its folder belonged to the workspace it came from.
+function freshImport({ folderId, ...chart }) {
   return { ...chart, id: makeId("chart"), name: uniqueImportedName(chart.name) };
 }
 

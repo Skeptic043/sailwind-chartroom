@@ -15,6 +15,9 @@ internal sealed record AppSettings(IReadOnlyList<ToolShortcut> Tools, bool Check
     /// <summary>The theme and appearance choices the page offers, and whether the page is dark now.</summary>
     internal IReadOnlyList<SettingChoice> Themes { get; init; } = [];
     internal IReadOnlyList<SettingChoice> Appearances { get; init; } = [];
+    /// <summary>The default icon size for locations, encounters and notes, and the sizes the page offers.</summary>
+    internal string IconSize { get; init; } = "normal";
+    internal IReadOnlyList<SettingChoice> IconSizes { get; init; } = [];
     internal bool Dark { get; init; } = true;
 
     /// <summary>Whether a port reached with Voyage Recorder clears its search areas and rough areas.</summary>
@@ -43,6 +46,8 @@ internal sealed record AppSettings(IReadOnlyList<ToolShortcut> Tools, bool Check
         {
             Themes = Choices(value, "themes"),
             Appearances = Choices(value, "appearances"),
+            IconSize = Text(value, "iconSize") ?? "normal",
+            IconSizes = Choices(value, "iconSizes"),
             Dark = !value.TryGetProperty("dark", out var dark) || dark.ValueKind != JsonValueKind.False,
             ClearReachedAreas = !value.TryGetProperty("clearReachedAreas", out var clear) || clear.ValueKind != JsonValueKind.False
         };

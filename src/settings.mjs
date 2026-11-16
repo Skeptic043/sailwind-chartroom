@@ -1,6 +1,6 @@
 // App settings live in the workspace and are saved with the charts. The desktop host shows them in a
 // native Settings window and sends back what the player applies; this module checks and applies them.
-import { APPEARANCE_IDS, CHART_TOOLS, INTERFACE_SIZES, THEME_IDS, validateShortcuts } from "./model.mjs";
+import { APPEARANCE_IDS, CHART_TOOLS, INTERFACE_SIZES, THEME_IDS, validateShortcuts, ICON_SIZES, ICON_SIZE_CHOICES } from "./model.mjs";
 import { APPEARANCES, THEMES, applyTheme, isDark, onSheetLoaded, onSystemAppearanceChange } from "./theme.mjs";
 import { drawChart } from "./render.mjs";
 import { elements, showToast } from "./dom.mjs";
@@ -39,9 +39,9 @@ export function initSettings() {
 }
 
 function openSettings() {
-  const { shortcuts, checkForUpdates, clearReachedAreas, interfaceSize, theme, appearance } = workspace.settings;
+  const { shortcuts, checkForUpdates, clearReachedAreas, interfaceSize, theme, appearance, iconSize } = workspace.settings;
   const tools = CHART_TOOLS.map(({ mode, label }) => ({ mode, label, key: shortcuts[mode] }));
-  host.openSettings({ tools, checkForUpdates, clearReachedAreas, interfaceSize, theme, appearance, themes: THEMES, appearances: appearanceChoices(), dark: isDark() },
+  host.openSettings({ tools, checkForUpdates, clearReachedAreas, interfaceSize, theme, appearance, iconSize, iconSizes: ICON_SIZE_CHOICES, themes: THEMES, appearances: appearanceChoices(), dark: isDark() },
     CHART_TOOLS.map(({ mode, label, key }) => ({ mode, label, key })));
 }
 
@@ -50,7 +50,7 @@ function appearanceChoices() {
   return host.platform === "mac" ? APPEARANCES.map((choice) => choice.id === "system" ? { ...choice, label: "Match macOS" } : choice) : APPEARANCES;
 }
 
-function applySettings({ shortcuts, checkForUpdates, clearReachedAreas, interfaceSize, theme, appearance }) {
+function applySettings({ shortcuts, checkForUpdates, clearReachedAreas, interfaceSize, theme, appearance, iconSize }) {
   try {
     workspace.settings.shortcuts = validateShortcuts(shortcuts);
   } catch (error) {
@@ -62,6 +62,7 @@ function applySettings({ shortcuts, checkForUpdates, clearReachedAreas, interfac
   if (INTERFACE_SIZES.includes(interfaceSize)) workspace.settings.interfaceSize = interfaceSize;
   if (THEME_IDS.includes(theme)) workspace.settings.theme = theme;
   if (APPEARANCE_IDS.includes(appearance)) workspace.settings.appearance = appearance;
+  if (Object.hasOwn(ICON_SIZES, iconSize)) workspace.settings.iconSize = iconSize;
   persist();
   applyAppearance();
   renderEverything();

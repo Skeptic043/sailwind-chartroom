@@ -19,6 +19,8 @@ public enum HostMessage: Equatable {
     case followTrack(chartId: String, log: Int? = nil, pick: Bool = false)
     case stopTrack
     case copyText(String)
+    /// A Chartroom Voyages page or submission form to open in the player's browser.
+    case openLink(URL)
 
     // src/host.mjs sends a save as JSON.stringify({ type: "save", workspace }), so the workspace's own
     // text is everything between this prefix and the closing brace.
@@ -41,6 +43,9 @@ public enum HostMessage: Equatable {
         case "copy-text":
             guard let text = root["text"] as? String, !text.isEmpty else { return nil }
             return .copyText(text)
+        case "open-link":
+            guard let text = root["url"] as? String, let url = siteLink(text) else { return nil }
+            return .openLink(url)
         case "check-updates": return .checkUpdates(background: JSONValue.bool(root["background"]) ?? false)
         case "open-settings":
             guard let settings = AppSettings.parse(root["settings"]),
@@ -61,6 +66,20 @@ public enum HostMessage: Equatable {
             return .save(workspace: String(json.dropFirst(savePrefix.count).dropLast()))
         default: return nil
         }
+    }
+}
+
+extension HostMessage {
+    /// Only Chartroom Voyages: its pages on GitHub Pages and its repository's issue forms.
+    /// The same rule as IsSiteLink in desktop/HostMessage.cs.
+    static func siteLink(_ text: String) -> URL? {
+        guard text.count <= 8000, let parts = URLComponents(string: text), parts.scheme == "https",
+              parts.user == nil, parts.password == nil, parts.port == nil, let host = parts.host,
+              let url = parts.url else { return nil }
+        let path = parts.percentEncodedPath
+        let allowed = (host == "skeptic043.github.io" && path.hasPrefix("/sailwind-chartroom-voyages/"))
+            || (host == "github.com" && path == "/Skeptic043/sailwind-chartroom-voyages/issues/new")
+        return allowed ? url : nil
     }
 }
 

@@ -44,6 +44,21 @@ test("plots a route, saves it, and starts a fresh active route", async ({ chartr
   await chartroom.clickChart(600, 320);
   await chartroom.clickChart(700, 500);
   await expect(page.locator("#route-summary")).toBeVisible();
+  // Route in the top bar hides and shows the panel, and its heading drags it.
+  await page.locator("#show-route-panel").click();
+  await expect(page.locator("#route-summary")).toBeHidden();
+  await page.locator("#show-route-panel").click();
+  await expect(page.locator("#route-summary")).toBeVisible();
+  const before = await page.locator("#route-summary").boundingBox();
+  const handle = await page.locator("#route-summary-heading").boundingBox();
+  await page.mouse.move(handle.x + 10, handle.y + 5);
+  await page.mouse.down();
+  await page.mouse.move(handle.x - 290, handle.y + 205, { steps: 5 });
+  await page.mouse.up();
+  const after = await page.locator("#route-summary").boundingBox();
+  expect(Math.round(after.x - before.x)).toBe(-300);
+  expect(Math.round(after.y - before.y)).toBe(200);
+  expect((await chartroom.saved()).settings.routePanel.x).toBeLessThan(1);
   await page.locator("#save-route").click();
   const chart = await chartroom.chart();
   expect(chart.route).toEqual([]);
@@ -70,12 +85,12 @@ test("search areas snap to the chosen 16, 32 or 64-point compass", async ({ char
   await chartroom.dragChart({ x: 500, y: 450 }, { x: 530, y: 250 });
   await page.keyboard.press("Escape");
   await chartroom.press("s");
-  await page.locator("#search-points").selectOption("64");
+  await page.locator("#search-points").selectOption("32");
   await chartroom.dragChart({ x: 300, y: 450 }, { x: 330, y: 250 });
-  const [sixteen, sixtyFour] = (await chartroom.chart()).searches;
+  const [sixteen, thirtyTwo] = (await chartroom.chart()).searches;
   expect([sixteen.bearing, sixteen.spreadDeg]).toEqual([0, 11.25]);
-  expect([sixtyFour.bearing, sixtyFour.spreadDeg]).toEqual([11.25, 2.8125]);
-  expect((await chartroom.saved()).settings.searchPoints).toBe(64);
+  expect([thirtyTwo.bearing, thirtyTwo.spreadDeg]).toEqual([11.25, 5.625]);
+  expect((await chartroom.saved()).settings.searchPoints).toBe(32);
 });
 
 test("a location can hide its name on the chart", async ({ chartroom, page }) => {
@@ -266,13 +281,13 @@ test("refuses a file from a newer Chartroom with a clear message", async ({ char
 
 test("Settings opens the native window with the current keys and applies what it sends back", async ({ chartroom, page }) => {
   await chartroom.open();
-  const reply = { shortcuts: { select: "v", location: "k", route: "r", measure: "m", area: "a", search: "s", wind: "w", dr: "d" }, checkForUpdates: true, interfaceSize: 150 };
+  const reply = { shortcuts: { select: "v", location: "k", route: "r", measure: "m", area: "a", search: "s", wind: "w", dr: "d", note: "n", encounter: "e" }, checkForUpdates: true, interfaceSize: 150 };
   await page.evaluate((settings) => { window.__host.settingsReply = settings; }, reply);
   await page.locator('.app-menu[data-menu="file"] summary').click();
   await page.locator("#open-settings").click();
   const opened = await page.evaluate(() => window.__host.settingsOpened);
   expect(opened.settings.tools.find((tool) => tool.mode === "location")).toEqual({ mode: "location", label: "Add location", key: "l" });
-  expect(opened.defaults).toHaveLength(8);
+  expect(opened.defaults).toHaveLength(10);
   await expect(page.locator('.tool[data-mode="location"] b')).toHaveText("K");
   await expect(page.locator('kbd[data-shortcut="location"]')).toHaveText("K");
   await chartroom.press("k");
@@ -362,7 +377,7 @@ test("Help shows up to date and release notes; the startup check can be turned o
   await expect(page.locator("#update-install")).toBeHidden();
   await page.locator("#update-dialog-close").click();
 
-  await page.evaluate(() => { window.__host.settingsReply = { shortcuts: { select: "v", location: "l", route: "r", measure: "m", area: "a", search: "s", wind: "w", dr: "d" }, checkForUpdates: false, clearReachedAreas: false, interfaceSize: 0 }; });
+  await page.evaluate(() => { window.__host.settingsReply = { shortcuts: { select: "v", location: "l", route: "r", measure: "m", area: "a", search: "s", wind: "w", dr: "d", note: "n", encounter: "e" }, checkForUpdates: false, clearReachedAreas: false, interfaceSize: 0 }; });
   await page.locator('.app-menu[data-menu="file"] summary').click();
   await page.locator("#open-settings").click();
   await expect.poll(async () => (await chartroom.saved())?.settings.checkForUpdates).toBe(false);
@@ -378,7 +393,7 @@ test("themes and light or dark mode apply from settings and follow Settings chan
   await expect(page.locator("html")).toHaveAttribute("data-theme", "sailwind");
   await expect(page.locator("html")).toHaveAttribute("data-mode", "light");
   expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--paper-texture"))).toContain("assets/sailwind/paper-light.jpg");
-  const reply = { shortcuts: { select: "v", location: "l", route: "r", measure: "m", area: "a", search: "s", wind: "w", dr: "d" }, checkForUpdates: true, interfaceSize: 0, theme: "chartroom", appearance: "dark" };
+  const reply = { shortcuts: { select: "v", location: "l", route: "r", measure: "m", area: "a", search: "s", wind: "w", dr: "d", note: "n", encounter: "e" }, checkForUpdates: true, interfaceSize: 0, theme: "chartroom", appearance: "dark", iconSize: "small" };
   await page.evaluate((settings) => { window.__host.settingsReply = settings; }, reply);
   await page.locator('.app-menu[data-menu="file"] summary').click();
   await page.locator("#open-settings").click();
@@ -387,7 +402,8 @@ test("themes and light or dark mode apply from settings and follow Settings chan
   expect(opened.themes.map((theme) => theme.id)).toEqual(["chartroom", "sailwind"]);
   await expect(page.locator("html")).toHaveAttribute("data-theme", "chartroom");
   await expect(page.locator("html")).toHaveAttribute("data-mode", "dark");
-  expect((await chartroom.saved()).settings).toMatchObject({ theme: "chartroom", appearance: "dark" });
+  expect((await chartroom.saved()).settings).toMatchObject({ theme: "chartroom", appearance: "dark", iconSize: "small" });
+  expect(opened.iconSizes.map((size) => size.id)).toEqual(["tiny", "small", "normal", "large"]);
   expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--paper-texture").trim())).toBe("none");
 });
 

@@ -17,6 +17,7 @@ internal sealed class SettingsForm : Form
     private readonly ComboBox theme = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 190 };
     private readonly ComboBox appearance = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 190 };
     private readonly ComboBox interfaceSize = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 190 };
+    private readonly ComboBox iconSize = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 190 };
     private readonly CheckBox checkUpdates = new() { Text = "Check for updates when Chartroom starts", AutoSize = true };
     private readonly CheckBox clearReachedAreas = new() { Text = "Clear search areas and rough areas for ports you reach", AutoSize = true };
     private readonly AppSettings current;
@@ -67,8 +68,9 @@ internal sealed class SettingsForm : Form
         Fill(theme, current.Themes.Select(choice => choice.Label), current.Themes.ToList().FindIndex(choice => choice.Id == current.Theme));
         Fill(appearance, current.Appearances.Select(choice => choice.Label), current.Appearances.ToList().FindIndex(choice => choice.Id == current.Appearance));
         Fill(interfaceSize, AppSettings.InterfaceSizes.Select(size => size == 0 ? $"Match Windows ({windowsTextScale}%)" : $"{size}%"), Array.IndexOf(AppSettings.InterfaceSizes, current.InterfaceSize));
+        Fill(iconSize, current.IconSizes.Select(choice => choice.Label), current.IconSizes.ToList().FindIndex(choice => choice.Id == current.IconSize));
         var display = new TableLayoutPanel { ColumnCount = 2, AutoSize = true, Dock = DockStyle.Fill, Padding = new Padding(6, 4, 6, 6) };
-        foreach (var (label, control) in new (string, Control)[] { ("Theme", theme), ("Light or dark", appearance), ("Text and interface size", interfaceSize) })
+        foreach (var (label, control) in new (string, Control)[] { ("Theme", theme), ("Light or dark", appearance), ("Text and interface size", interfaceSize), ("Default icon size", iconSize) })
         {
             display.Controls.Add(new Label { Text = label, AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 6, 12, 3) });
             display.Controls.Add(control);
@@ -159,7 +161,8 @@ internal sealed class SettingsForm : Form
         apply(new AppSettings(tools, checkUpdates.Checked, AppSettings.InterfaceSizes[Math.Max(0, interfaceSize.SelectedIndex)],
             Pick(theme, current.Themes, current.Theme), Pick(appearance, current.Appearances, current.Appearance))
         {
-            ClearReachedAreas = clearReachedAreas.Checked
+            ClearReachedAreas = clearReachedAreas.Checked,
+            IconSize = Pick(iconSize, current.IconSizes, current.IconSize)
         });
         return true;
     }

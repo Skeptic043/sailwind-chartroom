@@ -1,6 +1,6 @@
 # Sailwind Chartroom
 
-A charting desk for Sailwind. Mark islands, plot and save routes, narrow down islands from mission directions, find your position by dead reckoning, and follow your boat live with [Voyage Recorder](https://github.com/Skeptic043/sailwind-voyage-recorder) or Coordinate Viewer.
+A charting desk for Sailwind. Mark islands, plot and save routes, narrow down islands from mission directions, navigate by dead reckoning, and follow your boat live with [Voyage Recorder](https://github.com/Skeptic043/sailwind-voyage-recorder) or Coordinate Viewer.
 
 ## Screenshots
 
@@ -15,24 +15,28 @@ A charting desk for Sailwind. Mark islands, plot and save routes, narrow down is
 1. Download `SailwindChartroom-<version>.zip` from the [latest release](https://github.com/Skeptic043/sailwind-chartroom/releases/latest) and extract it anywhere.
 2. Run `Sailwind Chartroom.exe`.
 
-Needs 64-bit Windows 10 or 11. Chartroom isn't code-signed, so Windows may warn the first time you run it. Choose More info, then Run anyway.
+Chartroom needs 64-bit Windows 10 or 11. It is not code-signed, so Windows may warn you the first time it opens. Choose `More info`, then `Run anyway`.
 
 ### macOS
 
 1. Download `SailwindChartroom-macos-universal-<version>.zip` from the [latest release](https://github.com/Skeptic043/sailwind-chartroom/releases/latest) and double-click it to unpack.
-2. Drag **Sailwind Chartroom** into your Applications folder and open it.
-3. macOS will say it can't check the app, because Chartroom isn't signed with an Apple developer account. Click **Done**.
-4. Open **System Settings → Privacy & Security**, scroll down to the message about Sailwind Chartroom, click **Open Anyway** and confirm.
+2. Drag `Sailwind Chartroom` into your `Applications` folder and open it.
+3. Because Chartroom is not signed with an Apple developer account, macOS will say it cannot check the app. Click `Done`.
+4. Open `System Settings` > `Privacy & Security`, scroll to the message about Sailwind Chartroom, click `Open Anyway`, then confirm.
 
-Steps 3 and 4 are only needed the first time. Needs macOS 13 or later, on Apple silicon or Intel.
+Steps 3 and 4 are only needed the first time. Chartroom needs macOS 13 or later and runs on Apple silicon or Intel.
 
 ## Updating
 
-Chartroom checks for new versions when it starts and can update itself. You can also use Help > Check for updates, or turn the check off in File > Settings.
+Chartroom checks for new versions when it starts and can update itself. You can also choose `Help` > `Check for updates`, or turn off automatic checks in `File` > `Settings`.
 
 ## Saved charts
 
-Charts save automatically to `%APPDATA%\Sailwind Chartroom` on Windows and `~/Library/Application Support/Sailwind Chartroom` on macOS, with a copy from your previous launch. Use File > Back up all charts to save a copy.
+Charts are saved automatically in `%APPDATA%\Sailwind Chartroom` on Windows and `~/Library/Application Support/Sailwind Chartroom` on macOS, along with a copy from your previous launch. Choose `File` > `Back up all charts` to save another copy.
+
+## Sharing and racing
+
+[Chartroom Voyages](https://skeptic043.github.io/sailwind-chartroom-voyages/) hosts shared worlds, voyages, heatmaps and race boards. The `File` menu's `Share voyage`, `Enter race`, `Publish route as race` and `Browse shared worlds/voyages` commands work with the site. Submissions require a GitHub account and are made in your browser. Chartroom only saves the file and opens the correct form.
 
 ## Credits
 

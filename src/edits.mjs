@@ -1,5 +1,6 @@
 // Chart edits started from panels, dialogs and tools.
-import { createFeature, createSearch, createWind, destinationPoint, locationRangeForType, parseBearing, parseCoordinate, removeChartItems, revealLayer, searchExtent, setLocked, translateChartItems } from "./model.mjs";
+import { LOCATION_ICONS } from "./icons.mjs";
+import { createFeature, createNote, createSearch, createWind, destinationPoint, locationRangeForType, parseBearing, parseCoordinate, removeChartItems, revealLayer, searchExtent, setLocked, translateChartItems } from "./model.mjs";
 import { clamp, positiveNumber } from "./format.mjs";
 import { parseDayTime } from "./gametime.mjs";
 import { elements, showToast } from "./dom.mjs";
@@ -13,6 +14,18 @@ export function addLocation(point, name = "New location", details = {}) {
     revealLayer(chart, "feature", feature);
     replaceSelectionState("feature", feature.id);
   });
+}
+
+// A new note at a place. Its day, time and name are optional and filled in by the player.
+export function addNote(point) {
+  let note = null;
+  commit((chart) => {
+    note = createNote({ lat: point.lat, lon: point.lon });
+    chart.notes.push(note);
+    revealLayer(chart, "note", note);
+    replaceSelectionState("note", note.id);
+  });
+  return note;
 }
 
 export function setAnchor(search, anchor) {
@@ -74,6 +87,13 @@ export function updateSelectedFromForm(kind) {
         try { updates.windDeg = parseBearing(wind); } catch { updates.windDeg = null; }
       }
     }
+    if (kind === "note") {
+      const day = elements["note-day"].value.trim();
+      const time = elements["note-time"].value.trim();
+      Object.assign(updates, { name: elements["note-name"].value.trim(), day, time, size: elements["note-size"].value });
+      if (day !== item.day || time !== item.time) updates.t = parseDayTime(day, time);
+      if (!updates.size) updates.size = undefined;
+    }
     if (kind === "wind") Object.assign(updates, {
       label: elements["wind-label"].value.trim(),
       bearing: parseBearing(elements["wind-direction"].value),
@@ -94,18 +114,37 @@ export function updateSelectedFromForm(kind) {
       rangeNm: locationRangeForType(elements["feature-type"].value, elements["feature-range"].value),
       notes: elements["feature-notes"].value.trim()
     });
+    // Only an encounter shows its picker; a plain location keeps having no icon.
+    const icon = kind === "feature" && !elements["feature-icon-row"].hidden ? elements["feature-icon"].value : "";
+    const size = kind === "feature" ? elements["feature-size"].value : "";
     commit((chart) => {
       translateChartItems(chart, selectedRefs(), { lat: target.lat - item.lat, lon: target.lon - item.lon }, { strict: true });
       Object.assign(item, updates);
       if (kind === "feature") {
         if (elements["feature-show-name"].checked) delete item.showName;
         else item.showName = false;
+        // An encounter still named after its type takes the new type's name; a name the player chose stays.
+        if (icon && icon !== item.icon && !item.rangeNm && (!item.name || item.name === LOCATION_ICONS[item.icon]?.label)) item.name = LOCATION_ICONS[icon].label;
+        if (icon && !item.rangeNm) item.icon = icon;
+        else delete item.icon;
+        if (size && !item.rangeNm) item.size = size;
+        else delete item.size;
       }
     });
   } catch (error) {
     showToast(error.message, true);
     refreshSelection();
   }
+}
+
+// Takes out the connection Connect track made at the selected position, leaving the gap before it again.
+export function removeTrackJoin() {
+  if (selection?.kind !== "track") return;
+  const id = selection.id;
+  commit((chart) => {
+    const point = chart.track.find((candidate) => candidate.id === id);
+    if (point) delete point.joinPrevious;
+  });
 }
 
 export function updateSavedRouteFromForm() {

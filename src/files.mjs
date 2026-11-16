@@ -1,7 +1,7 @@
 // Imports from files the player chooses, and exports written through the host's save dialog.
 import { exportFile, featuresToCsv, importChartData, importScrambledSeas, isVoyageRecorderText, parseTrackText, readVoyageRecorder, revealLayer } from "./model.mjs";
 import { parseScrambledSeasXml } from "./scrambled-seas.mjs";
-import { applyMarks, discoveredMarks } from "./discoveries.mjs";
+import { addRecordingExtras, applyMarks, discoveredMarks } from "./discoveries.mjs";
 import { showToast } from "./dom.mjs";
 import { activeChart, commit, host, persist, resetHistory, workspace } from "./state.mjs";
 import { fitData } from "./render.mjs";
@@ -11,7 +11,8 @@ export function importTrackText(text) {
   // A save slot's log can hold earlier games; only the latest is imported.
   const voyage = isVoyageRecorderText(text) ? readVoyageRecorder(text, undefined, { latestGame: true }) : null;
   const points = voyage ? voyage.points : parseTrackText(text);
-  if (!points.length && !voyage?.ports.length && !voyage?.missions.length) throw new Error("No valid recorded positions were found.");
+  if (!points.length && !voyage?.ports.length && !voyage?.missions.length && !voyage?.notes.length) throw new Error("No valid recorded positions were found.");
+  if (voyage?.keys) workspace.settings.recorderKeys = voyage.keys;
   commit((chart) => {
     for (const point of points) chart.track.push(point);
     if (points.length) revealLayer(chart, "track", points[0]);
@@ -21,6 +22,10 @@ export function importTrackText(text) {
     applyMarks(chart, marks);
     for (const feature of marks.features) revealLayer(chart, "feature", feature);
     for (const search of marks.searches) revealLayer(chart, "search", search);
+    addRecordingExtras(chart, voyage, {
+      add: (key, items) => chart[key].push(...items),
+      setRecording: (recording) => { chart.recording = recording; }
+    });
   });
   fitData();
   const skipped = voyage?.newGames ?? 0;

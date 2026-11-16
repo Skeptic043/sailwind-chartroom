@@ -24,6 +24,8 @@ internal abstract record HostMessage
     public sealed record FollowTrack(string ChartId, int? Log = null, bool Pick = false) : HostMessage;
     public sealed record StopTrack : HostMessage;
     public sealed record CopyText(string Contents) : HostMessage;
+    /// <summary>A Chartroom Voyages page or submission form to open in the player's browser.</summary>
+    public sealed record OpenLink(string Url) : HostMessage;
 
     public static HostMessage? Parse(string json)
     {
@@ -48,6 +50,7 @@ internal abstract record HostMessage
                     root.TryGetProperty("pick", out var pick) && pick.ValueKind == JsonValueKind.True),
                 "stop-track" => new StopTrack(),
                 "copy-text" when Text(root, "text") is { Length: > 0 } text => new CopyText(text),
+                "open-link" when Text(root, "url") is { } url && IsSiteLink(url) => new OpenLink(url),
                 "open-settings" when root.TryGetProperty("settings", out var settings) && AppSettings.Parse(settings) is { } parsed
                     && root.TryGetProperty("defaults", out var defaults) && AppSettings.Parse(JsonSerializer.SerializeToElement(new { tools = defaults })) is { } fallback
                     => new OpenSettings(parsed, fallback.Tools),
@@ -66,6 +69,16 @@ internal abstract record HostMessage
 
     private static string? Text(JsonElement root, string name) =>
         root.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+
+    // Only Chartroom Voyages: its pages on GitHub Pages and new issues on its repository, as isSiteLink in src/site.mjs.
+    private static bool IsSiteLink(string url) =>
+        url.Length <= 8000
+        && Uri.TryCreate(url, UriKind.Absolute, out var parsed)
+        && parsed.Scheme == Uri.UriSchemeHttps
+        && parsed.UserInfo.Length == 0
+        && parsed.IsDefaultPort
+        && ((parsed.Host == "skeptic043.github.io" && parsed.AbsolutePath.StartsWith("/sailwind-chartroom-voyages/", StringComparison.Ordinal))
+            || (parsed.Host == "github.com" && parsed.AbsolutePath == "/Skeptic043/sailwind-chartroom-voyages/issues/new"));
 
     private static bool IsWorkspace(JsonElement value) =>
         value.ValueKind == JsonValueKind.Object

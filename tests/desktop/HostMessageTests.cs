@@ -36,6 +36,24 @@ public sealed class HostMessageTests
     }
 
     [Theory]
+    [InlineData("https://skeptic043.github.io/sailwind-chartroom-voyages/#world/vanilla")]
+    [InlineData("https://github.com/Skeptic043/sailwind-chartroom-voyages/issues/new?template=share-voyage.yml")]
+    public void OpenLinkAcceptsChartroomVoyagesLinks(string url) =>
+        Assert.Equal(new HostMessage.OpenLink(url), HostMessage.Parse($$"""{"type":"open-link","url":"{{url}}"}"""));
+
+    [Theory]
+    [InlineData("https://example.com/sailwind-chartroom-voyages/")]
+    [InlineData("http://skeptic043.github.io/sailwind-chartroom-voyages/")]
+    [InlineData("https://github.com/Skeptic043/sailwind-chartroom/releases")]
+    [InlineData("https://github.com/Skeptic043/sailwind-chartroom-voyages/actions")]
+    [InlineData("https://skeptic043.github.io.example.com/sailwind-chartroom-voyages/")]
+    [InlineData("https://user@github.com/Skeptic043/sailwind-chartroom-voyages/issues")]
+    [InlineData("file:///C:/Windows/System32/calc.exe")]
+    [InlineData("C:/Windows/System32/calc.exe")]
+    public void OpenLinkRefusesAnyOtherAddress(string url) =>
+        Assert.Null(HostMessage.Parse($$"""{"type":"open-link","url":"{{url}}"}"""));
+
+    [Theory]
     [InlineData("""{"type":"export-file","name":"chart.json"}""")]
     [InlineData("""{"type":"export-file","name":"","contents":"{}"}""")]
     [InlineData("""{"type":"save"}""")]

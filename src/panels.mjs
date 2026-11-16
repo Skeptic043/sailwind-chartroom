@@ -1,5 +1,5 @@
 // Renders the side panels: chart header, layers, route summary, inspectors and the chart item list.
-import { anchorTarget, bearingDegrees, chartItemFocusPoint, distanceNm, formatCoordinate, formatDuration, isLocked, savedRouteForPoint, searchExtent, summarizeRoute } from "./model.mjs";
+import { anchorTarget, isEncounter, bearingDegrees, chartItemFocusPoint, distanceNm, formatCoordinate, formatDuration, isLocked, savedRouteForPoint, searchExtent, summarizeRoute } from "./model.mjs";
 import { assignedIsland, islandById, searchIsland, visibleIsland } from "./islands.mjs";
 import { assignedBoats } from "./boats.mjs";
 import { formatBearing, formatDirection, formatLeg, formatNm, plainDegrees } from "./format.mjs";
@@ -7,9 +7,16 @@ import { elements } from "./dom.mjs";
 import { activeChart, isSelected, live, selectItem, selectedItem, selectedKeys, selectedRefs, selection, updateUndoButtons, workspace } from "./state.mjs";
 import { centerOn, drawChart } from "./render.mjs";
 import { renderDeadReckoning } from "./dead-reckoning-panel.mjs";
-import { renderTrackSelection } from "./track-selection.mjs";
+import { renderTrackConnect, renderTrackSelection } from "./track-selection.mjs";
 import { latestPosition, positionLabel } from "./dead-reckoning.mjs";
 import { formatGameTime } from "./gametime.mjs";
+import { LOCATION_ICONS } from "./icons.mjs";
+import { readingKnowledge } from "./equipment.mjs";
+import { renderEquipment } from "./equipment-panel.mjs";
+import { placeFloating, renderOverlay } from "./overlay.mjs";
+import { renderTrackKey } from "./track-key.mjs";
+import { chartGroups } from "./folders.mjs";
+import { renderCompare } from "./compare.mjs";
 
 export function renderEverything() {
   renderHeader();
@@ -19,6 +26,10 @@ export function renderEverything() {
   renderInspector();
   renderFeatureList();
   renderDeadReckoning();
+  renderEquipment();
+  renderOverlay();
+  renderTrackKey();
+  renderCompare();
   updateUndoButtons();
   drawChart();
 }
@@ -34,13 +45,22 @@ function renderShortcuts() {
   for (const kbd of document.querySelectorAll("kbd[data-shortcut]")) kbd.textContent = shortcuts[kbd.dataset.shortcut]?.toUpperCase() ?? "";
 }
 
+// The Active chart menu: top-level charts first, then each folder's charts under its name.
 function renderHeader() {
-  elements["chart-select"].replaceChildren(...workspace.charts.map((chart) => {
-    const option = document.createElement("option");
-    option.value = chart.id;
-    option.textContent = chart.seed ? `${chart.name} · seed ${chart.seed}` : chart.name;
-    option.selected = chart.id === workspace.activeChartId;
-    return option;
+  const option = (chart) => {
+    const element = document.createElement("option");
+    element.value = chart.id;
+    element.textContent = chart.seed ? `${chart.name} · seed ${chart.seed}` : chart.name;
+    element.selected = chart.id === workspace.activeChartId;
+    return element;
+  };
+  elements["chart-select"].replaceChildren(...chartGroups(workspace).flatMap(({ folder, charts }) => {
+    if (!folder) return charts.map(option);
+    if (!charts.length) return [];
+    const group = document.createElement("optgroup");
+    group.label = folder.name;
+    group.append(...charts.map(option));
+    return [group];
   }));
 }
 
@@ -84,6 +104,7 @@ function renderLayerControls() {
   const layers = chart.layers;
   // The imported map is offered only on a chart imported from Scrambled Seas.
   elements["layer-imported-row"].hidden = !chart.scramble;
+  // Hidden positions exist only with equipment readings on.
   const shown = (key) => key === "importedMap" ? layers.importedMap && Boolean(chart.scramble) : layers[key];
   for (const [elementId, key, parents] of LAYER_CONTROLS) {
     elements[elementId].checked = layers[key];
@@ -100,16 +121,21 @@ export function renderRouteSummary() {
   const points = saved?.points ?? chart.route;
   const summary = summarizeRoute(points, chart.circumnavigation);
   elements["route-circumnavigation"].checked = chart.circumnavigation;
-  elements["route-summary"].hidden = points.length === 0;
+  // The Route button turns the panel off; while on, it shows with a route.
+  const panel = workspace.settings.routePanel;
+  elements["show-route-panel"].setAttribute("aria-pressed", String(panel.shown));
+  elements["route-summary"].hidden = !panel.shown || points.length === 0;
   elements["route-summary-title"].textContent = saved ? saved.name : "Route";
   elements["route-actions"].hidden = Boolean(saved);
   elements["route-distance"].textContent = `${formatNm(summary.totalNm)} nm`;
   if (document.activeElement !== elements["route-speed"]) elements["route-speed"].value = chart.speedKn;
   elements["route-eta"].textContent = formatDuration(summary.totalNm / chart.speedKn);
+  placeFloating(elements["route-summary"], panel);
 }
 
 export function renderInspector() {
   const item = selectedItem();
+  renderTrackConnect();
   const isFeature = selection?.kind === "feature" && item;
   const isRoute = (selection?.kind === "route" || selection?.kind === "saved-point") && item;
   const isSavedRoute = selection?.kind === "saved-route" && item;
@@ -119,6 +145,9 @@ export function renderInspector() {
   const isTrack = selection?.kind === "track" && item;
   const isMapIsland = selection?.kind === "map-island" && item;
   const isDr = selection?.kind === "dr" && item;
+  const isNote = selection?.kind === "note" && item;
+  elements["note-inspector"].hidden = !isNote;
+  if (isNote) renderNoteInspector(item);
   elements["dr-inspector"].hidden = !isDr;
   if (isDr) renderDrInspector(item);
   elements["empty-inspector"].hidden = Boolean(item);
@@ -139,9 +168,13 @@ export function renderInspector() {
     for (const field of ["name", "day", "time", "wind"]) elements[`track-${field}`].value = item[field];
     elements["track-lat"].value = item.lat.toFixed(4);
     elements["track-lon"].value = item.lon.toFixed(4);
-    const recorded = recordedDetail(item);
+    const recorded = recordedDetail(item, readingKnowledge(activeChart(), item));
     elements["track-recorded"].textContent = recorded;
     elements["track-recorded"].hidden = !recorded;
+    // With voyages to compare, a recorded position can be where your own voyage's elapsed time starts.
+    elements["track-compare-start"].hidden = !(activeChart().comparisons.length && item.source === "voyage" && Number.isFinite(item.t));
+    // A connection made with Connect track can be taken out again from its first position after the gap.
+    elements["track-join"].hidden = !item.joinPrevious;
     renderTrackSelection();
   }
   if (isMeasure) renderMeasureInspector(item, selection.kind === "line");
@@ -156,8 +189,9 @@ export function renderInspector() {
   }
   if (isFeature) {
     const isArea = item.rangeNm > 0;
-    elements["feature-kind"].textContent = isArea ? "Selected rough area" : "Selected location";
-    elements["feature-title"].textContent = isArea ? "Edit rough area" : "Edit location";
+    const encounter = isEncounter(item);
+    elements["feature-kind"].textContent = isArea ? "Selected rough area" : encounter ? "Selected encounter" : "Selected location";
+    elements["feature-title"].textContent = isArea ? "Edit rough area" : encounter ? "Edit encounter" : "Edit location";
     elements["feature-type"].value = isArea ? "area" : "location";
     elements["feature-name"].value = item.name;
     elements["feature-show-name"].checked = item.showName !== false;
@@ -167,6 +201,11 @@ export function renderInspector() {
     elements["feature-time"].value = item.time;
     elements["feature-range"].value = item.rangeNm || "";
     elements["feature-range-row"].hidden = !isArea;
+    elements["feature-icon-row"].hidden = !encounter;
+    if (encounter) elements["feature-icon"].value = item.icon;
+    // An island's outline is drawn at its real size, so only marks and encounters take a size.
+    elements["feature-size-row"].hidden = isArea || Boolean(visibleIsland(item));
+    elements["feature-size"].value = item.size ?? "";
     elements["feature-notes"].value = item.notes;
     const island = visibleIsland(item);
     elements["feature-island-status"].textContent = island ? `${island.name}${item.islandId ? "" : " · matched by name"}` : "None";
@@ -207,7 +246,7 @@ export function renderInspector() {
 // Fields that place or shape an item. A locked item keeps them until it is unlocked.
 const PLACEMENT_FIELDS = Object.freeze([
   "feature-type", "feature-lat", "feature-lon", "feature-range", "route-lat", "route-lon", "track-lat", "track-lon", "wind-lat", "wind-lon", "wind-direction",
-  "search-lat", "search-lon", "search-direction", "search-distance", "search-spread", "search-tolerance"
+  "search-lat", "search-lon", "search-direction", "search-distance", "search-spread", "search-tolerance", "note-lat", "note-lon"
 ]);
 
 function renderLockControls() {
@@ -225,6 +264,19 @@ function renderLockControls() {
   const refs = selectedRefs().filter((ref) => ref.kind !== "map-island");
   elements["lock-selected"].disabled = !refs.some((ref) => !isLocked(chart, ref));
   elements["unlock-selected"].disabled = !refs.some((ref) => isLocked(chart, ref));
+}
+
+function renderNoteInspector(note) {
+  elements["note-kind"].textContent = "Selected note";
+  elements["note-name"].value = note.name;
+  elements["note-size"].value = note.size ?? "";
+  elements["note-lat"].value = note.lat.toFixed(4);
+  elements["note-lon"].value = note.lon.toFixed(4);
+  elements["note-day"].value = note.day;
+  elements["note-time"].value = note.time;
+  const recorded = recordedDetail(note);
+  elements["note-recorded"].textContent = recorded;
+  elements["note-recorded"].hidden = !recorded;
 }
 
 // Where a DR position is, and the course, speed and time that put it there.
@@ -309,7 +361,7 @@ export function renderFeatureList() {
   const items = [
     ...chart.features.map((item) => {
       const boats = assignedBoats(item);
-      const location = item.rangeNm ? `Area · ${formatNm(item.rangeNm)} nm radius` : assignedIsland(item)?.name ?? (item.day ? `Day ${item.day}${item.time ? ` ${item.time}` : ""}` : "Location");
+      const location = item.rangeNm ? `Area · ${formatNm(item.rangeNm)} nm radius` : assignedIsland(item)?.name ?? (item.day ? `Day ${item.day}${item.time ? ` ${item.time}` : ""}` : LOCATION_ICONS[item.icon]?.label ?? "Location");
       return { kind: "feature", item, name: item.name || (item.rangeNm ? "Rough area" : "Location"), detail: boats.length ? `${location} · ${boatNames(boats)}` : location, marker: boats.length ? "⛵" : visibleIsland(item) ? "◈" : item.rangeNm ? "◎" : "●" };
     }),
     ...chart.route.map((item, index) => ({ kind: "route", item, name: item.name || `Waypoint ${index + 1}`, detail: withDayTime("Route waypoint", item), marker: "◆" })),
@@ -325,10 +377,11 @@ export function renderFeatureList() {
     ...chart.measures.map((item) => ({ kind: "measure", item, name: "Measure line", detail: `${formatNm(distanceNm(item, item.end))} nm · ${formatBearing(bearingDegrees(item, item.end))}`, marker: "↔" })),
     ...chart.segments.map((item) => ({ kind: "line", item, name: `Kept ${item.color} line`, detail: `${formatNm(distanceNm(item, item.end))} nm · ${formatBearing(bearingDegrees(item, item.end))}`, marker: "╱" })),
     ...chart.winds.map((item) => ({ kind: "wind", item, name: item.label || "Wind", detail: withDayTime(`Flows toward ${formatDirection(item.bearing)}`, item), marker: "➤" })),
+    ...chart.notes.map((item) => ({ kind: "note", item, name: item.name || firstLine(item.text) || "Note", detail: withDayTime("Note", item), search: item.text, marker: "✎" })),
     ...chart.drPositions.map((item) => ({ kind: "dr", item, name: item.label || "DR position", detail: [formatGameTime(item.t), item.sigmaNm > 0 ? `±${formatNm(item.sigmaNm)} nm` : ""].filter(Boolean).join(" · ") || "Dead reckoning", marker: "◓" }))
   ].filter((entry) => (filter === "all" || entry.kind === filter)
     && `${entry.name} ${entry.detail} ${assignedBoats(entry.item).map((boat) => boat.provider).join(" ")} ${entry.item.notes ?? ""} ${entry.search ?? ""}`.toLowerCase().includes(query));
-  elements["feature-count"].textContent = chart.features.length + chart.route.length + chart.savedRoutes.length + chart.searches.length + chart.measures.length + chart.segments.length + chart.winds.length + chart.drPositions.length;
+  elements["feature-count"].textContent = chart.features.length + chart.route.length + chart.savedRoutes.length + chart.searches.length + chart.measures.length + chart.segments.length + chart.winds.length + chart.drPositions.length + chart.notes.length;
   elements["feature-list"].replaceChildren(...items.map((entry) => {
     const { kind, item } = entry;
     const focus = chartItemFocusPoint(kind, item);
@@ -354,13 +407,18 @@ export function renderFeatureList() {
   }
 }
 
-const TRACK_EVENT_TEXT = { start: "Recording started", stop: "Recording stopped", sleep: "Fell asleep", wake: "Woke up", mark: "Location recorded" };
+function firstLine(text) {
+  return String(text ?? "").trim().split(/\r?\n/)[0].slice(0, 60);
+}
+
+const TRACK_EVENT_TEXT = { start: "Recording started", stop: "Recording stopped", sleep: "Fell asleep", wake: "Woke up", mark: "Location recorded", "race-start": "Race start", "race-checkpoint": "Race checkpoint", "race-finish": "Race finish" };
 
 // What Voyage Recorder noted beside the position: the boat, its course and speed, and why it was noted.
-function recordedDetail(item) {
-  const motion = Number.isFinite(item.knots)
-    ? Number.isFinite(item.course) ? `${formatBearing(item.course)} at ${item.knots.toFixed(1)} kn` : `${item.knots.toFixed(1)} kn`
-    : "";
+// With equipment readings on, course and speed show only with a compass and a chip log.
+function recordedDetail(item, knowledge = { course: true, speed: true }) {
+  const course = knowledge.course && Number.isFinite(item.course) ? formatBearing(item.course) : "";
+  const speed = knowledge.speed && Number.isFinite(item.knots) ? `${item.knots.toFixed(1)} kn` : "";
+  const motion = course && speed ? `${course} at ${speed}` : course || speed;
   const hull = Number.isFinite(item.hull) ? `hull ${item.hull}% damaged` : "";
   return [item.boat, motion, hull, TRACK_EVENT_TEXT[item.event]].filter(Boolean).join(" · ");
 }

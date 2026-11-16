@@ -1,5 +1,5 @@
 // Tool modes and pointer handling on the chart canvas, including the previews tools draw while active.
-import { COMPASS_STEP_DEG, ITEM_KINDS, MAX_RANGE_NM, MAX_ZOOM, MIN_ZOOM, WORLD_BOUNDS, bearingDegrees, chartItemFocusPoint, createFeature, createMeasure, createRoutePoint, createSearch, createWind, distanceNm, formatCoordinate, isLocked, itemForRef, revealLayer, searchExtent, searchesAnsweredBy, shownItems, translateChartItems } from "./model.mjs";
+import { COMPASS_STEP_DEG, ITEM_KINDS, MAX_RANGE_NM, MAX_ZOOM, MIN_ZOOM, WORLD_BOUNDS, bearingDegrees, chartItemFocusPoint, createFeature, createMeasure, createRoutePoint, createSearch, createWind, distanceNm, formatCoordinate, isEncounter, isLocked, itemForRef, revealLayer, searchExtent, searchesAnsweredBy, shownItems, translateChartItems } from "./model.mjs";
 import { assignedIsland, islandById, searchIsland } from "./islands.mjs";
 import { assignedBoats, drawBoatSilhouette } from "./boats.mjs";
 import { clamp, formatDirection, formatNm } from "./format.mjs";
@@ -8,7 +8,10 @@ import { activeChart, commit, host, workspace, isSelected, persist, pushUndo, re
 import { boatRowAt, coordinatePrecision, eventPoint, screenToWorld, worldToScreen } from "./viewport.mjs";
 import { boatColours, drawAreaCircle, drawChart, drawIslandSilhouette, drawLine, drawMeasureLine, drawSearchWedge, drawWindIndicator, labelPill, magnetRing } from "./render.mjs";
 import { findHit, resetHitCycle, nearestTrackPoint, onSelectedAreaEdge, selectedLineEnd, snapAlongRay, snapPoint } from "./hits.mjs";
-import { addLocation, addSearch, addWind, setAnchor } from "./edits.mjs";
+import { addLocation, addNote, addSearch, addWind, setAnchor } from "./edits.mjs";
+import { openNote } from "./notes.mjs";
+import { showComparisonPointAt } from "./compare.mjs";
+import { LOCATION_ICONS } from "./icons.mjs";
 import { renderEverything, renderInspector, renderRouteSummary } from "./panels.mjs";
 import { DR_HINT, pickStart, reckoningStart, showDeadReckoning } from "./dead-reckoning-panel.mjs";
 
@@ -18,6 +21,8 @@ const placesFreely = (event) => host.platform === "mac" ? event.altKey : event.c
 const MODE_HINTS = {
   select: "Drag the chart to pan. Shift-click or Shift-drag to select several chart items. Drag either end of a selected line to adjust it.",
   location: "Click anywhere to add a location. Double-click also works from Select mode.",
+  encounter: "Click where you saw it, then choose what it was.",
+  note: "Click where the note belongs, then write it in the note beside the icon.",
   route: "Click to add route waypoints. Right-click or press Escape when finished.",
   measure: "Drag from one point to another, or click each end. The line stays until you delete it or measure a new one.",
   area: "Press where the area is centred and drag out its radius. Drag the edge of a selected area to resize it.",
@@ -324,6 +329,18 @@ export function startPointer(event) {
     resolveToLocation(target);
     return;
   }
+  if (mode === "note") {
+    const note = addNote(target);
+    setMode("select");
+    openNote(note.id);
+    return;
+  }
+  if (mode === "encounter") {
+    addLocation(target, LOCATION_ICONS.whales.label, { icon: "whales" });
+    setMode("select");
+    if (selection?.kind === "feature") openNote(selection.id, "feature");
+    return;
+  }
   if (mode === "location") {
     const island = islandById(islandPlacement);
     addLocation(target, island?.name || "New location", island ? { islandId: island.id } : {});
@@ -398,6 +415,7 @@ export function startPointer(event) {
     pointerState = { type: "marquee", pointerId: event.pointerId, start: screen, cursor: screen, moved: false };
   } else {
     selectItem(null, null);
+    showComparisonPointAt(screen);
     startPan(event, screen);
   }
 }
@@ -544,6 +562,11 @@ export function endPointer(event) {
     return;
   }
   if (pointerState.type === "move-items" || pointerState.type === "resize-area" || pointerState.type === "line-end") {
+    // Clicking a note without dragging it opens its popout. Clicking an encounter opens the same popout for its notes.
+    if (pointerState.type === "move-items" && !pointerState.moved && selectedKeys.size === 1) {
+      if (selection?.kind === "note") openNote(selection.id);
+      else if (selection?.kind === "feature" && isEncounter(selectedItem())) openNote(selection.id, "feature");
+    }
     if (pointerState.moved) {
       activeChart().updatedAt = new Date().toISOString();
       persist();

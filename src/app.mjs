@@ -7,7 +7,7 @@ import { activeChart, clearSelection, commit, initState, persist, redo, replaceS
 import { eventPoint, screenToWorld } from "./viewport.mjs";
 import { drawChart, fitData, resizeCanvas, setOverlay } from "./render.mjs";
 import { findHit } from "./hits.mjs";
-import { addLocation, deleteSelected, lockSelected, updateSavedRouteFromForm, updateSelectedFromForm } from "./edits.mjs";
+import { addLocation, deleteSelected, lockSelected, removeTrackJoin, updateSavedRouteFromForm, updateSelectedFromForm } from "./edits.mjs";
 import { beginResolution, drawToolPreview, endPointer, extendSavedRoute, mode, movePointer, pointerState, setMode, setSpacePressed, startPointer, stopEdgePan, zoomAt } from "./interaction.mjs";
 import { LAYER_CONTROLS, renderEverything, renderFeatureList, renderInspector, renderRouteSummary } from "./panels.mjs";
 import { applyLayout, endPanelResize, movePanelResize, resizePanelFromKeyboard, startPanelResize, togglePanel } from "./layout.mjs";
@@ -18,6 +18,14 @@ import { initLiveTrack } from "./live-track.mjs";
 import { initSettings, initTheme, stepInterfaceSize } from "./settings.mjs";
 import { initDeadReckoning, reckonFrom } from "./dead-reckoning-panel.mjs";
 import { initTrackSelection } from "./track-selection.mjs";
+import { LOCATION_ICONS } from "./icons.mjs";
+import { initNotes, openNote } from "./notes.mjs";
+import { initEquipment } from "./equipment-panel.mjs";
+import { initOverlay } from "./overlay.mjs";
+import { initManageCharts } from "./manage-charts.mjs";
+import { initCompare } from "./compare.mjs";
+import { initShare } from "./share.mjs";
+import { initTrackKey } from "./track-key.mjs";
 import "./menus.mjs";
 
 const host = await connectHost();
@@ -116,11 +124,12 @@ for (const [elementId, key] of LAYER_CONTROLS) {
 }
 
 // Inspectors
-for (const kind of ["feature", "route", "search", "wind", "track"]) {
+for (const kind of ["feature", "route", "search", "wind", "track", "note"]) {
   elements[`${kind}-form`].addEventListener("change", () => updateSelectedFromForm(kind));
   elements[`${kind}-form`].addEventListener("submit", (event) => event.preventDefault());
 }
-for (const id of ["delete-feature", "delete-route-point", "delete-saved-route", "delete-measure", "delete-search", "delete-wind", "delete-track", "delete-map-island"]) {
+elements["open-note"].addEventListener("click", () => { if (selection?.kind === "note") openNote(selection.id); });
+for (const id of ["delete-feature", "delete-route-point", "delete-saved-route", "delete-measure", "delete-search", "delete-wind", "delete-track", "delete-map-island", "delete-note"]) {
   elements[id].addEventListener("click", deleteSelected);
 }
 // The padlock follows the item whose inspector is shown, and applies to the whole selection.
@@ -130,6 +139,7 @@ for (const button of document.querySelectorAll("[data-lock]")) {
 elements["lock-selected"].addEventListener("click", () => lockSelected(true));
 elements["unlock-selected"].addEventListener("click", () => lockSelected(false));
 elements["saved-route-form"].addEventListener("change", updateSavedRouteFromForm);
+elements["track-join"].addEventListener("click", removeTrackJoin);
 elements["dr-form"].addEventListener("submit", (event) => event.preventDefault());
 elements["dr-label"].addEventListener("change", (event) => {
   const position = selection?.kind === "dr" ? selectedItem() : null;
@@ -321,15 +331,25 @@ if (host.desktop) {
 }
 
 applyLayout();
+initEquipment();
+initOverlay({ renderRoute: renderRouteSummary });
+initManageCharts();
+initCompare({ draw: drawChart, renderAll: renderEverything });
+initShare({ draw: drawChart, renderAll: renderEverything });
+initTrackKey();
 renderEverything();
 resizeCanvas();
 initSettings();
 initUpdates();
 initLiveTrack();
 initDeadReckoning();
+initNotes();
 initTrackSelection();
 
-// Searches snap to a 16, 32 or 64-point compass, saved with the other settings.
+// What an encounter was. Encounters are placed with their own tool; plain locations have no icon.
+elements["feature-icon"].replaceChildren(...Object.entries(LOCATION_ICONS).map(([id, { label }]) => new Option(label, id)));
+
+// Searches snap to an 8, 16 or 32-point compass, saved with the other settings.
 elements["search-points"].value = String(workspace.settings.searchPoints);
 elements["search-points"].addEventListener("change", () => {
   workspace.settings.searchPoints = Number(elements["search-points"].value);
