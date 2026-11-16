@@ -3,6 +3,15 @@
     <channel>
         <title>Sailwind Chartroom</title>
         <item>
+            <title>0.9.7</title>
+            <pubDate>Mon, 16 Nov 2026 21:56:38 +0000</pubDate>
+            <link>https://github.com/Skeptic043/sailwind-chartroom/releases</link>
+            <sparkle:version>0.9.7999</sparkle:version>
+            <sparkle:shortVersionString>0.9.7</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/Skeptic043/sailwind-chartroom/releases/download/v0.9.7/SailwindChartroom-macos-universal-0.9.7.zip" length="1739535" type="application/octet-stream" sparkle:edSignature="jYBO/8l7suEC7vD6DvstBrKpJOmkHsTm/nH9o/WehTxUI0IwGr3QkbIQtSTUrzMIZsGymmLcC0llQ9sg8PheDg=="/>
+        </item>
+        <item>
             <title>0.8.11</title>
             <pubDate>Sun, 15 Nov 2026 05:34:32 +0000</pubDate>
             <link>https://github.com/Skeptic043/sailwind-chartroom/releases</link>
@@ -19,15 +28,6 @@
             <sparkle:shortVersionString>0.8.9</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
             <enclosure url="https://github.com/Skeptic043/sailwind-chartroom/releases/download/v0.8.9/SailwindChartroom-macos-universal-0.8.9.zip" length="1673721" type="application/octet-stream" sparkle:edSignature="m/08ZIHYENhHN+a+i9qjVKc+o3eRAzAJLzxiVAMa1jQUo7Re4mehsePa46AvOhHPWZJSEGEeWGqfvdJgPZroBw=="/>
-        </item>
-        <item>
-            <title>0.8.0</title>
-            <pubDate>Sat, 14 Nov 2026 19:41:33 +0000</pubDate>
-            <link>https://github.com/Skeptic043/sailwind-chartroom/releases</link>
-            <sparkle:version>0.8.999</sparkle:version>
-            <sparkle:shortVersionString>0.8.0</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
-            <enclosure url="https://github.com/Skeptic043/sailwind-chartroom/releases/download/v0.8.0/SailwindChartroom-macos-universal-0.8.0.zip" length="1632995" type="application/octet-stream" sparkle:edSignature="aOIPx6I/OJo8fzas+e/0pxtOGd/1TMtzDAhynOcMR1Qnaz9ojINk0ulxyPz2M5SPJK7UNekWeWUBrAZRGV6wAw=="/>
         </item>
         <item>
             <title>0.6.0-rc.1</title>
