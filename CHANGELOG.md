@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.8
+
+### Changed
+- The `File` menu's sharing commands are grouped under `Share and race` as `Publish world/route`, `Publish route as race`, `Enter a race`, `Browse worlds and routes`, `Compare a route` and `Save route to file`
+- Publishing a route as a race from a Scrambled Seas chart also publishes its world on Chartroom Voyages if the site doesn't have it yet
+
 ## 0.9.7
 
 ### Added

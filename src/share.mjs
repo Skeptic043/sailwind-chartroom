@@ -92,9 +92,9 @@ export function initShare({ draw, renderAll: render }) {
 // --- Export, share and race ------------------------------------------------------------------------
 
 const MODES = {
-  export: { title: "Export voyage", intro: "Choose the part of your Voyage Recorder track to share. It's highlighted on the chart. Your save slot and file paths are never included.", button: "Export" },
-  share: { title: "Share voyage", intro: "Choose the trip to share on Chartroom Voyages. Chartroom saves the file and opens the share form in your browser. Drag the file into the form, then submit it. Shared voyages are public and show your GitHub username.", button: "Save and open the form" },
-  race: { title: "Enter race", intro: "Choose the course and the trip you sailed it on. Chartroom checks the run the same way the board will, saves the file and opens the entry form in your browser. Drag the file into the form, then submit it.", button: "Check, save and open the form" }
+  export: { title: "Save route to file", intro: "Choose the part of your Voyage Recorder track to save. It's highlighted on the chart. Your save slot and file paths are never included.", button: "Save" },
+  share: { title: "Publish world/route", intro: "Choose the part of your track to publish on Chartroom Voyages. Its world is published with it if the site doesn't have it yet. Chartroom saves the file and opens the form in your browser. Drag the file into the form, then submit it. Published routes are public and show your GitHub username.", button: "Save and open the form" },
+  race: { title: "Enter a race", intro: "Choose the race and the part of your track you sailed it on. Chartroom checks the run the same way the board will, saves the file and opens the entry form in your browser. Drag the file into the form, then submit it.", button: "Check, save and open the form" }
 };
 
 async function openExport(nextMode) {
@@ -240,8 +240,8 @@ async function finishExport() {
     elements["export-voyage-dialog"].close();
     if (form) {
       host.openLink(form);
-      showToast("Voyage saved. Drag the file into the form that opened in your browser, then submit it.");
-    } else showToast("Voyage exported.");
+      showToast("Route saved. Drag the file into the form that opened in your browser, then submit it.");
+    } else showToast("Route saved to file.");
   } catch (error) {
     showToast(error.message, true);
   }
@@ -318,6 +318,8 @@ async function finishCourse() {
     const existing = await siteData("data/courses.json").catch(() => []);
     if (existing.some((other) => other.id === course.id)) throw new Error(`A race called "${course.id}" already exists. Choose another name.`);
     const { author, ...submission } = course;
+    const world = courseWorld(chart);
+    if (world?.kind === "scrambled") submission.worldSettings = world;
     host.openLink(issueFormUrl("create-course", { course: JSON.stringify(submission, null, 2) }));
     elements["course-dialog"].close();
     showToast("Submit the form that opened in your browser to publish the race.");
@@ -345,8 +347,8 @@ async function openBrowse() {
     elements["browse-status"].textContent = "Nothing has been shared yet.";
     return;
   }
-  elements["browse-status"].textContent = "Open a shared voyage as a comparison on this chart.";
-  elements["browse-world"].replaceChildren(...browseWorlds.map((world) => new Option(`${world.name} (${world.voyages} voyage${world.voyages === 1 ? "" : "s"})`, world.key)));
+  elements["browse-status"].textContent = "Open a published route as a comparison on this chart.";
+  elements["browse-world"].replaceChildren(...browseWorlds.map((world) => new Option(`${world.name} (${world.voyages} route${world.voyages === 1 ? "" : "s"})`, world.key)));
   const own = worldKey(activeChart().recording?.world);
   elements["browse-world"].value = browseWorlds.some((world) => world.key === own) ? own : browseWorlds[0].key;
   elements["browse-world-row"].hidden = false;
@@ -366,7 +368,7 @@ async function showWorld(key) {
   if (elements["browse-world"].value !== key) return;
   const own = worldKey(activeChart().recording?.world);
   elements["browse-world-summary"].textContent = own && own !== key
-    ? "This chart's recording is from another world, so these voyages won't line up with its islands."
+    ? "This chart's recording is from another world, so these routes won't line up with its islands."
     : world.description || "";
   elements["browse-heatmap"].checked = heatmap?.key === key;
   elements["browse-heatmap-row"].hidden = !world.heatmap?.voyages;
@@ -382,11 +384,11 @@ function browseRow(voyage, world) {
   compare.addEventListener("click", async () => {
     compare.disabled = true;
     try {
-      addComparison(await siteData(voyage.file), `${voyage.submitter}'s voyage`);
+      addComparison(await siteData(voyage.file), `${voyage.submitter}'s route`);
       persist();
       renderAll();
       compare.textContent = "Added";
-      showToast(`Comparing ${voyage.name || "the voyage"} from ${world.name}.`);
+      showToast(`Comparing ${voyage.name || "the route"} from ${world.name}.`);
     } catch (error) {
       compare.disabled = false;
       showToast(error.message, true);

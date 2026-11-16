@@ -33,13 +33,13 @@
           <button id="paste-track" type="button">Paste positions</button>
           <button id="clear-track" type="button">Clear track</button>
           <hr>
-          <p class="menu-heading">Voyages</p>
-          <button id="export-voyage" type="button">Export voyage</button>
-          <button id="compare-voyage" type="button">Compare voyage</button>
-          <button id="share-voyage" type="button">Share voyage</button>
-          <button id="enter-race" type="button">Enter race</button>
+          <p class="menu-heading">Share and race</p>
+          <button id="share-voyage" type="button">Publish world/route</button>
           <button id="publish-course" type="button">Publish route as race</button>
-          <button id="browse-voyages" type="button">Browse shared worlds/voyages</button>
+          <button id="enter-race" type="button">Enter a race</button>
+          <button id="browse-voyages" type="button">Browse worlds and routes</button>
+          <button id="compare-voyage" type="button">Compare a route</button>
+          <button id="export-voyage" type="button">Save route to file</button>
           <hr>
           <button id="open-settings" type="button" hidden>Settings</button>
           <p id="storage-note" class="menu-note">Everything stays in this browser unless you export it.</p>
@@ -501,8 +501,8 @@
 
   <dialog id="export-voyage-dialog" class="floating-dialog" aria-labelledby="export-title">
     <form id="export-voyage-form" method="dialog" class="dialog-card">
-      <div class="eyebrow">Share a trip</div>
-      <h2 id="export-title">Export voyage</h2>
+      <div class="eyebrow">Share and race</div>
+      <h2 id="export-title">Save route to file</h2>
       <p id="export-intro">Choose the part of your Voyage Recorder track to share. It's highlighted on the chart. Your save slot and file paths are never included.</p>
       <label id="export-course-row" hidden>Course <select id="export-course"></select></label>
       <button id="export-race-markers" type="button" hidden>Use my race start and finish</button>
@@ -552,7 +552,7 @@
   <dialog id="browse-dialog" class="wide-dialog">
     <div class="dialog-card">
       <div class="eyebrow">Chartroom Voyages</div>
-      <h2>Browse shared worlds/voyages</h2>
+      <h2>Browse worlds and routes</h2>
       <p id="browse-status">Loading…</p>
       <label id="browse-world-row" hidden>World <select id="browse-world"></select></label>
       <p id="browse-world-summary" class="fineprint"></p>

@@ -116,7 +116,7 @@ export async function hashGameId(game) {
 export function parseVoyageFile(value) {
   // A run downloaded from a Chartroom Voyages board holds the voyage it was sailed in.
   if (typeof value?.course === "string" && value.voyage?.format === VOYAGE_FORMAT) value = value.voyage;
-  if (value?.format !== VOYAGE_FORMAT) throw new Error("This isn't a voyage file. Export one from File > Export voyage.");
+  if (value?.format !== VOYAGE_FORMAT) throw new Error("This isn't a route file. Save one with File > Save route to file.");
   if (!Number.isInteger(value.version) || value.version < 1) throw new Error("This voyage file has no readable version.");
   if (value.version > VOYAGE_VERSION) throw new Error("This voyage file was made by a newer version of Chartroom. Update Chartroom to open it.");
   const points = (Array.isArray(value.points) ? value.points : []).slice(0, MAX_POINTS).filter((point) =>

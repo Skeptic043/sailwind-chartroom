@@ -209,7 +209,7 @@ async function site(page, files) {
 const GRC = { lat: 31.10547, lon: -4.86723 };
 const NEVERDIN = { lat: 30.88448, lon: -5.43159 };
 
-test("Share voyage and Enter race save the file, check the run and open the site's forms", async ({ chartroom, page }) => {
+test("Publish world/route and Enter a race save the file, check the run and open the site's forms", async ({ chartroom, page }) => {
   const course = (id, rules = {}) => ({ id, version: 1, name: id, world: "vanilla", start: { island: "alankh/gold_rock_city" }, checkpoints: [{ island: "alankh/neverdin" }], order: "any", finish: { lastCheckpoint: true }, rules: { sortBy: "game", mods: { mode: "any", plugins: [] }, ...rules } });
   await site(page, {
     "data/courses.json": [{ id: "dash", name: "Dash", world: "vanilla", runs: 2 }, { id: "clean", name: "Clean", world: "vanilla", runs: 0 }, { id: "elsewhere", name: "Elsewhere", world: "ss-0000000000000000", runs: 0 }],
@@ -229,7 +229,7 @@ test("Share voyage and Enter race save the file, check the run and open the site
 
   await page.locator('.app-menu[data-menu="file"] > summary').click();
   await page.locator("#share-voyage").click();
-  await expect(page.locator("#export-title")).toHaveText("Share voyage");
+  await expect(page.locator("#export-title")).toHaveText("Publish world/route");
   await expect(page.locator("#export-course-row")).toBeHidden();
   await page.locator("#export-submit").click();
   await expect.poll(() => page.evaluate(() => window.__host.links ?? [])).toEqual(["https://github.com/Skeptic043/sailwind-chartroom-voyages/issues/new?template=share-voyage.yml"]);
@@ -237,7 +237,7 @@ test("Share voyage and Enter race save the file, check the run and open the site
 
   await page.locator('.app-menu[data-menu="file"] > summary').click();
   await page.locator("#enter-race").click();
-  await expect(page.locator("#export-title")).toHaveText("Enter race");
+  await expect(page.locator("#export-title")).toHaveText("Enter a race");
   await expect(page.locator("#export-course option")).toHaveText(["Dash (2 runs)", "Clean (0 runs)"]);
   const mods = page.locator('#export-share input[value="plugins"]');
   await expect(mods).toBeChecked();
@@ -245,7 +245,7 @@ test("Share voyage and Enter race save the file, check the run and open the site
   // A run the board would turn away says why, and nothing is saved or opened.
   await page.locator("#export-course").selectOption("clean");
   await page.locator("#export-submit").click();
-  await expect(page.locator("#export-check")).toContainText("wouldn't be accepted: This course doesn't allow a.b.");
+  await expect(page.locator("#export-check")).toContainText("wouldn't be accepted: This race doesn't allow a.b.");
   expect(await page.evaluate(() => window.__host.exports.length)).toBe(1);
   await page.locator("#export-course").selectOption("dash");
   await expect(page.locator("#export-check")).toBeHidden();
@@ -279,7 +279,7 @@ test("Publish route as race reads the route's islands and opens the race form fi
   expect(submitted.author).toBeUndefined();
 });
 
-test("Browse shared worlds/voyages adds a world's voyages as comparisons and shows its heatmap", async ({ chartroom, page }) => {
+test("Browse worlds and routes adds a world's routes as comparisons and shows its heatmap", async ({ chartroom, page }) => {
   const voyage = { format: "sailwind-voyage", version: 1, id: "7", submitter: "sailor", name: "Long way round", world: { kind: "vanilla" }, points: [{ t: 80, ...GRC }, { t: 84, ...NEVERDIN }] };
   await site(page, {
     "data/worlds.json": [{ key: "vanilla", name: "Vanilla Sailwind", voyages: 1, courses: [] }],
@@ -290,7 +290,7 @@ test("Browse shared worlds/voyages adds a world's voyages as comparisons and sho
   await chartroom.open({ charts: [{ id: "c1", name: "Sea", view: { lat: 31, lon: -5.1, zoom: 6 } }], activeChartId: "c1" });
   await page.locator('.app-menu[data-menu="file"] > summary').click();
   await page.locator("#browse-voyages").click();
-  await expect(page.locator("#browse-world option")).toHaveText(["Vanilla Sailwind (1 voyage)"]);
+  await expect(page.locator("#browse-world option")).toHaveText(["Vanilla Sailwind (1 route)"]);
   await expect(page.locator("#browse-list .browse-row")).toContainText("Long way round");
   await page.locator("#browse-list button", { hasText: "Compare" }).click();
   await expect(page.locator("#browse-list button")).toHaveText("Added");

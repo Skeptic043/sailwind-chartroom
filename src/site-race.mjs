@@ -75,7 +75,7 @@ export function checkRun(course, voyage) {
   const starts = places.start
     ? departures(voyage, places.start).map((time) => ({ time, from: -1 }))
     : places.checkpoints.flatMap((where, index) => departures(voyage, where).map((time) => ({ time, from: index })));
-  if (!starts.length) return { ok: false, reason: places.start ? `The voyage never leaves ${places.start.name}.` : "The voyage never leaves any of the course's ports." };
+  if (!starts.length) return { ok: false, reason: places.start ? `The run never leaves ${places.start.name}.` : "The run never leaves any of the race's ports." };
   const reached = places.checkpoints.map((where) => reaches(voyage, where));
   const finishes = places.finish ? reaches(voyage, places.finish) : null;
   const irl = course.rules?.sortBy === "irl";
@@ -104,12 +104,12 @@ export function checkRun(course, voyage) {
     };
     // A real-time board picks the fastest run by real time, and can only use runs that have it.
     if (irl && !(Number.isFinite(run.irlSeconds) && run.irlSeconds >= 0)) {
-      firstReason ||= "This board sorts by real time, but the voyage has no real time recorded.";
+      firstReason ||= "This board sorts by real time, but the run has no real time recorded.";
       continue;
     }
     if (!best || (irl ? run.irlSeconds < best.irlSeconds : run.gameHours < best.gameHours)) best = run;
   }
-  if (!best) return { ok: false, reason: firstReason || "The voyage doesn't complete the course." };
+  if (!best) return { ok: false, reason: firstReason || "The run doesn't complete the race." };
   return { ...best, ...summary(voyage, best.start, best.finish) };
 }
 
@@ -121,7 +121,7 @@ function runFrom(course, places, start, reached, finishes) {
     for (const [index, times] of reached.entries()) {
       if (done.has(index)) continue;
       const hit = times.find((time) => time.t > after);
-      if (!hit) return { ok: false, reason: `The voyage doesn't reach ${places.checkpoints[index].name} in order.` };
+      if (!hit) return { ok: false, reason: `The run doesn't reach ${places.checkpoints[index].name} in order.` };
       splits.push({ name: places.checkpoints[index].name, t: hit.t, utc: hit.utc });
       after = hit.t;
     }
@@ -129,7 +129,7 @@ function runFrom(course, places, start, reached, finishes) {
     for (const [index, times] of reached.entries()) {
       if (done.has(index)) continue;
       const hit = times.find((time) => time.t > start.time.t);
-      if (!hit) return { ok: false, reason: `The voyage doesn't reach ${places.checkpoints[index].name}.` };
+      if (!hit) return { ok: false, reason: `The run doesn't reach ${places.checkpoints[index].name}.` };
       splits.push({ name: places.checkpoints[index].name, t: hit.t, utc: hit.utc });
     }
     splits.sort((a, b) => a.t - b.t);
@@ -138,7 +138,7 @@ function runFrom(course, places, start, reached, finishes) {
   let finish;
   if (finishes) {
     finish = finishes.find((time) => time.t > after);
-    if (!finish) return { ok: false, reason: `The voyage doesn't finish at ${places.finish.name} after the last checkpoint.` };
+    if (!finish) return { ok: false, reason: `The run doesn't finish at ${places.finish.name} after the last checkpoint.` };
   } else {
     const last = splits.at(-1);
     if (!last) return { ok: false, reason: "The course has nothing to reach." };
@@ -149,21 +149,21 @@ function runFrom(course, places, start, reached, finishes) {
 
 export function checkMods(mods, plugins) {
   if (!mods || mods.mode === "any") return "";
-  if (!plugins) return "This course has mod rules, but the voyage file doesn't list its mods. Export it again with Loaded mods ticked.";
+  if (!plugins) return "This race has mod rules, but the route file doesn't list its mods. Save it again with Loaded mods ticked.";
   const loaded = new Set(plugins.map((plugin) => plugin.guid.toLowerCase()));
   const listed = (mods.plugins ?? []).map((guid) => guid.toLowerCase());
   if (mods.mode === "block") {
     const blocked = listed.filter((guid) => loaded.has(guid));
-    if (blocked.length) return `This course doesn't allow ${blocked.join(", ")}.`;
+    if (blocked.length) return `This race doesn't allow ${blocked.join(", ")}.`;
   }
   if (mods.mode === "require") {
     const missing = listed.filter((guid) => !loaded.has(guid));
-    if (missing.length) return `This course needs ${missing.join(", ")}.`;
+    if (missing.length) return `This race needs ${missing.join(", ")}.`;
   }
   if (mods.mode === "only") {
     const allowed = new Set([...listed, ...ALWAYS_ALLOWED]);
     const others = [...loaded].filter((guid) => !allowed.has(guid));
-    if (others.length) return `This course allows no other mods, but the voyage had ${others.join(", ")}.`;
+    if (others.length) return `This race allows no other mods, but the run had ${others.join(", ")}.`;
   }
   return "";
 }
@@ -175,15 +175,15 @@ function checkConduct(rules, voyage, start, finish) {
   if (Array.isArray(rules.boats) && rules.boats.length) {
     const allowed = new Set(rules.boats.map(key));
     const other = boats.find((boat) => !allowed.has(key(boat)));
-    if (other) return `This course doesn't allow the ${other}.`;
-    if (!boats.length) return "This course has boat rules, but the voyage file doesn't say which boat was sailed. Export it again with Boat ticked.";
+    if (other) return `This race doesn't allow the ${other}.`;
+    if (!boats.length) return "This race has boat rules, but the route file doesn't say which boat was sailed. Save it again with Boat ticked.";
   }
-  if (rules.oneBoat && !boats.length) return "This course is sailed in one boat, but the voyage file doesn't say which boat was sailed. Export it again with Boat ticked.";
-  if (rules.oneBoat && boats.length > 1) return `This course is sailed in one boat, but the voyage used ${boats.join(" and ")}.`;
+  if (rules.oneBoat && !boats.length) return "This race is sailed in one boat, but the route file doesn't say which boat was sailed. Save it again with Boat ticked.";
+  if (rules.oneBoat && boats.length > 1) return `This race is sailed in one boat, but the run used ${boats.join(" and ")}.`;
   if (Number.isFinite(rules.maxHull)) {
     const hulls = during.map((point) => point.hull).filter(Number.isFinite);
-    if (!hulls.length) return "This course limits hull damage, but the voyage file has none recorded. Export it again with Hull damage ticked.";
-    if (Math.max(...hulls) > rules.maxHull) return `Hull damage reached ${Math.max(...hulls)}%, over this course's ${rules.maxHull}%.`;
+    if (!hulls.length) return "This race limits hull damage, but the route file has none recorded. Save it again with Hull damage ticked.";
+    if (Math.max(...hulls) > rules.maxHull) return `Hull damage reached ${Math.max(...hulls)}%, over this race's ${rules.maxHull}%.`;
   }
   return "";
 }

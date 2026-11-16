@@ -73,14 +73,14 @@ async function importComparisons(files) {
   }
   if (!added) return;
   persist();
-  showToast(`Comparing ${added} voyage${added === 1 ? "" : "s"}.`);
+  showToast(`Comparing ${added} route${added === 1 ? "" : "s"}.`);
 }
 
 // Adds a voyage file's contents to the active chart's comparisons, named after fallbackName when the voyage
 // has no name of its own. Throws with a message for the player. The caller persists.
 export function addComparison(value, fallbackName) {
   const chart = activeChart();
-  if (chart.comparisons.length >= MAX_COMPARISONS) throw new Error(`A chart compares up to ${MAX_COMPARISONS} voyages. Remove one first.`);
+  if (chart.comparisons.length >= MAX_COMPARISONS) throw new Error(`A chart compares up to ${MAX_COMPARISONS} routes. Remove one first.`);
   const voyage = parseVoyageFile(value);
   const total = chart.comparisons.reduce((sum, comparison) => sum + comparison.points.length, voyage.points.length);
   if (total > MAX_COMPARED_POINTS) throw new Error("That's more recorded positions than a chart can compare at once. Remove a comparison first.");
@@ -157,12 +157,12 @@ function compareRow(comparison, chartWorld) {
   const remove = Object.assign(document.createElement("button"), { type: "button", textContent: "Remove" });
   remove.addEventListener("click", () => removeComparison(comparison.id));
   // Brings the whole voyage into view.
-  const jump = Object.assign(document.createElement("button"), { type: "button", textContent: "Go to", title: "Show this voyage on the chart" });
+  const jump = Object.assign(document.createElement("button"), { type: "button", textContent: "Go to", title: "Show this route on the chart" });
   jump.addEventListener("click", () => {
     if (!comparison.shown) updateComparison(comparison.id, { shown: true });
     fitPoints(comparison.points);
   });
-  heading.append(shown, swatch, Object.assign(document.createElement("strong"), { textContent: comparison.name || "Voyage", title: comparison.name || "Voyage" }), jump, remove);
+  heading.append(shown, swatch, Object.assign(document.createElement("strong"), { textContent: comparison.name || "Route", title: comparison.name || "Route" }), jump, remove);
   row.append(heading);
 
   const stats = sailedStats(comparison.points);
@@ -371,7 +371,7 @@ export function showComparisonPointAt(screen) {
     for (const note of comparison.notes) {
       const at = worldToScreen(note);
       if (Math.abs(at.x - screen.x) <= 7 && Math.abs(at.y - screen.y) <= 8) {
-        elements["compare-point"].textContent = [`${comparison.name || "Voyage"} · note`, `${formatGameTime(note.t)} · ${formatDuration(note.t - comparison.start)} since its start`, note.text].join("\n");
+        elements["compare-point"].textContent = [`${comparison.name || "Route"} · note`, `${formatGameTime(note.t)} · ${formatDuration(note.t - comparison.start)} since its start`, note.text].join("\n");
         elements["compare-point"].hidden = false;
         return true;
       }
@@ -385,7 +385,7 @@ export function showComparisonPointAt(screen) {
   const wind = Number.isFinite(point.windFrom) ? `Wind from ${formatBearing(point.windFrom)}${Number.isFinite(point.windKnots) ? ` at ${point.windKnots.toFixed(1)} kn` : ""}` : "";
   const motion = Number.isFinite(point.knots) ? `${Number.isFinite(point.course) ? `${formatBearing(point.course)} at ` : ""}${point.knots.toFixed(1)} kn` : "";
   elements["compare-point"].textContent = [
-    comparison.name || "Voyage",
+    comparison.name || "Route",
     `${formatGameTime(point.t)} · ${formatDuration(point.t - comparison.start)} since its start`,
     `${formatCoordinate(point.lat, "lat", 3)} · ${formatCoordinate(point.lon, "lon", 3)}`,
     [motion, point.boat].filter(Boolean).join(" · "),

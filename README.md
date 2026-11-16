@@ -1,6 +1,6 @@
 # Sailwind Chartroom
 
-A charting desk for Sailwind. Mark islands, plot and save routes, narrow down islands from mission directions, navigate by dead reckoning, and follow your boat live with [Voyage Recorder](https://github.com/Skeptic043/sailwind-voyage-recorder) or Coordinate Viewer.
+A charting desk for Sailwind. Mark islands, plot and save routes, narrow down islands from mission directions, navigate by dead reckoning, follow your boat live with [Voyage Recorder](https://github.com/Skeptic043/sailwind-voyage-recorder) or Coordinate Viewer, and publish your worlds, routes and races on [Chartroom Voyages](https://skeptic043.github.io/sailwind-chartroom-voyages/).
 
 ## Screenshots
 
@@ -36,7 +36,7 @@ Charts are saved automatically in `%APPDATA%\Sailwind Chartroom` on Windows and 
 
 ## Sharing and racing
 
-[Chartroom Voyages](https://skeptic043.github.io/sailwind-chartroom-voyages/) hosts shared worlds, voyages, heatmaps and race boards. The `File` menu's `Share voyage`, `Enter race`, `Publish route as race` and `Browse shared worlds/voyages` commands work with the site. Submissions require a GitHub account and are made in your browser. Chartroom only saves the file and opens the correct form.
+[Chartroom Voyages](https://skeptic043.github.io/sailwind-chartroom-voyages/) hosts published worlds, routes, heatmaps and race boards. The `File` menu's `Share and race` commands work with the site: `Publish world/route`, `Publish route as race`, `Enter a race` and `Browse worlds and routes`. Publishing a route or a race also publishes its world if the site doesn't have it yet. Submissions require a GitHub account and are made in your browser. Chartroom only saves the file and opens the correct form.
 
 ## Credits
 

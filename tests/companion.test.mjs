@@ -183,7 +183,7 @@ test("a voyage file holds only what the player chose to share", async () => {
   const parsed = parseVoyageFile(JSON.parse(JSON.stringify(file)));
   assert.equal(parsed.points.length, 2);
   assert.throws(() => parseVoyageFile({ ...file, version: 2 }), /newer version/);
-  assert.throws(() => parseVoyageFile({ format: "other" }), /isn't a voyage file/);
+  assert.throws(() => parseVoyageFile({ format: "other" }), /isn't a route file/);
 });
 
 test("voyages compare by world and line up by elapsed time", () => {
