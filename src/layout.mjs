@@ -3,6 +3,7 @@ import { clamp } from "./format.mjs";
 import { elements } from "./dom.mjs";
 import { persist, workspace } from "./state.mjs";
 import { resizeCanvas } from "./render.mjs";
+import { placeFloatingPanels } from "./overlay.mjs";
 
 let resizeFrame = null;
 
@@ -52,6 +53,7 @@ export function applyLayout() {
 export function togglePanel(side) {
   workspace.layout[`${side}Open`] = !workspace.layout[`${side}Open`];
   applyLayout();
+  placeFloatingPanels();
   persist();
 }
 
@@ -64,6 +66,7 @@ function panelMaxWidth(side) {
 function setPanelWidth(side, width, save = false) {
   workspace.layout[`${side}Width`] = clamp(width, 190, panelMaxWidth(side));
   applyLayout();
+  placeFloatingPanels();
   if (save) persist();
 }
 

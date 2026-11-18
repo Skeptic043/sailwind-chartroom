@@ -80,7 +80,7 @@ test("following Voyage Recorder adds its notes once and shows its keys in the ov
   await page.locator("#show-key-overlay").click();
   await expect(page.locator("#show-key-overlay")).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator("#key-overlay td.key")).toHaveText(["J", "V", "Shift + V"]);
-  await page.locator('.app-menu[data-menu="file"] > summary').click();
+  await page.locator('.app-menu[data-menu="voyage"] > summary').click();
   await page.locator("#follow-track").click();
   await expect.poll(() => page.evaluate(() => window.__host.workspace?.charts?.[0]?.notes?.length ?? 0)).toBe(1);
   const chart = await chartroom.chart();
@@ -143,12 +143,12 @@ test("a voyage exports with the chosen parts and compares on another chart", asy
     { type: "position", day: 3, hour: 11, lat: 40.3, lon: 0.9, boat: "medi medium", event: "race-finish", windFrom: 95, windKnots: 10 }
   )];
   await chartroom.open(null, { recording: { name: "slot1.jsonl", runs } });
-  await page.locator('.app-menu[data-menu="file"] > summary').click();
+  await page.locator('.app-menu[data-menu="voyage"] > summary').click();
   await page.locator("#follow-track").click();
   // Following a new chart offers the positions before the newest one.
   await page.locator("#missing-form button.primary").click();
   await expect.poll(() => page.evaluate(() => window.__host.workspace?.charts?.[0]?.track?.length ?? 0)).toBe(3);
-  await page.locator('.app-menu[data-menu="file"] > summary').click();
+  await page.locator('.app-menu[data-menu="voyage"] > summary').click();
   await page.locator("#export-voyage").click();
   await expect(page.locator("#export-summary")).toContainText("3 positions");
   // The panel leaves the chart usable, and each end shows its position's time and what was recorded there.
@@ -222,12 +222,12 @@ test("Publish world/route and Enter a race save the file, check the run and open
     ...Array.from({ length: 8 }, (_, step) => ({ type: "position", day: 3, hour: 9 + step, lat: GRC.lat + (NEVERDIN.lat - GRC.lat) * step / 7, lon: GRC.lon + (NEVERDIN.lon - GRC.lon) * step / 7 }))
   )];
   await chartroom.open(null, { recording: { name: "slot1.jsonl", runs } });
-  await page.locator('.app-menu[data-menu="file"] > summary').click();
+  await page.locator('.app-menu[data-menu="voyage"] > summary').click();
   await page.locator("#follow-track").click();
   await page.locator("#missing-form button.primary").click();
   await expect.poll(() => page.evaluate(() => window.__host.workspace?.charts?.[0]?.track?.length ?? 0)).toBe(8);
 
-  await page.locator('.app-menu[data-menu="file"] > summary').click();
+  await page.locator('.app-menu[data-menu="voyage"] > summary').click();
   await page.locator("#share-voyage").click();
   await expect(page.locator("#export-title")).toHaveText("Publish world/route");
   await expect(page.locator("#export-course-row")).toBeHidden();
@@ -235,7 +235,7 @@ test("Publish world/route and Enter a race save the file, check the run and open
   await expect.poll(() => page.evaluate(() => window.__host.links ?? [])).toEqual(["https://github.com/Skeptic043/sailwind-chartroom-voyages/issues/new?template=share-voyage.yml"]);
   expect(await page.evaluate(() => window.__host.exports.length)).toBe(1);
 
-  await page.locator('.app-menu[data-menu="file"] > summary').click();
+  await page.locator('.app-menu[data-menu="voyage"] > summary').click();
   await page.locator("#enter-race").click();
   await expect(page.locator("#export-title")).toHaveText("Enter a race");
   await expect(page.locator("#export-course option")).toHaveText(["Dash (2 runs)", "Clean (0 runs)"]);
@@ -260,7 +260,7 @@ test("Publish route as race reads the route's islands and opens the race form fi
   await site(page, { "data/courses.json": [{ id: "taken", name: "Taken", world: "vanilla", runs: 0 }] });
   const route = [{ id: "a", ...GRC }, { id: "b", lat: 31.4, lon: -5.2, name: "Buoy" }, { id: "c", ...NEVERDIN }, { id: "d", ...GRC }];
   await chartroom.open({ charts: [{ id: "c1", name: "Race", view: { lat: 31, lon: -5.1, zoom: 6 }, route, recording: { game: "g", world: { kind: "vanilla" } } }], activeChartId: "c1" });
-  await page.locator('.app-menu[data-menu="file"] > summary').click();
+  await page.locator('.app-menu[data-menu="voyage"] > summary').click();
   await page.locator("#publish-course").click();
   await expect(page.locator("#course-summary")).toHaveText("Start: Gold Rock City\nCheckpoints: Buoy, Neverdin\nFinish: Gold Rock City");
   await page.locator("#course-name").fill("Taken");
@@ -288,7 +288,7 @@ test("Browse worlds and routes adds a world's routes as comparisons and shows it
     "voyages/vanilla/7.json": voyage
   });
   await chartroom.open({ charts: [{ id: "c1", name: "Sea", view: { lat: 31, lon: -5.1, zoom: 6 } }], activeChartId: "c1" });
-  await page.locator('.app-menu[data-menu="file"] > summary').click();
+  await page.locator('.app-menu[data-menu="voyage"] > summary').click();
   await page.locator("#browse-voyages").click();
   await expect(page.locator("#browse-world option")).toHaveText(["Vanilla Sailwind (1 route)"]);
   await expect(page.locator("#browse-list .browse-row")).toContainText("Long way round");
@@ -324,7 +324,7 @@ test("Connect track joins two stretches into one, and the track key explains the
   await page.mouse.down();
   await page.mouse.move(handle.x + 210, handle.y + 105, { steps: 5 });
   await page.mouse.up();
-  expect((await chartroom.saved()).settings.trackKeyPanel.x).toBeGreaterThan(0.02);
+  await expect.poll(async () => (await chartroom.saved()).settings.trackKeyPanel.x).toBeGreaterThan(0.02);
   await page.locator("#show-track-key").click();
   await expect(page.locator("#track-key")).toBeHidden();
   // The view is centred on 30.7°N 4.8°W at 900 pixels a degree: a5 (30.75°N 4.85°W) is 45 left and 45 up,

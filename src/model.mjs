@@ -80,7 +80,8 @@ const LAYER_DEFAULTS = Object.freeze({
   deadReckoning: true,
   notes: true,
   winds: true,
-  grid: true, labels: true, boats: true, islands: true, track: true, trackCoordinateViewer: true, trackVoyageRecorder: true, trackWinds: true,
+  grid: true, labels: true, boats: true, islands: true, track: true, trackLines: true, trackCoordinateViewer: true, trackVoyageRecorder: true,
+  trackVoyageAutomaticLocations: true, trackVoyageManualLocations: true, trackWinds: true,
   vanillaMap: false, importedMap: true, secretIslands: false, tradeWinds: false, expandedWinds: false
 });
 
@@ -100,7 +101,7 @@ export function itemShown(chart, kind, item) {
   if (kind === "line") return layers.measure && layers[`${item.color}Lines`];
   // With equipment readings on, a position whose place the player couldn't have found stays hidden until
   // equipment readings are turned off again. Latitude-only readings are drawn as lines of latitude instead.
-  if (kind === "track") return layers.track && layers[trackSourceLayer(item)] && (!chart.equipment?.enabled || fullyKnown(chart, item));
+  if (kind === "track") return trackLayerShown(chart, item) && (!chart.equipment?.enabled || fullyKnown(chart, item));
   if (kind === "dr") return layers.deadReckoning;
   if (kind === "note") return layers.notes;
   if (kind === "map-island") return layers.importedMap && (layers.secretIslands || !islandById(item.id)?.secret);
@@ -140,6 +141,16 @@ export function revealLayer(chart, kind, item) {
 // Positions from Voyage Recorder and from Coordinate Viewer show and hide separately.
 function trackSourceLayer(point) {
   return point?.source === "voyage" ? "trackVoyageRecorder" : "trackCoordinateViewer";
+}
+
+// Whether View shows a recorded position, before equipment readings: its source, and for Voyage Recorder
+// whether it was recorded automatically or by hand. A hidden position takes its dot, wind, line and
+// arrow with it. Race markers follow only their source.
+export function trackLayerShown(chart, point) {
+  const layers = chart.layers;
+  if (!layers.track || !layers[trackSourceLayer(point)]) return false;
+  if (point?.source !== "voyage" || point.event?.startsWith("race-")) return true;
+  return layers[point.event === "mark" ? "trackVoyageManualLocations" : "trackVoyageAutomaticLocations"];
 }
 
 export function createWorkspace() {

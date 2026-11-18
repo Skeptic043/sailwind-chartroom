@@ -1,6 +1,6 @@
 // Draws the chart canvas and moves its view. Tool previews are drawn by interaction.mjs through setOverlay().
 import { mapPalette, paperTile } from "./theme.mjs";
-import { MAX_ZOOM, MIN_ZOOM, NM_PER_DEGREE, WORLD_BOUNDS, bearingDegrees, clusteredLabelIds, destinationPoint, distanceNm, formatDuration, legPieces, searchChartLabel, searchEvidenceOpacity, searchExtent, searchIconAnchors, searchNameLabelIds, searchOverlapGroups, shownItems, summarizeRoute, tradeWindAt, iconScale } from "./model.mjs";
+import { MAX_ZOOM, MIN_ZOOM, NM_PER_DEGREE, WORLD_BOUNDS, bearingDegrees, clusteredLabelIds, destinationPoint, distanceNm, formatDuration, legPieces, searchChartLabel, searchEvidenceOpacity, searchExtent, searchIconAnchors, searchNameLabelIds, searchOverlapGroups, shownItems, summarizeRoute, trackLayerShown, tradeWindAt, iconScale } from "./model.mjs";
 import { islandWorldBounds } from "./islands.mjs";
 import { VANILLA_MAP, importedMapIslands } from "./scrambled-seas.mjs";
 import { assignedBoats, boatMarkerSize, drawBoatSilhouette } from "./boats.mjs";
@@ -251,26 +251,27 @@ function drawTrack(palette) {
   context.save();
   context.strokeStyle = palette.track;
   context.lineWidth = 1.5;
-  // With equipment readings on, the known positions are joined within each stretch of the whole recording,
-  // so a day between noon sights stays one line.
+  // Stretches come from the whole recording of each shown source, then keep only the shown positions, so
+  // hidden readings (equipment, or automatic or manual locations) don't break a stretch into gaps.
   const shownSet = new Set(track);
-  const segments = gated
-    ? trackSegments(chart.track.filter((point) => chart.layers[point.source === "voyage" ? "trackVoyageRecorder" : "trackCoordinateViewer"])).map((segment) => segment.filter((point) => shownSet.has(point))).filter((segment) => segment.length)
-    : trackSegments(track);
-  for (const segment of segments) {
-    const line = unwrapStretch(segment);
-    const offsets = [0];
-    if (line.some((point) => point.lon > WORLD_BOUNDS.maxLon)) offsets.push(-360);
-    if (line.some((point) => point.lon < WORLD_BOUNDS.minLon)) offsets.push(360);
-    for (const offset of offsets) {
-      const screen = [];
-      for (const [index, point] of line.entries()) {
-        const next = project({ lat: point.lat, lon: point.lon + offset });
-        const previous = screen.at(-1);
-        if (previous && index < line.length - 1 && Math.abs(next.x - previous.x) < TRACK_LINE_SPACING_PX && Math.abs(next.y - previous.y) < TRACK_LINE_SPACING_PX) continue;
-        screen.push(next);
+  const segments = trackSegments(chart.track.filter((point) => chart.layers[point.source === "voyage" ? "trackVoyageRecorder" : "trackCoordinateViewer"]))
+    .map((segment) => segment.filter((point) => shownSet.has(point))).filter((segment) => segment.length);
+  if (chart.layers.trackLines) {
+    for (const segment of segments) {
+      const line = unwrapStretch(segment);
+      const offsets = [0];
+      if (line.some((point) => point.lon > WORLD_BOUNDS.maxLon)) offsets.push(-360);
+      if (line.some((point) => point.lon < WORLD_BOUNDS.minLon)) offsets.push(360);
+      for (const offset of offsets) {
+        const screen = [];
+        for (const [index, point] of line.entries()) {
+          const next = project({ lat: point.lat, lon: point.lon + offset });
+          const previous = screen.at(-1);
+          if (previous && index < line.length - 1 && Math.abs(next.x - previous.x) < TRACK_LINE_SPACING_PX && Math.abs(next.y - previous.y) < TRACK_LINE_SPACING_PX) continue;
+          screen.push(next);
+        }
+        strokeDashed(screen, [3, 5]);
       }
-      strokeDashed(screen, [3, 5]);
     }
   }
   const visible = (screen) => screen.x >= -12 && screen.y >= -12 && screen.x <= width + 12 && screen.y <= height + 12;
@@ -327,7 +328,7 @@ function drawLatitudeLines(palette) {
   context.lineWidth = 1.6;
   context.lineCap = "round";
   for (const point of chart.track) {
-    if (!chart.layers[point.source === "voyage" ? "trackVoyageRecorder" : "trackCoordinateViewer"]) continue;
+    if (!trackLayerShown(chart, point)) continue;
     const knowledge = readingKnowledge(chart, point);
     if (knowledge.lat && knowledge.lon) {
       lastKnown = point;

@@ -17,6 +17,7 @@ import {
   importScrambledSeas,
   islandsShown,
   itemShown,
+  trackLayerShown,
   revealLayer,
   shownItems,
   createRoutePoint,
@@ -897,6 +898,46 @@ test("Coordinate Viewer and Voyage Recorder positions show and hide separately",
   assert.equal(shown(), 0);
   revealLayer(chart, "track", recorder[0]);
   assert.deepEqual(shownItems(chart, "track"), recorder);
+});
+
+test("recorded track lines start shown and keep an explicit hidden choice", () => {
+  const chart = createChart();
+  delete chart.layers.trackLines;
+  const defaulted = sanitizeWorkspace({ activeChartId: chart.id, charts: [chart] }).charts[0];
+  assert.equal(defaulted.layers.trackLines, true);
+  defaulted.layers.trackLines = false;
+  const hidden = sanitizeWorkspace({ activeChartId: defaulted.id, charts: [defaulted] }).charts[0];
+  assert.equal(hidden.layers.trackLines, false);
+});
+
+test("Voyage Recorder location choices hide whole positions, not Coordinate Viewer or race markers", () => {
+  const chart = createChart();
+  const viewer = { id: "viewer", lat: 1, lon: 1 };
+  const automatic = { id: "automatic", lat: 1, lon: 2, source: "voyage" };
+  const manual = { id: "manual", lat: 1, lon: 3, source: "voyage", event: "mark" };
+  const race = { id: "race", lat: 1, lon: 4, source: "voyage", event: "race-start" };
+
+  const shown = () => [viewer, automatic, manual, race].map((point) => itemShown(chart, "track", point));
+  assert.deepEqual(shown(), [true, true, true, true]);
+  chart.layers.trackVoyageAutomaticLocations = false;
+  assert.deepEqual(shown(), [true, false, true, true]);
+  chart.layers.trackVoyageManualLocations = false;
+  assert.deepEqual(shown(), [true, false, false, true]);
+  assert.equal(trackLayerShown(chart, race), true);
+  chart.layers.trackVoyageRecorder = false;
+  assert.deepEqual(shown(), [true, false, false, false]);
+});
+
+test("Voyage Recorder location choices start shown and keep explicit hidden choices", () => {
+  const chart = createChart();
+  delete chart.layers.trackVoyageAutomaticLocations;
+  delete chart.layers.trackVoyageManualLocations;
+  const defaulted = sanitizeWorkspace({ activeChartId: chart.id, charts: [chart] }).charts[0];
+  assert.deepEqual([defaulted.layers.trackVoyageAutomaticLocations, defaulted.layers.trackVoyageManualLocations], [true, true]);
+  defaulted.layers.trackVoyageAutomaticLocations = false;
+  defaulted.layers.trackVoyageManualLocations = false;
+  const hidden = sanitizeWorkspace({ activeChartId: defaulted.id, charts: [defaulted] }).charts[0];
+  assert.deepEqual([hidden.layers.trackVoyageAutomaticLocations, hidden.layers.trackVoyageManualLocations], [false, false]);
 });
 
 test("Voyage Recorder ports and missions become locations and search areas, once", async () => {

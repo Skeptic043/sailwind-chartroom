@@ -36,7 +36,7 @@ Charts are saved automatically in `%APPDATA%\Sailwind Chartroom` on Windows and 
 
 ## Sharing and racing
 
-[Chartroom Voyages](https://skeptic043.github.io/sailwind-chartroom-voyages/) hosts published worlds, routes, heatmaps and race boards. The `File` menu's `Share and race` commands work with the site: `Publish world/route`, `Publish route as race`, `Enter a race` and `Browse worlds and routes`. Publishing a route or a race also publishes its world if the site doesn't have it yet. Submissions require a GitHub account and are made in your browser. Chartroom only saves the file and opens the correct form.
+[Chartroom Voyages](https://skeptic043.github.io/sailwind-chartroom-voyages/) hosts published worlds, routes, heatmaps and race boards. The `Voyage` menu's `Chartroom Voyages` commands work with the site: `Publish world/route`, `Publish route as race`, `Enter a race` and `Browse worlds and routes`. Publishing a route or a race also publishes its world if the site doesn't have it yet. Submissions require a GitHub account and are made in your browser. Chartroom only saves the file and opens the correct form.
 
 ## Credits
 

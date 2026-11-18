@@ -112,6 +112,7 @@ button { cursor: pointer; }
 .menu-check:hover { background: var(--panel-3); color: var(--ink); }
 .menu-check input { width: auto; margin: 0; accent-color: var(--accent); }
 .menu-check-sub { padding-left: 26px; }
+.menu-check-sub-sub { padding-left: 44px; }
 .menu-check:has(input:disabled) { opacity: .5; cursor: default; }
 .menu-note { margin: 5px 8px; color: var(--faint); font-size: 11px; line-height: 1.4; }
 
@@ -506,7 +507,7 @@ kbd { justify-self: start; padding: 4px 7px; border: 1px solid var(--line-strong
 
 @media (max-width: 860px) {
   html, body { overflow: auto; }
-  .icon-text span { display: none; }
+  .icon-text span, .panel-toggle span { display: none; }
   .menu-popover { max-width: calc(100vw - 24px); }
   .app-shell { height: auto; min-height: calc(100vh - var(--topbar-height)); grid-template-columns: var(--left-column) minmax(430px, 1fr); }
   .chart-stage { min-height: calc(100vh - var(--topbar-height)); }
@@ -517,6 +518,11 @@ kbd { justify-self: start; padding: 4px 7px; border: 1px solid var(--line-strong
 }
 
 @media (max-width: 620px) {
+  .topbar { grid-template-columns: minmax(0, 1fr) auto; gap: 6px; padding: 0 6px; }
+  .menu-bar { gap: 0; }
+  .top-actions { gap: 2px; }
+  .app-menu summary { padding-inline: 5px; }
+  .panel-toggle { padding-inline: 5px; }
   .island-list, .boat-list { grid-template-columns: 1fr; }
   .island-filters, .boat-filters { grid-template-columns: 1fr; }
 }

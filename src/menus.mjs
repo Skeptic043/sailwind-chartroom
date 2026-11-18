@@ -1,4 +1,4 @@
-// Makes the File, Edit, View and Help menus behave like one desktop menu bar.
+// Makes the File, Edit, View, Voyage and Help menus behave like one desktop menu bar.
 
 const appMenus = [...document.querySelectorAll(".app-menu")];
 

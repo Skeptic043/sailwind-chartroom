@@ -157,6 +157,8 @@ test("chart items filter and search narrow the list", async ({ chartroom, page }
 
 test("menus open from the keyboard and close with Escape", async ({ chartroom, page }) => {
   await chartroom.open();
+  await expect(page.locator(".app-menu > summary")).toHaveText(["File", "Edit", "View", "Voyage", "Help"]);
+  await expect(page.locator("#save-chart")).toHaveCount(0);
   const file = page.locator('.app-menu[data-menu="file"] summary');
   await file.focus();
   await page.keyboard.press("ArrowDown");
@@ -166,6 +168,22 @@ test("menus open from the keyboard and close with Escape", async ({ chartroom, p
   await file.focus();
   await page.keyboard.press("ArrowRight");
   await expect(page.locator('.app-menu[data-menu="edit"] summary')).toBeFocused();
+  const view = page.locator('.app-menu[data-menu="view"] summary');
+  await view.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(page.locator('.app-menu[data-menu="voyage"] summary')).toBeFocused();
+});
+
+test("menus and panel buttons fit at the largest interface scale", async ({ chartroom, page }) => {
+  await page.setViewportSize({ width: 450, height: 600 });
+  await chartroom.open();
+  const edges = await page.evaluate(() => ({
+    menu: document.querySelector('.app-menu[data-menu="help"] > summary').getBoundingClientRect().right,
+    actions: document.querySelector("#show-key-overlay").getBoundingClientRect().right,
+    viewport: window.innerWidth
+  }));
+  expect(edges.menu).toBeLessThanOrEqual(edges.viewport);
+  expect(edges.actions).toBeLessThanOrEqual(edges.viewport);
 });
 
 test("the island library applies an outline to the selected location", async ({ chartroom, page }) => {
@@ -584,7 +602,7 @@ test("follows Coordinate Viewer live into the chart it started on", async ({ cha
   await chartroom.open();
   await chartroom.press("l");
   await chartroom.clickChart(500, 400);
-  await page.locator('.app-menu[data-menu="file"] > summary').click();
+  await page.locator('.app-menu[data-menu="voyage"] > summary').click();
   await page.locator("#follow-track-cv").click();
   await expect(page.locator("#follow-track-cv")).toHaveText("Stop following coords_0.txt");
   // Nothing is saved until the first position arrives, so this waits on the host itself.
@@ -597,7 +615,7 @@ test("follows Coordinate Viewer live into the chart it started on", async ({ cha
   const undone = await chartroom.chart();
   expect(undone.features, "undo takes back the location").toHaveLength(0);
   expect(undone.track, "but keeps the live positions").toHaveLength(2);
-  await page.locator('.app-menu[data-menu="file"] > summary').click();
+  await page.locator('.app-menu[data-menu="voyage"] > summary').click();
   await page.locator("#follow-track-cv").click();
   await expect(page.locator("#follow-track-cv")).toHaveText("Follow live (Coordinate Viewer)");
 });
@@ -615,7 +633,7 @@ test("follows a Voyage Recorder log live, with its boat, speed and sessions", as
     { id: 1, name: "slot1.jsonl", place: "", modified: new Date(now - 3 * 3600000).toISOString() }
   ];
   await chartroom.open(null, { recording: { name: "slot1.jsonl", runs, choices } });
-  await page.locator('.app-menu[data-menu="file"] > summary').click();
+  await page.locator('.app-menu[data-menu="voyage"] > summary').click();
   await page.locator("#follow-track").click();
   // The newest save slot is offered first and selected; the player picks another.
   await expect(page.locator("#slot-dialog")).toBeVisible();
@@ -639,11 +657,11 @@ test("following a recording joins the chart's track and offers the positions it 
   const runs = [line(9, 40) + line(9.5, 40.01) + line(10, 40.02) + line(10.5, 40.03), line(11, 40.04)];
   await chartroom.open(null, { recording: { name: "slot1.jsonl", runs } });
   // The chart already has the first two positions, from following earlier.
-  await page.locator('.app-menu[data-menu="file"] > summary').click();
+  await page.locator('.app-menu[data-menu="voyage"] > summary').click();
   await page.locator("#paste-track").click();
   await page.locator("#paste-text").fill(line(9, 40) + line(9.5, 40.01));
   await page.locator("#paste-form button.primary").click();
-  await page.locator('.app-menu[data-menu="file"] > summary').click();
+  await page.locator('.app-menu[data-menu="voyage"] > summary').click();
   await page.locator("#follow-track").click();
   await expect(page.locator("#missing-text")).toHaveText("1 position was recorded since this chart's last one from slot1.jsonl. Add it to the track?");
   await page.locator("#missing-form button.primary").click();
@@ -661,7 +679,7 @@ test("ports and missions noted while following become chart marks", async ({ cha
       + '{"type":"mission","day":4,"hour":10,"origin":"Gold Rock City","originIsland":1,"originLat":30.6,"originLon":-2.45,"destination":"Fort Aestrin","destinationIsland":15,"heading":22.5,"points":16,"miles":214}\n'
   ];
   await chartroom.open(null, { recording: { name: "slot1.jsonl", runs } });
-  await page.locator('.app-menu[data-menu="file"] > summary').click();
+  await page.locator('.app-menu[data-menu="voyage"] > summary').click();
   await page.locator("#follow-track").click();
   await expect(page.locator("#toast")).toContainText("From Voyage Recorder: Gold Rock City, Fort Aestrin.");
   await expect.poll(() => page.evaluate(() => window.__host.workspace?.charts?.[0]?.searches?.length ?? 0)).toBe(1);
@@ -679,7 +697,7 @@ test("following a save slot leaves out its earlier games", async ({ chartroom, p
     '{"type":"session","day":1,"hour":8,"game":"cccc"}\n{"type":"position","day":1,"hour":8,"lat":31,"lon":2}\n'
   ];
   await chartroom.open(null, { recording: { name: "slot1.jsonl", runs } });
-  await page.locator('.app-menu[data-menu="file"] > summary').click();
+  await page.locator('.app-menu[data-menu="voyage"] > summary').click();
   await page.locator("#follow-track").click();
   await expect(page.locator("#toast")).toContainText("A new game started in this save slot.");
   await expect.poll(() => page.evaluate(() => window.__host.workspace?.charts?.[0]?.track?.length ?? 0)).toBe(2);
@@ -694,7 +712,7 @@ test("a new game is noticed after a first run without positions", async ({ chart
     '{"type":"session","day":1,"hour":8,"game":"bbbb"}\n{"type":"position","day":1,"hour":8,"lat":30,"lon":1}\n'
   ];
   await chartroom.open(null, { recording: { name: "slot1.jsonl", runs } });
-  await page.locator('.app-menu[data-menu="file"] > summary').click();
+  await page.locator('.app-menu[data-menu="voyage"] > summary').click();
   await page.locator("#follow-track").click();
   await expect(page.locator("#toast")).toContainText("A new game started in this save slot.");
   await expect.poll(() => page.evaluate(() => window.__host.workspace?.charts?.[0]?.track?.length ?? 0)).toBe(1);
@@ -704,7 +722,7 @@ test("a new game is noticed after a first run without positions", async ({ chart
 test("the macOS app offers live following too", async ({ chartroom, page }) => {
   await chartroom.open(null, { platform: "mac" });
   await expect(page.locator("#follow-track")).toBeVisible({ visible: false });
-  await page.locator('.app-menu[data-menu="file"] > summary').click();
+  await page.locator('.app-menu[data-menu="voyage"] > summary').click();
   await expect(page.locator("#follow-track")).toBeVisible();
 });
 
@@ -722,7 +740,7 @@ test("a route copies for SailMaster as a web map path", async ({ chartroom, page
 
 test("a Coordinate Viewer position can be selected, edited and deleted", async ({ chartroom, page }) => {
   await chartroom.open();
-  await page.locator('.app-menu[data-menu="file"] > summary').click();
+  await page.locator('.app-menu[data-menu="voyage"] > summary').click();
   await page.locator("#follow-track-cv").click();
   // Nothing is saved until the first position arrives, so this waits on the host itself.
   await expect.poll(() => page.evaluate(() => window.__host.workspace?.charts?.[0]?.track?.length ?? 0)).toBe(2);
@@ -863,6 +881,63 @@ test("selected track positions show their figures and save as a route", async ({
   expect(route.points.map((point) => point.lon)).toEqual([0, 0.02]);
 });
 
+test("View hides only the lines between recorded positions", async ({ chartroom, page }) => {
+  const track = [{ id: "t1", lat: 0, lon: 0, t: 10 }, { id: "t2", lat: 0, lon: 0.01, t: 10.5 }, { id: "t3", lat: 0, lon: 0.02, t: 11 }];
+  await chartroom.open(seaWith({ view: { lat: 0, lon: 0.01, zoom: 2000 }, track }));
+  const picture = () => page.locator("#chart-canvas").evaluate((canvas) => canvas.toDataURL());
+  const withLines = await picture();
+  await page.locator('.app-menu[data-menu="view"] > summary').click();
+  await expect(page.locator("#layer-track-lines")).toBeChecked();
+  await page.locator("#layer-track-lines").uncheck();
+  await expect(page.locator("#layer-track")).toBeChecked();
+  await expect(page.locator("#layer-track-cv")).toBeChecked();
+  await page.keyboard.press("Escape");
+  expect(await picture()).not.toBe(withLines);
+  expect((await chartroom.chart()).track).toHaveLength(3);
+  expect((await chartroom.chart()).layers.trackLines).toBe(false);
+  const canvas = await chartroom.canvas.boundingBox();
+  await chartroom.clickChart(canvas.width / 2, canvas.height / 2);
+  await expect(page.locator("#track-inspector")).toBeVisible();
+});
+
+test("View hides Voyage Recorder automatic and manual locations separately", async ({ chartroom, page }) => {
+  const track = [
+    { id: "cv", lat: 0, lon: -0.03, t: 9 },
+    { id: "automatic", lat: 0, lon: -0.02, t: 10, source: "voyage" },
+    { id: "manual", lat: 0, lon: -0.01, t: 11, source: "voyage", event: "mark" },
+    { id: "race", lat: 0, lon: 0.01, t: 12, source: "voyage", event: "race-start" },
+    { id: "latest", lat: 0, lon: 0.03, t: 13, source: "voyage" }
+  ];
+  await chartroom.open(seaWith({ view: { lat: 0, lon: 0, zoom: 2000 }, track }));
+  const picture = () => page.locator("#chart-canvas").evaluate((canvas) => canvas.toDataURL());
+  const allLocations = await picture();
+
+  await page.locator('.app-menu[data-menu="view"] > summary').click();
+  await expect(page.locator("label:has(#layer-track-winds) span")).toHaveText("Wind direction");
+  await expect(page.locator("#layer-track-voyage-automatic")).toBeChecked();
+  await expect(page.locator("#layer-track-voyage-manual")).toBeChecked();
+  await page.locator("#layer-track-voyage-automatic").uncheck();
+  const withoutAutomatic = await picture();
+  expect(withoutAutomatic).not.toBe(allLocations);
+
+  await page.keyboard.press("Escape");
+  const canvas = await chartroom.canvas.boundingBox();
+  await chartroom.clickChart(canvas.width / 2 + 60, canvas.height / 2);
+  await expect(page.locator("#track-inspector"), "a hidden automatic reading takes its arrow with it").toBeHidden();
+  await chartroom.clickChart(canvas.width / 2 + 20, canvas.height / 2);
+  await expect(page.locator("#track-inspector"), "the last shown position is still selectable").toBeVisible();
+  await page.locator('.app-menu[data-menu="view"] > summary').click();
+  await page.locator("#layer-track-voyage-manual").uncheck();
+  const withoutVoyageLocations = await picture();
+  expect(withoutVoyageLocations).not.toBe(withoutAutomatic);
+
+  await page.locator("#layer-track-cv").uncheck();
+  expect(await picture(), "Coordinate Viewer remains visible until its own control is changed").not.toBe(withoutVoyageLocations);
+  const chart = await chartroom.chart();
+  expect(chart.track).toHaveLength(5);
+  expect([chart.layers.trackVoyageAutomaticLocations, chart.layers.trackVoyageManualLocations]).toEqual([false, false]);
+});
+
 test("the top bar toggles show and hide the side panels", async ({ chartroom, page }) => {
   await chartroom.open();
   await expect(page.locator("#show-left-panel")).toHaveAttribute("aria-pressed", "true");
@@ -873,6 +948,54 @@ test("the top bar toggles show and hide the side panels", async ({ chartroom, pa
   await expect(page.locator("body")).toHaveClass(/right-panel-hidden/);
   await page.locator("#show-left-panel").click();
   await expect(page.locator("body")).not.toHaveClass(/left-panel-hidden/);
+});
+
+test("floating panels stay accessible when sidebars resize", async ({ chartroom, page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await chartroom.open({
+    activeChartId: "sea",
+    layout: { leftWidth: 190, rightWidth: 190, leftOpen: true, rightOpen: true },
+    settings: {
+      trackKey: true,
+      overlay: { shown: true, x: 0.02, y: 0.08 },
+      routePanel: { shown: true, x: 1, y: 0.02 },
+      trackKeyPanel: { x: 0.5, y: 0.6 }
+    },
+    charts: [{ id: "sea", name: "Sea", view: { lat: 0, lon: 0, zoom: 20 }, route: [{ id: "a", lat: 0, lon: 0 }, { id: "b", lat: 1, lon: 1 }] }]
+  });
+  const ids = ["route-summary", "track-key", "key-overlay"];
+  const positions = () => page.evaluate((panelIds) => {
+    const stage = document.querySelector("#chart-canvas").getBoundingClientRect();
+    return Object.fromEntries(panelIds.map((id) => {
+      const box = document.querySelector(`#${id}`).getBoundingClientRect();
+      return [id, { left: box.left - stage.left, right: box.right - stage.left, width: stage.width }];
+    }));
+  }, ids);
+  const expectInside = async () => {
+    const current = await positions();
+    for (const id of ids) {
+      expect(current[id].left, `${id} left edge`).toBeGreaterThanOrEqual(0);
+      expect(current[id].right, `${id} right edge`).toBeLessThanOrEqual(current[id].width + 1);
+    }
+    return current;
+  };
+  await expectInside();
+  await page.locator("#right-panel-resizer").focus();
+  for (let step = 0; step < 15; step += 1) await page.keyboard.press("ArrowLeft");
+  const afterRight = await expectInside();
+  expect(Math.round(afterRight["route-summary"].right), "a panel at the right edge stays there").toBe(Math.round(afterRight["route-summary"].width));
+  await page.locator("#left-panel-resizer").focus();
+  for (let step = 0; step < 15; step += 1) await page.keyboard.press("ArrowRight");
+  await expectInside();
+  await page.locator("#show-right-panel").click();
+  const wider = await expectInside();
+  expect(Math.round(wider["route-summary"].right), "and stays there when the chart widens").toBe(Math.round(wider["route-summary"].width));
+  await page.locator("#show-right-panel").click();
+  await expectInside();
+  await chartroom.saved();
+  await page.reload();
+  await expect(page.locator("#app-version")).toHaveText("9.9.9");
+  await expectInside();
 });
 
 test("undo after moving a recorded position puts it back, and earlier history keeps it too", async ({ chartroom, page }) => {

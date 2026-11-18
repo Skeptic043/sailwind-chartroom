@@ -16,7 +16,6 @@
         <div class="menu-popover" role="menu">
           <label class="menu-field">Active chart<select id="chart-select" aria-label="Active chart"></select></label>
           <button id="new-chart" type="button">New chart</button>
-          <button id="save-chart" type="button">Save chart</button>
           <button id="chart-settings" type="button">Chart details</button>
           <button id="manage-charts" type="button">Manage charts</button>
           <hr>
@@ -25,21 +24,6 @@
           <button id="export-csv" type="button">Export locations as CSV</button>
           <button id="export-all" type="button">Back up all charts</button>
           <button id="open-folder" type="button" hidden>Open save folder</button>
-          <hr>
-          <p class="menu-heading">Recorded track</p>
-          <button id="follow-track" type="button" hidden>Follow live (Voyage Recorder)</button>
-          <button id="follow-track-cv" type="button" hidden>Follow live (Coordinate Viewer)</button>
-          <button id="import-track" type="button">Import file</button>
-          <button id="paste-track" type="button">Paste positions</button>
-          <button id="clear-track" type="button">Clear track</button>
-          <hr>
-          <p class="menu-heading">Share and race</p>
-          <button id="share-voyage" type="button">Publish world/route</button>
-          <button id="publish-course" type="button">Publish route as race</button>
-          <button id="enter-race" type="button">Enter a race</button>
-          <button id="browse-voyages" type="button">Browse worlds and routes</button>
-          <button id="compare-voyage" type="button">Compare a route</button>
-          <button id="export-voyage" type="button">Save route to file</button>
           <hr>
           <button id="open-settings" type="button" hidden>Settings</button>
           <p id="storage-note" class="menu-note">Everything stays in this browser unless you export it.</p>
@@ -58,6 +42,7 @@
       <details class="app-menu" data-menu="view">
         <summary role="menuitem" aria-haspopup="true" aria-expanded="false">View</summary>
         <div class="menu-popover" role="menu">
+          <p class="menu-heading">Chart marks</p>
           <label class="menu-check"><input id="layer-locations" type="checkbox" checked><span>Locations</span></label>
           <label class="menu-check menu-check-sub"><input id="layer-location-islands" type="checkbox" checked><span>Islands</span></label>
           <label class="menu-check"><input id="layer-routes" type="checkbox" checked><span>Routes</span></label>
@@ -75,27 +60,56 @@
           <label class="menu-check menu-check-sub"><input id="layer-search-islands" type="checkbox" checked><span>Islands</span></label>
           <label class="menu-check"><input id="layer-winds" type="checkbox" checked><span>Wind indicators</span></label>
           <hr>
+          <p class="menu-heading">Chart display</p>
           <label class="menu-check"><input id="layer-grid" type="checkbox" checked><span>Coordinate grid</span></label>
           <label class="menu-check"><input id="layer-labels" type="checkbox" checked><span>Chart labels</span></label>
           <label class="menu-check"><input id="layer-boats" type="checkbox" checked><span>Boat markers</span></label>
           <label class="menu-check"><input id="layer-islands" type="checkbox" checked><span>Island outlines</span></label>
+          <hr>
+          <p class="menu-heading">Recorded track</p>
           <label class="menu-check"><input id="layer-track" type="checkbox" checked><span>Recorded track</span></label>
+          <label class="menu-check menu-check-sub"><input id="layer-track-lines" type="checkbox" checked><span>Track lines</span></label>
           <label class="menu-check menu-check-sub"><input id="layer-track-cv" type="checkbox" checked><span>Coordinate Viewer</span></label>
           <label class="menu-check menu-check-sub"><input id="layer-track-voyage" type="checkbox" checked><span>Voyage Recorder</span></label>
-          <label class="menu-check menu-check-sub"><input id="layer-track-winds" type="checkbox" checked><span>Wind along the track</span></label>
+          <label class="menu-check menu-check-sub-sub"><input id="layer-track-voyage-automatic" type="checkbox" checked><span>Automatic locations</span></label>
+          <label class="menu-check menu-check-sub-sub"><input id="layer-track-voyage-manual" type="checkbox" checked><span>Manual locations</span></label>
+          <label class="menu-check menu-check-sub"><input id="layer-track-winds" type="checkbox" checked><span>Wind direction</span></label>
           <label class="menu-check menu-check-sub"><input id="layer-track-key" type="checkbox"><span>Track key</span></label>
           <label class="menu-check"><input id="layer-key-overlay" type="checkbox"><span>Voyage Recorder hotkeys</span></label>
           <hr>
+          <p class="menu-heading">Map layers</p>
           <label class="menu-check"><input id="layer-vanilla" type="checkbox"><span>Vanilla map</span></label>
           <label id="layer-imported-row" class="menu-check" hidden><input id="layer-imported-map" type="checkbox" checked><span>Imported map</span></label>
           <label class="menu-check menu-check-sub"><input id="layer-secrets" type="checkbox"><span>Secret islands</span></label>
           <label class="menu-check"><input id="layer-trade-winds" type="checkbox"><span>Trade winds</span></label>
           <label class="menu-check menu-check-sub"><input id="layer-expanded-winds" type="checkbox"><span>Border Expander winds</span></label>
           <hr>
+          <p class="menu-heading">Layout</p>
           <button id="fit-chart" type="button">Fit chart data</button>
           <button id="toggle-left-panel" type="button" aria-pressed="false">Hide chart tools</button>
           <button id="toggle-right-panel" type="button" aria-pressed="false">Hide chart items</button>
           <button id="pin-window" type="button" hidden>Keep Chartroom on top</button>
+        </div>
+      </details>
+      <details class="app-menu" data-menu="voyage">
+        <summary role="menuitem" aria-haspopup="true" aria-expanded="false">Voyage</summary>
+        <div class="menu-popover" role="menu">
+          <p class="menu-heading">Recorded track</p>
+          <button id="follow-track" type="button" hidden>Follow live (Voyage Recorder)</button>
+          <button id="follow-track-cv" type="button" hidden>Follow live (Coordinate Viewer)</button>
+          <button id="import-track" type="button">Import file</button>
+          <button id="paste-track" type="button">Paste positions</button>
+          <button id="clear-track" type="button">Clear track</button>
+          <hr>
+          <p class="menu-heading">Route files</p>
+          <button id="export-voyage" type="button">Save route to file</button>
+          <button id="compare-voyage" type="button">Compare a route</button>
+          <hr>
+          <p class="menu-heading">Chartroom Voyages</p>
+          <button id="browse-voyages" type="button">Browse worlds and routes</button>
+          <button id="share-voyage" type="button">Publish world/route</button>
+          <button id="publish-course" type="button">Publish route as race</button>
+          <button id="enter-race" type="button">Enter a race</button>
         </div>
       </details>
       <details class="app-menu" data-menu="help">
@@ -501,7 +515,7 @@
 
   <dialog id="export-voyage-dialog" class="floating-dialog" aria-labelledby="export-title">
     <form id="export-voyage-form" method="dialog" class="dialog-card">
-      <div class="eyebrow">Share and race</div>
+      <div class="eyebrow">Voyage</div>
       <h2 id="export-title">Save route to file</h2>
       <p id="export-intro">Choose the part of your Voyage Recorder track to share. It's highlighted on the chart. Your save slot and file paths are never included.</p>
       <label id="export-course-row" hidden>Course <select id="export-course"></select></label>
@@ -653,7 +667,7 @@
       <p class="help-note"><strong>Long plots:</strong> while a measurement, search or area is active, hold the pointer against the chart edge briefly to pan in that direction.</p>
       <p class="help-note"><strong>Without a recording:</strong> Dead reckoning carries your position forward from your last known position, using your compass course, chip log speed and hours sailed. Plot a new DR position whenever you change course or speed. Each circle shows how far that DR position may be off.</p>
       <p class="help-note"><strong>Following your boat:</strong>
- press J in game to start recording with Voyage Recorder, then choose File, Recorded track, Follow live. Chartroom finds the recording by itself. When it finds none, it asks for the file instead, such as the coords file in Coordinate Viewer's plugin folder. Each position recorded joins the chart you started on.</p>
+ press J in game to start recording with Voyage Recorder, then choose Voyage, Recorded track, Follow live. Chartroom finds the recording by itself. When it finds none, it asks for the file instead, such as the coords file in Coordinate Viewer's plugin folder. Each position recorded joins the chart you started on.</p>
       <p class="help-note"><strong>Scrambled Seas:</strong> turn on ExternalSave in Scrambled Seas' settings and save your game, then use File, Import to open the scramble_&lt;slot&gt;.xml file in its plugin folder. Chartroom makes a new chart with the Scrambled Seas map in View, showing where that world's islands are.</p>
       <p class="help-note"><strong>Your charts:</strong> Chartroom saves automatically and keeps a copy from your previous launch. Use File, Back up all charts to keep your own copy, or to move your charts to another computer.</p>
       <p class="help-note"><strong>Layout:</strong> use the two panel buttons at the top to hide either sidebar. Drag a sidebar's inner edge to resize it.</p>

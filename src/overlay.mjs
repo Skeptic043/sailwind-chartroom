@@ -10,6 +10,7 @@ const RECORDER_ROWS = Object.freeze([
   { name: "location", action: "Record your location", fallback: "V" },
   { name: "marker", action: "Marks and notes", fallback: "V + LeftShift" }
 ]);
+const floatingPanels = [];
 
 // BepInEx writes a shortcut as its key, then its modifiers: "V + LeftShift". Shown the usual way: "Shift + V".
 const MODIFIER_NAMES = Object.freeze({ LeftShift: "Shift", RightShift: "Shift", LeftControl: "Ctrl", RightControl: "Ctrl", LeftAlt: "Alt", RightAlt: "Alt", LeftCommand: "Cmd", RightCommand: "Cmd" });
@@ -24,6 +25,7 @@ export function keyLabel(text) {
 // A panel over the chart that its heading drags around. Where it sits is kept in settings as fractions of the
 // chart's free width and height, so it stays in the same corner when the window changes size.
 export function makeFloating(box, handle, position) {
+  floatingPanels.push({ box, position });
   let drag = null;
   handle.addEventListener("pointerdown", (event) => {
     if (event.button !== 0 || event.target.closest("button, input, select, label")) return;
@@ -48,6 +50,11 @@ export function makeFloating(box, handle, position) {
   handle.addEventListener("pointerup", finish);
   handle.addEventListener("pointercancel", finish);
   window.addEventListener("resize", () => placeFloating(box, position()));
+}
+
+// A sidebar changes the chart's width without resizing the window, so panels are placed again the same way.
+export function placeFloatingPanels() {
+  for (const { box, position } of floatingPanels) placeFloating(box, position());
 }
 
 export function placeFloating(box, { x, y }) {

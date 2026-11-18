@@ -59,7 +59,6 @@ elements["chart-select"].addEventListener("change", (event) => {
   renderEverything();
 });
 elements["new-chart"].addEventListener("click", () => openChartDialog("new"));
-elements["save-chart"].addEventListener("click", () => { persist(); showToast("Chart saved."); });
 elements["chart-settings"].addEventListener("click", () => openChartDialog("edit"));
 elements["chart-form"].addEventListener("submit", saveChartDialog);
 elements["delete-chart"].addEventListener("click", deleteChart);

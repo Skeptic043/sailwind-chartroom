@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.9.11
+
+### Added
+- `View` > `Recorded track` can hide the lines connecting recorded positions
+- `View` > `Recorded track` can hide Voyage Recorder locations recorded automatically or manually, including their wind and everything else recorded with them
+
+### Changed
+- Recorded track, route file and Chartroom Voyages commands moved from `File` to the new `Voyage` menu
+- Renamed `Wind along the track` to `Wind direction`
+- Removed `Save chart` (charts autosave)
+- Movable panels don't get hidden behind sidebars when they are opened, closed or resized
+- Menus and panel buttons now fit in narrow windows
+
 ## 0.9.8
 
 ### Added
