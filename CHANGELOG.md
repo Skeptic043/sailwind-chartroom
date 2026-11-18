@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.12
+
+### Fixed
+- On Mac, Escape closes menus, notes and the publish or save route panel after clicking something in them
+
 ## 0.9.11
 
 ### Added

@@ -44,21 +44,21 @@ for (const menu of appMenus) {
     } else if (event.key === "ArrowDown") {
       event.preventDefault();
       openAppMenu(menu, { focusFirst: true });
-    } else if (event.key === "Escape") {
-      event.preventDefault();
-      closeAppMenus({ restoreFocus: true });
     }
-  });
-  menu.addEventListener("keydown", (event) => {
-    if (event.key !== "Escape" || !menu.open || event.target === summary) return;
-    event.preventDefault();
-    event.stopPropagation();
-    closeAppMenus({ restoreFocus: true });
   });
   menu.querySelectorAll("button").forEach((button) => button.addEventListener("click", () => closeAppMenus()));
   // Checkboxes leave the menu open, so several layers can be switched in one visit.
   menu.querySelectorAll("select").forEach((control) => control.addEventListener("change", () => closeAppMenus()));
 }
+// Escape closes an open menu wherever focus is, before anything else sees the key: Safari's engine, which
+// the macOS app uses, doesn't focus a checkbox when it's clicked, so focus is often outside the menu.
+window.addEventListener("keydown", (event) => {
+  // A dialog opened over the chart keeps its own Escape.
+  if (event.key !== "Escape" || !appMenus.some((menu) => menu.open) || document.querySelector("dialog:modal")) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  closeAppMenus({ restoreFocus: Boolean(document.activeElement?.closest(".app-menu")) });
+}, true);
 document.addEventListener("pointerdown", (event) => {
   if (event.target.closest(".app-menu")) return;
   closeAppMenus();

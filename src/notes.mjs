@@ -3,7 +3,7 @@
 // The popout opens beside its icon, follows it as the chart pans and zooms, and flips to the icon's other
 // side near the chart's edge. It hides while its icon is out of view and shows again when it returns.
 import { MAX_ENCOUNTER_NOTES, MAX_NOTE_LENGTH, itemShown, iconScale } from "./model.mjs";
-import { canvas, context, elements } from "./dom.mjs";
+import { canvas, context, elements, keysBelongTo } from "./dom.mjs";
 import { activeChart, commit, isSelected, workspace } from "./state.mjs";
 import { symbolSize, worldToScreen } from "./viewport.mjs";
 import { LOCATION_ICONS, drawLocationIcon } from "./icons.mjs";
@@ -37,8 +37,9 @@ export function initNotes() {
   window.addEventListener("pagehide", saveText);
   // An encounter's type can be switched from the button beside the close button.
   elements["note-popout-type"].addEventListener("click", () => showTypes(elements["note-popout-types"].hidden));
-  elements["note-popout"].addEventListener("keydown", (event) => {
-    if (event.key !== "Escape") return;
+  // Escape closes the type list, then the popout, before the chart's own Escape sees it.
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape" || elements["note-popout"].hidden || !keysBelongTo(elements["note-popout"])) return;
     if (!elements["note-popout-types"].hidden) {
       event.stopPropagation();
       showTypes(false);

@@ -29,6 +29,44 @@ test("a note's popout opens beside its icon, follows it, flips at the edge and s
   await expect(chartroom.items().filter({ hasText: "Whales off the bow" })).toHaveCount(1);
 });
 
+// Safari's engine, which the macOS app uses, doesn't focus buttons and checkboxes when they're clicked, so
+// each step clicks inside and then leaves focus on the page, as a Mac does.
+test("Escape closes a menu and the note popout when focus is outside them", async ({ chartroom, page }) => {
+  await chartroom.open();
+  const blur = () => page.evaluate(() => document.activeElement?.blur());
+  const view = page.locator('.app-menu[data-menu="view"]');
+  await view.locator("summary").click();
+  await page.locator("#layer-track-key").check();
+  await blur();
+  await page.keyboard.press("Escape");
+  await expect(view).not.toHaveAttribute("open", "");
+  await expect(page.locator("#layer-track-key")).toBeChecked();
+  await expect(page.locator("#track-key")).toBeVisible();
+  // A dialog that opens by itself over an open menu, like Follow live's, closes with one Escape.
+  await view.locator("summary").click();
+  await page.evaluate(() => document.querySelector("#missing-dialog").showModal());
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#missing-dialog")).toBeHidden();
+
+  await page.keyboard.press("Escape");
+  await chartroom.press("n");
+  await chartroom.clickChart(300, 300);
+  const popout = page.locator("#note-popout");
+  await expect(popout).toBeVisible();
+  await page.locator("#note-popout-text").click();
+  await blur();
+  await page.keyboard.press("Escape");
+  await expect(popout).toBeHidden();
+
+  // Once focus moves on, Escape is the chart's again and the popout stays open.
+  await chartroom.clickChart(300, 300);
+  await expect(popout).toBeVisible();
+  await page.locator("#note-popout-text").click();
+  await chartroom.canvas.focus();
+  await page.keyboard.press("Escape");
+  await expect(popout).toBeVisible();
+});
+
 test("the encounter tool places whales that can be changed and resized, and plain locations have no icon", async ({ chartroom, page }) => {
   await chartroom.open();
   await chartroom.press("e");
@@ -231,6 +269,13 @@ test("Publish world/route and Enter a race save the file, check the run and open
   await page.locator("#share-voyage").click();
   await expect(page.locator("#export-title")).toHaveText("Publish world/route");
   await expect(page.locator("#export-course-row")).toBeHidden();
+  // Escape closes the panel after a click inside it, even without focus there, as on a Mac.
+  await page.locator("#export-intro").click();
+  await page.evaluate(() => document.activeElement?.blur());
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#export-voyage-dialog")).toBeHidden();
+  await page.locator('.app-menu[data-menu="voyage"] > summary').click();
+  await page.locator("#share-voyage").click();
   await page.locator("#export-submit").click();
   await expect.poll(() => page.evaluate(() => window.__host.links ?? [])).toEqual(["https://github.com/Skeptic043/sailwind-chartroom-voyages/issues/new?template=share-voyage.yml"]);
   expect(await page.evaluate(() => window.__host.exports.length)).toBe(1);
@@ -324,7 +369,7 @@ test("Connect track joins two stretches into one, and the track key explains the
   await page.mouse.down();
   await page.mouse.move(handle.x + 210, handle.y + 105, { steps: 5 });
   await page.mouse.up();
-  await expect.poll(async () => (await chartroom.saved()).settings.trackKeyPanel.x).toBeGreaterThan(0.02);
+  expect((await chartroom.saved()).settings.trackKeyPanel.x).toBeGreaterThan(0.02);
   await page.locator("#show-track-key").click();
   await expect(page.locator("#track-key")).toBeHidden();
   // The view is centred on 30.7°N 4.8°W at 900 pixels a degree: a5 (30.75°N 4.85°W) is 45 left and 45 up,

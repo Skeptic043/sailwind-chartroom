@@ -9,7 +9,7 @@ import { islandById } from "./site-islands.mjs";
 import { sailedStats, trackSegments, unwrapStretch } from "./track.mjs";
 import { formatGameTime } from "./gametime.mjs";
 import { formatNm } from "./format.mjs";
-import { context, elements, showToast } from "./dom.mjs";
+import { context, elements, keysBelongTo, showToast } from "./dom.mjs";
 import { activeChart, host, persist, selection } from "./state.mjs";
 import { worldToScreen } from "./viewport.mjs";
 
@@ -62,8 +62,9 @@ export function initShare({ draw, renderAll: render }) {
   }
   elements["export-race-markers"].addEventListener("click", useRaceMarkers);
   // The panel isn't modal, so Escape closes it here.
-  elements["export-voyage-dialog"].addEventListener("keydown", (event) => {
-    if (event.key === "Escape") elements["export-voyage-dialog"].close();
+  document.addEventListener("keydown", (event) => {
+    const panel = elements["export-voyage-dialog"];
+    if (event.key === "Escape" && panel.open && keysBelongTo(panel)) panel.close();
   });
   elements["export-share"].addEventListener("change", updateExportRange);
   elements["export-voyage-form"].addEventListener("submit", (event) => {

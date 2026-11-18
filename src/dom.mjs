@@ -45,6 +45,14 @@ export const canvas = elements["chart-canvas"];
 
 export const context = canvas.getContext("2d");
 
+// Whether a panel owns a key press: the last thing clicked or focused is in it. Safari's engine, which the
+// macOS app uses, doesn't focus buttons and checkboxes when they're clicked, so clicks count as well.
+let lastTouched = null;
+for (const type of ["pointerdown", "focusin"]) document.addEventListener(type, (event) => { lastTouched = event.target; }, true);
+export function keysBelongTo(box) {
+  return box.contains(lastTouched);
+}
+
 let toastTimer = null;
 
 export function showToast(message, error = false) {
