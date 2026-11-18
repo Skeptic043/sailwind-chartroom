@@ -3,6 +3,15 @@
     <channel>
         <title>Sailwind Chartroom</title>
         <item>
+            <title>0.9.12</title>
+            <pubDate>Wed, 18 Nov 2026 08:06:55 +0000</pubDate>
+            <link>https://github.com/Skeptic043/sailwind-chartroom/releases</link>
+            <sparkle:version>0.9.12999</sparkle:version>
+            <sparkle:shortVersionString>0.9.12</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/Skeptic043/sailwind-chartroom/releases/download/v0.9.12/SailwindChartroom-macos-universal-0.9.12.zip" length="1740698" type="application/octet-stream" sparkle:edSignature="YeDZQ9MihwuRP9e2XmxR9QxSdKZX1S2GveSQR7O/o4iGdUFLW02hEnnn1dfe5tL2lOBCSTg66tyZCYVg7TQqCQ=="/>
+        </item>
+        <item>
             <title>0.9.8</title>
             <pubDate>Mon, 16 Nov 2026 22:16:20 +0000</pubDate>
             <link>https://github.com/Skeptic043/sailwind-chartroom/releases</link>
@@ -19,15 +28,6 @@
             <sparkle:shortVersionString>0.9.7</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
             <enclosure url="https://github.com/Skeptic043/sailwind-chartroom/releases/download/v0.9.7/SailwindChartroom-macos-universal-0.9.7.zip" length="1739535" type="application/octet-stream" sparkle:edSignature="jYBO/8l7suEC7vD6DvstBrKpJOmkHsTm/nH9o/WehTxUI0IwGr3QkbIQtSTUrzMIZsGymmLcC0llQ9sg8PheDg=="/>
-        </item>
-        <item>
-            <title>0.8.11</title>
-            <pubDate>Sun, 15 Nov 2026 05:34:32 +0000</pubDate>
-            <link>https://github.com/Skeptic043/sailwind-chartroom/releases</link>
-            <sparkle:version>0.8.11999</sparkle:version>
-            <sparkle:shortVersionString>0.8.11</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
-            <enclosure url="https://github.com/Skeptic043/sailwind-chartroom/releases/download/v0.8.11/SailwindChartroom-macos-universal-0.8.11.zip" length="1674279" type="application/octet-stream" sparkle:edSignature="gxooHiTOUf/POHyUIpgUxpcb5DDzLViIrdYEGhXD+C22Ly01R48S6HSwioWt8PIcz4rjYODxD9s2U+6WA0F8Ag=="/>
         </item>
         <item>
             <title>0.6.0-rc.1</title>
