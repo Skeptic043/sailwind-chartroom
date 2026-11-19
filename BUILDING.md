@@ -12,6 +12,7 @@
 - `desktop/` is the Windows host. It embeds the page in the exe, serves it to WebView2 and owns the saved workspace file.
 - `macos/` is the macOS host, a Swift package. It serves the same page to a WKWebView and owns the same workspace file format. See macOS below.
 - `src/island-catalog.generated.mjs` holds the island outlines. See Island catalog below.
+- `src/terra-incognita-islands.generated.mjs` holds Fluffy's Terra Incognita island outlines. See Terra Incognita island catalog below.
 
 The project version is `<Version>` in `desktop/SailwindChartroom.csproj`. The app reads it from there at run time.
 
@@ -83,3 +84,18 @@ node scripts/generate-island-catalog.mjs sailwind_empty_sea_map.html src/island-
 The script also regroups Fire Fish Lagoon, where the page attaches the lagoon's shared towns and rocks to single islands: each town and rock goes to the land it stands nearest, and the unnamed islands are added as separate pieces beside the whole "Fire Fish Islands" outline.
 
 Record the Sailwind Map commit the polygons come from in `THIRD-PARTY-NOTICES.md`.
+
+## Terra Incognita island catalog
+
+`src/terra-incognita-islands.generated.mjs` is committed. It was generated from the 42 top-down island maps and placement metadata Fluffy provided for Chartroom. `twin_13.png` in the original archive has a transparent hole, so the generator uses Fluffy's replacement `twin_13.webp` instead:
+
+```powershell
+python scripts/generate-terra-incognita-islands.py IslandOutlines.zip twin_13.webp src/terra-incognita-islands.generated.mjs
+```
+
+The generator needs Python 3.10 or later and Pillow; ordinary builds do not. It checks the archive, traces the islands' opaque edges, preserves their separate islets, scales them from the supplied metres and origins, and refuses an outline that differs materially from its source mask.
+
+The source files used for the committed catalog are:
+
+- `IslandOutlines.zip`: SHA-256 `C58CA81D04601E4AF8A36B5C125388A0E5AB02107223196D9A5BC8FCE3BA4264`
+- `twin_13.webp`: SHA-256 `6406DD31648DB2DD6F3A23D154759351BA2BAF1C650BA93BBE446BC66D790510`

@@ -56,7 +56,7 @@ import {
   tradeWindAt,
   translateChartItems
 } from "../src/model.mjs";
-import { ISLAND_CATALOG, ISLAND_GROUPS, VANILLA_ISLANDS, assignedIsland, islandGroup, islandById, islandByName, normalizeIslandName, searchIsland, visibleIsland } from "../src/islands.mjs";
+import { ISLAND_CATALOG, ISLAND_GROUPS, VANILLA_ISLANDS, assignedIsland, islandContains, islandGroup, islandById, islandByName, normalizeIslandName, searchIsland, visibleIsland } from "../src/islands.mjs";
 import { LOCATION_ICONS } from "../src/icons.mjs";
 import { importedMapIslands, parseScrambledSeasXml } from "../src/scrambled-seas.mjs";
 import { readFileSync } from "node:fs";
@@ -366,6 +366,21 @@ test("the island library lists islands by group, small islands and mod islands l
   assert.equal(islandById("firefish/fire_fish_islands/west_islet"), ISLAND_CATALOG[ISLAND_CATALOG.indexOf(islandById("firefish/fire_fish_islands")) + 1], "lagoon pieces follow the lagoon");
 });
 
+test("the island library includes Fluffy's Terra Incognita outlines", () => {
+  const terra = ISLAND_CATALOG.filter((island) => island.provider === "Terra Incognita");
+  assert.equal(terra.length, 42);
+  assert.equal(new Set(terra.map((island) => island.id)).size, 42);
+  assert.ok(terra.every((island) => island.id === `terra-incognita/${island.name.toLowerCase().replaceAll(" ", "_")}`));
+  assert.ok(terra.every((island) => island.shapes.length && island.shapes.every((shape) => shape.rings.length)));
+
+  const twin = islandById("terra-incognita/twin_13");
+  assert.equal(twin.name, "Twin 13");
+  assert.equal(islandGroup(twin), "Mod Islands");
+  assert.equal(VANILLA_ISLANDS.includes(twin), false);
+  assert.equal(islandContains(twin, { lat: 0, lon: 0 }, { lat: -0.0054, lon: -0.00803 }), true,
+    "the downloaded replacement fills the transparent hole in the archived Twin 13 image");
+});
+
 test("the boat library lists stock boats by region, then each mod together, small to large", () => {
   const names = BOAT_CATALOG.map((boat) => boat.name);
   assert.deepEqual(names.slice(0, 8), ["Dhow", "Sanbuq", "Baghlah (Bigbuq)", "Kakam", "Junk", "Jong", "Cog", "Brig"]);
@@ -386,8 +401,8 @@ test("formats passage times", () => {
 });
 
 test("bundles the licensed island catalog and matches location names exactly", () => {
-  assert.equal(ISLAND_CATALOG.length, 50);
-  assert.equal(new Set(ISLAND_CATALOG.map((island) => island.id)).size, 50);
+  assert.equal(ISLAND_CATALOG.length, 92);
+  assert.equal(new Set(ISLAND_CATALOG.map((island) => island.id)).size, 92);
   assert.equal(islandByName("Chronos").region, "Aestrin");
   assert.equal(islandByName("  dead COVE ").id, "emerald/dead_cove");
   assert.equal(normalizeIslandName("Al’Nilem"), normalizeIslandName("Al'Nilem"));

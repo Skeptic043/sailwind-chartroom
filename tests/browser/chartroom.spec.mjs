@@ -221,6 +221,20 @@ test("the island library applies an outline to the selected location", async ({ 
   expect((await chartroom.chart()).features[0].islandId).toBeTruthy();
 });
 
+test("Terra Incognita islands can be chosen and placed as locations", async ({ chartroom, page }) => {
+  await chartroom.open();
+  await chartroom.press("i");
+  await page.locator("#island-search").fill("Terra Incognita");
+  await expect(page.locator("#island-list .island-row")).toHaveCount(42);
+  await page.locator("#island-list .island-row", { hasText: "Twin 13" }).click();
+  await chartroom.clickChart(500, 400);
+
+  const feature = (await chartroom.chart()).features[0];
+  expect(feature.name).toBe("Twin 13");
+  expect(feature.islandId).toBe("terra-incognita/twin_13");
+  await expect(page.locator("#feature-island-status")).toContainText("Twin 13");
+});
+
 test("the vanilla map draws under the chart with its secrets, and trade winds stand alone", async ({ chartroom, page }) => {
   await chartroom.open();
   const picture = () => page.locator("canvas").first().evaluate((canvas) => canvas.toDataURL());

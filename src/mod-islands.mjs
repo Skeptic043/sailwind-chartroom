@@ -2,6 +2,8 @@
 // converted to chart degrees (9000 world metres per degree, latitude 36 at world zero).
 // Mod islands are offered in the island library only; the vanilla map does not draw them.
 
+import { TERRA_INCOGNITA_ISLANDS } from "./terra-incognita-islands.generated.mjs";
+
 function ringBounds(rings) {
   const bounds = { minLon: Infinity, maxLon: -Infinity, minLat: Infinity, maxLat: -Infinity };
   for (const ring of rings) {
@@ -27,5 +29,6 @@ export const MOD_ISLANDS = [
     [0.02764, -0.00727, 0.02693, -0.00526, 0.02875, -0.00328, 0.0297, -0.00009, 0.02879, 0.0028, 0.02932, 0.00583, 0.02683, 0.0113, 0.02221, 0.01632, 0.02224, 0.01738, 0.0233, 0.01819, 0.0246, 0.01798, 0.03121, 0.01282, 0.03305, 0.00978, 0.03254, 0.00112, 0.02974, -0.00404, 0.02959, -0.00577],
     [-0.01837, -0.0162, -0.02271, -0.01391, -0.02922, -0.00724, -0.03215, -0.00176, -0.0322, 0.00249, -0.03104, 0.00204, -0.02938, -0.00404, -0.02683, -0.0074, -0.02538, -0.00784, -0.02256, -0.01118, -0.01766, -0.01498, -0.01699, -0.01619],
     [0.01788, 0.01721, 0.00203, 0.01906, 0.00088, 0.02011, 0.00268, 0.02081, 0.0105, 0.02064, 0.01874, 0.01958, 0.02001, 0.0189, 0.02016, 0.01799]
-  ] }])
+  ] }]),
+  ...TERRA_INCOGNITA_ISLANDS
 ];
