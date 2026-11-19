@@ -3,7 +3,7 @@
 ## 0.9.18
 
 ### Added
-- 42 island outlines from Fluffy's [Terra Incognita](https://github.com/FluffyJesus/Terra_Incognita) mod to the island library, ready to place as locations. Thank you to Fluffy for providing the island icons!
+- 42 island outlines from Fluffy's [Terra Incognita](https://github.com/FluffyJesus/Terra_Incognita) mod to the island library, ready to place as locations. Thank you to Fluffy for providing the island icons.
 
 ## 0.9.17
 
