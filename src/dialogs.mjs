@@ -1,7 +1,8 @@
 // The chart details, island library and boat library dialogs.
 import { boatColours } from "./render.mjs";
 import { mapPalette } from "./theme.mjs";
-import { MAX_BOATS, createChart } from "./model.mjs";
+import { MAX_BOATS, MAX_CLOCK_PERCENT, MIN_CLOCK_PERCENT, createChart } from "./model.mjs";
+import { clamp } from "./format.mjs";
 import { ISLAND_CATALOG, ISLAND_GROUPS, islandGroup, searchIsland, visibleIsland } from "./islands.mjs";
 import { BOAT_CATALOG, assignedBoats, boatMarkerSize, drawBoatSilhouette } from "./boats.mjs";
 import { elements, showToast } from "./dom.mjs";
@@ -17,6 +18,8 @@ export function openChartDialog(nextMode) {
   elements["chart-dialog-title"].textContent = nextMode === "new" ? "New scrambled sea" : "Chart details";
   elements["dialog-chart-name"].value = nextMode === "new" ? `Scrambled Sea ${workspace.charts.length + 1}` : chart.name;
   elements["dialog-chart-seed"].value = nextMode === "new" ? "" : chart.seed;
+  // A new chart starts on the same game clock as the one open, as it's most likely the same game.
+  elements["dialog-chart-clock"].value = chart.clockPercent;
   elements["delete-chart"].hidden = nextMode === "new";
   elements["chart-dialog"].showModal();
   window.setTimeout(() => elements["dialog-chart-name"].select(), 0);
@@ -26,9 +29,11 @@ export function saveChartDialog(event) {
   event.preventDefault();
   const name = elements["dialog-chart-name"].value.trim();
   const seed = elements["dialog-chart-seed"].value.trim();
-  if (!name) return;
+  const clock = clamp(elements["dialog-chart-clock"].valueAsNumber, MIN_CLOCK_PERCENT, MAX_CLOCK_PERCENT);
+  if (!name || !Number.isFinite(clock)) return;
   if (dialogMode === "new") {
     const chart = createChart({ name, seed });
+    chart.clockPercent = clock;
     workspace.charts.push(chart);
     workspace.activeChartId = chart.id;
     resetHistory();
@@ -36,6 +41,7 @@ export function saveChartDialog(event) {
     pushUndo();
     activeChart().name = name;
     activeChart().seed = seed;
+    activeChart().clockPercent = clock;
     activeChart().updatedAt = new Date().toISOString();
   }
   persist();

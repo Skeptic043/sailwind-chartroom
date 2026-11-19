@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.9.14
+
+### Added
+- `Game clock %` in `Chart details`, the route panel and the dead reckoning panel (for users of the [TimeScale](https://github.com/NANDbrew/TimeScale/releases/latest) mod)
+
+### Changed
+- The save status at the top right is just a colored dot, with its status in the tooltip, so the buttons beside it no longer shift while saving
+- Naming a location after a search area or rough area removes that area
+- Placing a location selects it's name to allow typing a name without clicking the text box first
+
 ## 0.9.12
 
 ### Fixed

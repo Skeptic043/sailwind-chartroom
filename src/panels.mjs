@@ -1,5 +1,5 @@
 // Renders the side panels: chart header, layers, route summary, inspectors and the chart item list.
-import { anchorTarget, isEncounter, bearingDegrees, chartItemFocusPoint, distanceNm, formatCoordinate, formatDuration, isLocked, savedRouteForPoint, searchExtent, summarizeRoute } from "./model.mjs";
+import { anchorTarget, isEncounter, bearingDegrees, chartItemFocusPoint, distanceNm, formatCoordinate, formatDuration, isLocked, milesPerGameHour, savedRouteForPoint, searchExtent, summarizeRoute } from "./model.mjs";
 import { assignedIsland, islandById, searchIsland, visibleIsland } from "./islands.mjs";
 import { assignedBoats } from "./boats.mjs";
 import { formatBearing, formatDirection, formatLeg, formatNm, plainDegrees } from "./format.mjs";
@@ -132,7 +132,8 @@ export function renderRouteSummary() {
   elements["route-actions"].hidden = Boolean(saved);
   elements["route-distance"].textContent = `${formatNm(summary.totalNm)} nm`;
   if (document.activeElement !== elements["route-speed"]) elements["route-speed"].value = chart.speedKn;
-  elements["route-eta"].textContent = formatDuration(summary.totalNm / chart.speedKn);
+  if (document.activeElement !== elements["route-clock"]) elements["route-clock"].value = chart.clockPercent;
+  elements["route-eta"].textContent = formatDuration(summary.totalNm / milesPerGameHour(chart, chart.speedKn));
   placeFloating(elements["route-summary"], panel);
 }
 
@@ -288,20 +289,22 @@ function renderDrInspector(position) {
   elements["dr-detail"].textContent = [
     `${formatCoordinate(position.lat, "lat", 3)} · ${formatCoordinate(position.lon, "lon", 3)}`,
     formatGameTime(position.t),
-    `Course: ${formatBearing(position.course)} · Speed: ${position.speedKn} kn · Time sailed: ${formatDuration(position.hours)} · Distance: ${formatNm(position.speedKn * position.hours)} nm`,
+    `Course: ${formatBearing(position.course)} · Speed: ${position.speedKn} kn · Time sailed: ${formatDuration(position.hours)} · Distance: ${formatNm(milesPerGameHour(position, position.speedKn) * position.hours)} nm`,
+    position.clockPercent !== 100 ? `Game clock: ${position.clockPercent}%` : "",
     `Starting position: ${position.from.label || "a position"}`,
     position.sigmaNm > 0 ? `Possible error: about ${formatNm(position.sigmaNm)} nm, growing by ${position.percent}% of the distance sailed` : ""
   ].filter(Boolean).join("\n");
 }
 
 function renderSavedRouteInspector(route) {
-  const summary = summarizeRoute(route.points, activeChart().circumnavigation);
-  const speed = activeChart().speedKn;
+  const chart = activeChart();
+  const summary = summarizeRoute(route.points, chart.circumnavigation);
+  const speed = chart.speedKn;
   elements["saved-route-name"].value = route.name;
   elements["saved-route-visible"].checked = !route.hidden;
   elements["saved-route-detail"].textContent = [
     `${route.points.length} waypoint${route.points.length === 1 ? "" : "s"} · ${formatNm(summary.totalNm)} nm`,
-    `${formatDuration(summary.totalNm / speed)} at ${speed} kn`
+    `${formatDuration(summary.totalNm / milesPerGameHour(chart, speed))} at ${speed} kn`
   ].join("\n");
 }
 
@@ -312,12 +315,13 @@ function renderMeasureInspector(measure, kept) {
   elements["keep-measure"].hidden = kept;
   elements["measure-note"].textContent = kept ? "Drag either end to adjust the line." : "Drag either end to adjust the line. Measuring again replaces it unless you keep it.";
   const nm = distanceNm(measure, measure.end);
-  const speed = activeChart().speedKn;
+  const chart = activeChart();
+  const speed = chart.speedKn;
   const at = (point) => `${formatCoordinate(point.lat, "lat", 3)} · ${formatCoordinate(point.lon, "lon", 3)}`;
   elements["measure-detail"].textContent = [
     `${formatNm(nm)} nm · ${formatBearing(bearingDegrees(measure, measure.end))}`,
     `Back: ${formatBearing(bearingDegrees(measure.end, measure))}`,
-    `${formatDuration(nm / speed)} at ${speed} kn`,
+    `${formatDuration(nm / milesPerGameHour(chart, speed))} at ${speed} kn`,
     `From ${at(measure)}`,
     `To ${at(measure.end)}`
   ].join("\n");

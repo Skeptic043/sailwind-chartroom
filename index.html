@@ -139,7 +139,7 @@
         <button id="show-key-overlay" class="panel-toggle" type="button" aria-pressed="false" title="Show or hide Voyage Recorder's hotkeys"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><rect x="2.5" y="6" width="19" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M6 10h1.5M10 10h1.5M14 10h1.5M18 10h.5M7 14h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span>Hotkeys</span></button>
       </div>
       <span id="app-version" class="app-version"></span>
-      <span id="save-status" class="save-status"><i></i> Saved</span>
+      <span id="save-status" class="save-status" role="img" title="Saved" aria-label="Saved"><i></i></span>
     </div>
   </header>
   <div id="update-bar" class="update-bar" role="alert" hidden>
@@ -194,6 +194,9 @@
             <label title="Your guess at how far off you could be, as a share of the distance sailed. At 10%, after 20 nm you could be 2 nm off. The circle round each DR position shows it.">Error, % <input id="dr-percent" type="number" min="0" max="100" step="1"></label>
           </div>
           <div class="two-columns compact">
+            <label title="For users of the timescale mod. Leave at 100% without the mod.">Game clock, % <input id="dr-clock" type="number" min="1" max="1000" step="any"></label>
+          </div>
+          <div class="two-columns compact">
             <label>Start day <input id="dr-day" maxlength="30" placeholder="Optional"></label>
             <label>Start time <input id="dr-time" maxlength="30" placeholder="Optional"></label>
           </div>
@@ -221,6 +224,7 @@
       <div id="route-summary" class="route-summary" aria-live="polite" hidden>
         <div id="route-summary-heading" class="floating-handle" title="Drag to move"><span id="route-summary-title">Route</span><strong id="route-distance">0 nm</strong></div>
         <div><label for="route-speed">Speed kn</label><input id="route-speed" type="number" max="30" step="0.5"></div>
+        <div title="For users of the timescale mod. Leave at 100% without the mod."><label for="route-clock">Game clock %</label><input id="route-clock" type="number" min="1" max="1000" step="any"></div>
         <div><span>Passage</span><strong id="route-eta">—</strong></div>
         <div title="Routes on this chart take the short way around the world, across its east and west edges."><label for="route-circumnavigation">Circumnavigation</label><input id="route-circumnavigation" type="checkbox"></div>
         <div id="route-actions" class="route-actions">
@@ -505,6 +509,7 @@
       <p>Keep each seed or playthrough separate so imported tracks and locations never mix.</p>
       <label>Chart name <input id="dialog-chart-name" maxlength="80" required></label>
       <label>Scrambled Seas seed <input id="dialog-chart-seed" maxlength="80" placeholder="Optional"></label>
+      <label title="For users of the timescale mod. Leave at 100% without the mod.">Game clock, % <input id="dialog-chart-clock" type="number" min="1" max="1000" step="any" required></label>
       <div class="dialog-actions">
         <button value="cancel" type="button" data-close>Cancel</button>
         <button id="delete-chart" class="danger-text" type="button" hidden>Delete chart</button>

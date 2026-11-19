@@ -1,7 +1,7 @@
 // Comparing other players' voyages with this chart's track. Comparison voyages are drawn in their own
 // colours beside your track. Show location by time elapsed puts a marker on every
 // voyage at the same time since its start, so you can see who was where after the same hours at sea.
-import { createComparison, formatCoordinate, formatDuration, MAX_COMPARISONS } from "./model.mjs";
+import { createComparison, formatCoordinate, formatDuration, MAX_COMPARISONS, milesPerGameHour } from "./model.mjs";
 import { exportablePoints, parseVoyageFile, positionAtElapsed, sameWorld } from "./voyages.mjs";
 import { sailedStats, trackSegments, unwrapStretch } from "./track.mjs";
 import { formatGameTime } from "./gametime.mjs";
@@ -16,6 +16,7 @@ let elapsed = 0;
 let playing = 0;
 // Playback runs at a multiple of Sailwind's own clock: at 1× a game hour takes 125 real seconds, as in the game
 // at normal speed (Sun.timescale 0.008 game hours a second), so following along feels like sailing it again.
+// With the chart's game clock slowed, a game hour takes as much longer as it does in the game.
 const REAL_SECONDS_PER_GAME_HOUR = 125;
 const PLAYBACK_SPEEDS = Object.freeze([1, 2, 5, 10, 25, 50, 100, 250, 500]);
 const POINT_HIT_PX = 8;
@@ -240,7 +241,7 @@ function startPlayback() {
   elements["compare-play"].setAttribute("aria-label", "Pause");
   let last = performance.now();
   const frame = (now) => {
-    elapsed = Math.min(max, elapsed + (now - last) / 1000 / REAL_SECONDS_PER_GAME_HOUR * playbackSpeed());
+    elapsed = Math.min(max, elapsed + (now - last) / 1000 / (REAL_SECONDS_PER_GAME_HOUR * milesPerGameHour(activeChart(), 1)) * playbackSpeed());
     last = now;
     renderElapsed();
     redraw();

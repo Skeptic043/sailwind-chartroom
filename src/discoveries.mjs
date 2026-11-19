@@ -2,8 +2,9 @@
 // as an imported Scrambled Seas world places it (the island's outline moved by the island's offset), and it
 // removes the search areas and rough areas for it. A mission read from the mission book becomes a search
 // area, or a rough area when Scrambled Seas gives coordinates. Destinations already charted, and searches
-// already drawn from the same place, are left alone.
-import { NM_PER_DEGREE, createFeature, createSearch, distanceNm, newRecorderNotes, newVisits, revealLayer } from "./model.mjs";
+// already drawn from the same place, are left alone. A location placed or named by hand answers the same
+// search areas and rough areas.
+import { NM_PER_DEGREE, createFeature, createSearch, distanceNm, isEncounter, newRecorderNotes, newVisits, revealLayer } from "./model.mjs";
 import { islandById } from "./islands.mjs";
 import { islandIdForNumber } from "./scrambled-seas.mjs";
 
@@ -17,7 +18,6 @@ export function discoveredMarks(chart, { ports = [], missions = [] }, { clearRea
   const searches = [];
   const cleared = new Set();
   const answered = new Set();
-  const named = (item, name, islandId) => (islandId && item.islandId === islandId) || sameName(item.name ?? item.label, name);
   const charted = (name, islandId) => [...chart.features, ...features].some((feature) => !cleared.has(feature.id) && named(feature, name, islandId));
   // A rough area isn't the place itself, so a port reached still becomes a location beside one that stays.
   const located = (name, islandId) => [...chart.features, ...features].some((feature) => !(feature.rangeNm > 0) && named(feature, name, islandId));
@@ -51,6 +51,16 @@ export function discoveredMarks(chart, { ports = [], missions = [] }, { clearRea
     }
   }
   return { features, searches, cleared: [...cleared], answered: [...answered] };
+}
+
+// The search areas and rough areas a location placed or named by hand answers, as a reached port would:
+// searches for its name or island, rough areas for its name. Rough areas and encounters answer nothing.
+export function answeredByLocation(chart, location) {
+  if (location.rangeNm > 0 || isEncounter(location)) return { cleared: [], answered: [] };
+  return {
+    cleared: chart.features.filter((area) => area.rangeNm > 0 && area.id !== location.id && sameName(area.name, location.name)).map((area) => area.id),
+    answered: chart.searches.filter((search) => named(search, location.name, location.islandId)).map((search) => search.id)
+  };
 }
 
 // What else a recording adds to a chart beside its track and marks: notes not seen before, new port visits,
@@ -94,6 +104,10 @@ function islandPlace(islandId, visit) {
     return { lat: island.sourceCenter.lat + visit.offsetLat, lon: island.sourceCenter.lon + visit.offsetLon };
   }
   return { lat: visit.lat, lon: visit.lon };
+}
+
+function named(item, name, islandId) {
+  return (islandId && item.islandId === islandId) || sameName(item.name ?? item.label, name);
 }
 
 // Names match whatever their case, spaces or punctuation: "Dragon CLiffs" is Dragon Cliffs.

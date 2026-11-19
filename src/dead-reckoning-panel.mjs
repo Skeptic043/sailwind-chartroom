@@ -79,6 +79,7 @@ export function renderDeadReckoning() {
   elements["dr-from-latest"].hidden = picked?.chartId !== chart.id;
   if (!elements["dr-speed"].value) elements["dr-speed"].value = chart.speedKn;
   if (document.activeElement !== elements["dr-percent"]) elements["dr-percent"].value = chart.drPercent;
+  if (document.activeElement !== elements["dr-clock"]) elements["dr-clock"].value = chart.clockPercent;
 }
 
 // What a field should hold is part of its error, such as "the speed in knots".
@@ -116,7 +117,8 @@ function plotDeadReckoning() {
   const hours = readHours();
   const percent = readNumber("dr-percent", "the error as a percentage", 100);
   const startT = readStartTime(start);
-  const end = deadReckon(start, course, speedKn, hours);
+  const { clockPercent } = activeChart();
+  const end = deadReckon(start, course, speedKn, hours, clockPercent);
   const position = createDrPosition({
     lat: end.lat,
     lon: end.lon,
@@ -126,6 +128,7 @@ function plotDeadReckoning() {
     speedKn,
     hours,
     percent,
+    clockPercent,
     from: { lat: start.lat, lon: start.lon, label: start.label }
   });
   picked = null;

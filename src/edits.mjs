@@ -6,14 +6,36 @@ import { parseDayTime } from "./gametime.mjs";
 import { elements, showToast } from "./dom.mjs";
 import { clearSelection, commit, refreshSelection, replaceSelectionState, selectedItem, selectedRefs, selection } from "./state.mjs";
 import { fitPoints } from "./render.mjs";
+import { answeredByLocation, removeAnswered } from "./discoveries.mjs";
 
 export function addLocation(point, name = "New location", details = {}) {
+  let answered = null;
   commit((chart) => {
     const feature = createFeature({ ...details, lat: point.lat, lon: point.lon, name });
+    answered = answerSearches(chart, feature);
     chart.features.push(feature);
     revealLayer(chart, "feature", feature);
     replaceSelectionState("feature", feature.id);
   });
+  reportAnswered(answered, name);
+  // Typing names the new location straight away; after the click that placed it has finished.
+  window.setTimeout(() => { elements["feature-name"].focus(); elements["feature-name"].select(); }, 0);
+}
+
+// Inside a commit: drops the search areas and rough areas a location now answers, all in the same undo step.
+export function answerSearches(chart, location) {
+  const marks = answeredByLocation(chart, location);
+  removeAnswered(chart, marks);
+  return marks;
+}
+
+export function reportAnswered(marks, name) {
+  if (!marks) return;
+  const count = (n, kind) => n ? `${n === 1 ? "the" : n} ${kind} area${n === 1 ? "" : "s"}` : "";
+  const removed = [count(marks.answered.length, "search"), count(marks.cleared.length, "rough")].filter(Boolean);
+  if (!removed.length) return;
+  const one = marks.answered.length + marks.cleared.length === 1;
+  showToast(`Removed ${removed.join(" and ")} for ${name}. Undo brings ${one ? "it" : "them"} back.`);
 }
 
 // A new note at a place. Its day, time and name are optional and filled in by the player.
@@ -117,6 +139,9 @@ export function updateSelectedFromForm(kind) {
     // Only an encounter shows its picker; a plain location keeps having no icon.
     const icon = kind === "feature" && !elements["feature-icon-row"].hidden ? elements["feature-icon"].value : "";
     const size = kind === "feature" ? elements["feature-size"].value : "";
+    // Naming a location, or making a rough area a location, answers the search areas for that name.
+    const answering = kind === "feature" && !updates.rangeNm && (updates.name !== item.name || item.rangeNm > 0);
+    let answered = null;
     commit((chart) => {
       translateChartItems(chart, selectedRefs(), { lat: target.lat - item.lat, lon: target.lon - item.lon }, { strict: true });
       Object.assign(item, updates);
@@ -129,8 +154,10 @@ export function updateSelectedFromForm(kind) {
         else delete item.icon;
         if (size && !item.rangeNm) item.size = size;
         else delete item.size;
+        if (answering) answered = answerSearches(chart, item);
       }
     });
+    reportAnswered(answered, item.name);
   } catch (error) {
     showToast(error.message, true);
     refreshSelection();

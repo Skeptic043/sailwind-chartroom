@@ -42,6 +42,9 @@ export function createChart({ name = "Uncharted Sea", seed = "" } = {}) {
     // A circumnavigation chart's routes take the short way round, across the east and west edges.
     circumnavigation: false,
     speedKn: 6,
+    // The game clock's speed as a percentage of normal, for the TimeScale mod. Speeds stay in chip log knots;
+    // passage times, dead reckoning, average speeds and replay follow the clock (milesPerGameHour).
+    clockPercent: 100,
     features: [],
     route: [],
     savedRoutes: [],
@@ -292,6 +295,7 @@ export function sanitizeChart(value, { legacyWind = false } = {}) {
   base.layers = Object.fromEntries(Object.entries(LAYER_DEFAULTS).map(([key, shown]) => [key, shown ? value.layers?.[key] !== false : value.layers?.[key] === true]));
   base.circumnavigation = value.circumnavigation === true;
   base.speedKn = clampNumber(value.speedKn, 0.1, 30, base.speedKn);
+  base.clockPercent = clampNumber(value.clockPercent, MIN_CLOCK_PERCENT, MAX_CLOCK_PERCENT, base.clockPercent);
   base.features = arrayOf(value.features, sanitizeFeature);
   base.route = arrayOf(value.route, sanitizeRoutePoint);
   base.savedRoutes = arrayOf(value.savedRoutes, sanitizeSavedRoute);
@@ -1069,6 +1073,7 @@ function sanitizeDrPosition(value) {
     speedKn: clampNumber(worked.speedKn, 0, 40, 0),
     hours: clampNumber(worked.hours, 0, 1000, 0),
     percent: clampNumber(worked.percent, 0, 100, 0),
+    clockPercent: clampNumber(worked.clockPercent, MIN_CLOCK_PERCENT, MAX_CLOCK_PERCENT, 100),
     from: { lat: Number(from.lat), lon: Number(from.lon), label: cleanText(from.label, 120) },
     createdAt: validDate(value.createdAt) || new Date().toISOString(),
     ...lockedFlag(value)
@@ -1149,6 +1154,15 @@ export function parseBearing(input) {
   const numeric = Number(text.replace(/[°\sT]+$/u, ""));
   if (!Number.isFinite(numeric) || numeric < 0 || numeric > 360) throw new Error("Bearing must be 0–360° or a compass point such as NE or NbE.");
   return numeric % 360;
+}
+
+// A chip log reads the boat's speed through the water, which the game clock doesn't change. At a slower clock
+// each game hour lasts longer, so the boat covers more of the chart in it: at 50%, twice the knots.
+export const MIN_CLOCK_PERCENT = 1;
+export const MAX_CLOCK_PERCENT = 1000;
+
+export function milesPerGameHour({ clockPercent = 100 }, knots) {
+  return knots * 100 / clockPercent;
 }
 
 export function formatDuration(hours) {

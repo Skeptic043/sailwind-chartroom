@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { createChart, createDrPosition, importChartData, sanitizeWorkspace, windFromMathAngle } from "../src/model.mjs";
+import { createChart, createDrPosition, importChartData, milesPerGameHour, sanitizeWorkspace, windFromMathAngle } from "../src/model.mjs";
 import { formatGameTime, parseClock, parseDayTime } from "../src/gametime.mjs";
 import { connectionBetween, sailedStats, simplifyTrack, trackSegments, trackToRoutePoints } from "../src/track.mjs";
 import { deadReckon, drSigma, latestPosition } from "../src/dead-reckoning.mjs";
@@ -69,6 +69,17 @@ test("dead reckoning runs the course, wraps across the chart's edge, and grows l
   assert.equal(end.nm, 12);
   near(deadReckon({ lat: 0, lon: 179.99 }, 90, 7, 1).lon, -179.96, 1e-9);
   assert.equal(drSigma(1, 10, 12), 1 + 1.2);
+});
+
+test("a slowed game clock stretches each game hour: dead reckoning goes further and passages take fewer hours", () => {
+  // TimeScale at 50%: 6 kn on the chip log covers 12 nm of chart in a game hour.
+  assert.equal(deadReckon({ lat: 30, lon: -5 }, 90, 6, 2, 50).nm, 24);
+  assert.equal(milesPerGameHour({ clockPercent: 50 }, 6), 12);
+  assert.equal(milesPerGameHour(createChart(), 6), 6);
+  const chart = sanitizeWorkspace({ charts: [{ ...createChart(), clockPercent: 50 }, { ...createChart(), clockPercent: 0 }] }).charts;
+  assert.deepEqual(chart.map((each) => each.clockPercent), [50, 1]);
+  const position = createDrPosition({ lat: 30, lon: -4.8, from: { lat: 30, lon: -5 }, speedKn: 6, hours: 2, clockPercent: 50 });
+  assert.equal(milesPerGameHour(position, position.speedKn) * position.hours, 24);
 });
 
 test("selected positions give distance and speed, skipping breaks, and simplify into a route", () => {

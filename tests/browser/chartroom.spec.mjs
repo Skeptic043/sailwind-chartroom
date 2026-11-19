@@ -13,7 +13,9 @@ test("adds, edits and deletes a location, saving each change", async ({ chartroo
   await chartroom.press("l");
   await chartroom.clickChart(600, 400);
   await expect(page.locator("#feature-inspector")).toBeVisible();
-  await page.locator("#feature-name").fill("Gold Rock");
+  await expect(page.locator("#feature-name"), "typing names the new location").toBeFocused();
+  await page.keyboard.type("Gold Rock");
+  await expect(page.locator("#feature-name")).toHaveValue("Gold Rock");
   await page.locator("#feature-name").press("Enter");
   await expect.poll(async () => (await chartroom.chart()).features.map((feature) => feature.name)).toEqual(["Gold Rock"]);
   await expect(chartroom.items()).toHaveCount(1);
@@ -172,6 +174,27 @@ test("menus open from the keyboard and close with Escape", async ({ chartroom, p
   await view.focus();
   await page.keyboard.press("ArrowRight");
   await expect(page.locator('.app-menu[data-menu="voyage"] summary')).toBeFocused();
+});
+
+test("saving shows only a dot, so the top bar buttons stay put", async ({ chartroom, page }) => {
+  await chartroom.open();
+  await chartroom.saved();
+  // Every change of the dot is recorded with where the buttons beside it were at that moment.
+  await page.evaluate(() => {
+    const status = document.querySelector("#save-status");
+    window.__saveSeen = [];
+    new MutationObserver(() => window.__saveSeen.push({ title: status.title, x: document.querySelector("#show-key-overlay").getBoundingClientRect().x }))
+      .observe(status, { attributes: true, attributeFilter: ["title"] });
+  });
+  const x = await page.evaluate(() => document.querySelector("#show-key-overlay").getBoundingClientRect().x);
+  await chartroom.press("l");
+  await chartroom.clickChart(400, 300);
+  await chartroom.saved();
+  const seen = await page.evaluate(() => window.__saveSeen);
+  expect(seen.map((entry) => entry.title)).toContain("Saving…");
+  expect(seen.at(-1).title).toBe("Saved");
+  expect(seen.every((entry) => entry.x === x)).toBe(true);
+  await expect(page.locator("#save-status")).toHaveText("");
 });
 
 test("menus and panel buttons fit at the largest interface scale", async ({ chartroom, page }) => {
@@ -865,6 +888,54 @@ test("dead reckoning carries on from the latest position, or from a point clicke
   await page.locator('.app-menu[data-menu="view"] > summary').click();
   await page.locator("#layer-dead-reckoning").uncheck();
   await expect.poll(async () => (await chartroom.chart()).layers.deadReckoning).toBe(false);
+});
+
+test("the game clock speeds up passages and dead reckoning on a slowed clock, set from either panel", async ({ chartroom, page }) => {
+  await chartroom.open(atSea({ speedKn: 6, track: [{ id: "cv", lat: 30.6, lon: -4.6, t: 3 * 24 + 10, day: "3", time: "10:00" }] }));
+  await chartroom.press("r");
+  await chartroom.clickChart(400, 300);
+  await chartroom.clickChart(600, 300);
+  const eta = await page.locator("#route-eta").textContent();
+  await page.locator("#route-clock").fill("50");
+  await page.locator("#route-clock").press("Tab");
+  await expect.poll(async () => (await chartroom.chart()).clockPercent).toBe(50);
+  await expect(page.locator("#route-eta")).not.toHaveText(eta);
+  await chartroom.press("Escape");
+  await chartroom.press("d");
+  await expect(page.locator("#dr-clock")).toHaveValue("50");
+  await page.locator("#dr-course").fill("E");
+  await page.locator("#dr-speed").fill("6");
+  await page.locator("#dr-hours").fill("2");
+  await page.getByRole("button", { name: "Plot DR position" }).click();
+  const [dr] = (await chartroom.chart()).drPositions;
+  expect(dr.lon, "6 kn for 2 game hours at half clock covers 24 nm").toBeCloseTo(-4.6 + 24 / 140, 9);
+  await expect(page.locator("#dr-detail")).toContainText("Distance: 24");
+  await expect(page.locator("#dr-detail")).toContainText("Game clock: 50%");
+});
+
+test("Chart details sets the game clock, and a new chart starts on the open chart's clock", async ({ chartroom, page }) => {
+  await chartroom.open();
+  await page.locator('.app-menu[data-menu="file"] > summary').click();
+  await page.locator("#chart-settings").click();
+  await expect(page.locator("#dialog-chart-clock")).toHaveValue("100");
+  await page.locator("#dialog-chart-clock").fill("50");
+  await page.getByRole("button", { name: "Save chart" }).click();
+  await expect.poll(async () => (await chartroom.chart()).clockPercent).toBe(50);
+  await page.locator('.app-menu[data-menu="file"] > summary').click();
+  await page.locator("#new-chart").click();
+  await expect(page.locator("#dialog-chart-clock")).toHaveValue("50");
+});
+
+test("naming a location after a search area removes the search area, and undo brings it back", async ({ chartroom, page }) => {
+  await chartroom.open(seaWith({ searches: [{ id: "hunt", lat: 20, lon: -1, bearing: 90, distanceNm: 60, spreadDeg: 20, label: "Gold Rock" }] }));
+  await chartroom.press("l");
+  await chartroom.clickChart(600, 400);
+  await page.locator("#feature-name").fill("gold rock");
+  await page.locator("#feature-name").press("Enter");
+  await expect.poll(async () => (await chartroom.chart()).searches.length).toBe(0);
+  await expect(page.locator("#toast")).toHaveText("Removed the search area for gold rock. Undo brings it back.");
+  await chartroom.press("Control+z");
+  await expect.poll(async () => (await chartroom.chart()).searches.map((search) => search.id)).toEqual(["hunt"]);
 });
 
 test("selected track positions show their figures and save as a route", async ({ chartroom, page }) => {

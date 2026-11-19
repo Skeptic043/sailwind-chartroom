@@ -136,9 +136,10 @@ button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-
 .danger { color: var(--danger); }
 .danger-text { color: var(--danger); background: transparent; border-color: transparent; }
 .app-version { padding: 3px 6px; border: 1px solid var(--line); border-radius: 999px; color: var(--faint); font-size: 11px; font-weight: 800; letter-spacing: .04em; }
-.save-status { color: var(--muted); font-size: 13px; display: inline-flex; align-items: center; gap: 7px; margin-right: 6px; }
+.save-status { display: inline-flex; align-items: center; padding: 4px; margin-right: 6px; cursor: default; }
 .save-status i { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 10%, transparent); }
 .save-status.saving i { background: var(--accent); }
+.save-status.failed i { background: var(--danger); box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 18%, transparent); }
 
 .app-shell {
   --left-column: var(--left-panel-width, 270px);

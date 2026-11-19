@@ -27,17 +27,23 @@ export function activeChart() {
   return workspace.charts.find((chart) => chart.id === workspace.activeChartId) ?? workspace.charts[0];
 }
 
-export function persist() {
+// The top bar shows saving as a coloured dot only, with its state in the tooltip, so the buttons beside it
+// don't shift every time the chart saves.
+function showSaveStatus(state, label) {
   const status = elements["save-status"];
-  status.classList.add("saving");
-  status.lastChild.textContent = " Saving…";
+  status.classList.toggle("saving", state === "saving");
+  status.classList.toggle("failed", state === "failed");
+  status.title = label;
+  status.setAttribute("aria-label", label);
+}
+
+export function persist() {
+  showSaveStatus("saving", "Saving…");
   host.save(workspace);
 }
 
 export function setSaveStatus(ok) {
-  const status = elements["save-status"];
-  status.classList.remove("saving");
-  status.lastChild.textContent = ok ? " Saved" : " Save failed";
+  showSaveStatus(ok ? "saved" : "failed", ok ? "Saved" : "Save failed");
 }
 
 // Snapshots copy everything but the track, which can hold tens of thousands of positions. Each

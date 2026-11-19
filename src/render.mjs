@@ -1,6 +1,6 @@
 // Draws the chart canvas and moves its view. Tool previews are drawn by interaction.mjs through setOverlay().
 import { mapPalette, paperTile } from "./theme.mjs";
-import { MAX_ZOOM, MIN_ZOOM, NM_PER_DEGREE, WORLD_BOUNDS, bearingDegrees, clusteredLabelIds, destinationPoint, distanceNm, formatDuration, legPieces, searchChartLabel, searchEvidenceOpacity, searchExtent, searchIconAnchors, searchNameLabelIds, searchOverlapGroups, shownItems, summarizeRoute, trackLayerShown, tradeWindAt, iconScale } from "./model.mjs";
+import { MAX_ZOOM, MIN_ZOOM, NM_PER_DEGREE, WORLD_BOUNDS, bearingDegrees, clusteredLabelIds, destinationPoint, distanceNm, formatDuration, legPieces, milesPerGameHour, searchChartLabel, searchEvidenceOpacity, searchExtent, searchIconAnchors, searchNameLabelIds, searchOverlapGroups, shownItems, summarizeRoute, trackLayerShown, tradeWindAt, iconScale } from "./model.mjs";
 import { islandWorldBounds } from "./islands.mjs";
 import { VANILLA_MAP, importedMapIslands } from "./scrambled-seas.mjs";
 import { assignedBoats, boatMarkerSize, drawBoatSilhouette } from "./boats.mjs";
@@ -638,9 +638,10 @@ export function drawMeasureLine(from, to, selected, palette) {
 function lineLabel(from, to, palette) {
   const a = worldToScreen(from);
   const b = worldToScreen(to);
-  const speed = activeChart().speedKn;
+  const chart = activeChart();
+  const speed = chart.speedKn;
   const nm = distanceNm(from, to);
-  const text = `${formatNm(nm)} nm · ${formatBearing(bearingDegrees(from, to))} · ${formatDuration(nm / speed)} at ${speed} kn`;
+  const text = `${formatNm(nm)} nm · ${formatBearing(bearingDegrees(from, to))} · ${formatDuration(nm / milesPerGameHour(chart, speed))} at ${speed} kn`;
   // The label sits beside the middle of the line, on its upper side, far enough out to clear it at any angle.
   context.save();
   context.font = PILL_FONT;

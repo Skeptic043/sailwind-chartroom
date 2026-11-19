@@ -8,7 +8,7 @@ import { activeChart, commit, host, workspace, isSelected, persist, pushUndo, re
 import { boatRowAt, coordinatePrecision, eventPoint, screenToWorld, worldToScreen } from "./viewport.mjs";
 import { boatColours, drawAreaCircle, drawChart, drawIslandSilhouette, drawLine, drawMeasureLine, drawSearchWedge, drawWindIndicator, labelPill, magnetRing } from "./render.mjs";
 import { findHit, resetHitCycle, nearestTrackPoint, onSelectedAreaEdge, selectedLineEnd, snapAlongRay, snapPoint } from "./hits.mjs";
-import { addLocation, addNote, addSearch, addWind, setAnchor } from "./edits.mjs";
+import { addLocation, addNote, addSearch, addWind, answerSearches, reportAnswered, setAnchor } from "./edits.mjs";
 import { openNote } from "./notes.mjs";
 import { showComparisonPointAt } from "./compare.mjs";
 import { LOCATION_ICONS } from "./icons.mjs";
@@ -609,6 +609,7 @@ function resolveToLocation(point) {
   const ref = resolutionDraft;
   const source = itemForRef(activeChart(), ref);
   if (!ref || !source) return setMode("select");
+  let answered = null;
   commit((chart) => {
     if (ref.kind === "search") {
       const extent = searchExtent(source);
@@ -630,9 +631,11 @@ function resolveToLocation(point) {
       source.lat = point.lat;
       source.lon = point.lon;
       source.rangeNm = 0;
+      answered = answerSearches(chart, source);
       replaceSelectionState("feature", source.id);
     }
   });
+  reportAnswered(answered, source.name);
   setMode("select");
 }
 

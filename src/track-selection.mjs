@@ -1,7 +1,7 @@
 // Two or more selected Coordinate Viewer positions: their distance and average speed in the track
 // position inspector, and Save route, which keeps them as a saved route. Two positions either side of a gap
 // can be connected from the Connect track panel under the tools, making the stretches one.
-import { formatDuration, makeId, revealLayer } from "./model.mjs";
+import { formatDuration, makeId, milesPerGameHour, revealLayer } from "./model.mjs";
 import { besideGap, connectionBetween, sailedStats, trackToRoutePoints } from "./track.mjs";
 import { formatNm } from "./format.mjs";
 import { elements, showToast } from "./dom.mjs";
@@ -48,13 +48,16 @@ function selectedTrackPoints(chart) {
 }
 
 export function renderTrackSelection() {
-  const points = selectedTrackPoints(activeChart());
+  const chart = activeChart();
+  const points = selectedTrackPoints(chart);
   elements["track-selection"].hidden = points.length < 2;
   if (points.length < 2) return;
   const stats = sailedStats(points);
+  // Miles per game hour back to knots on the chip log, whatever the game clock's speed.
+  const averageKn = stats.movingHours ? stats.averageKn / milesPerGameHour(chart, 1) : null;
   elements["track-selection-detail"].textContent = [
     `${points.length} positions · ${formatNm(stats.distanceNm)} nm sailed`,
-    stats.movingHours ? `Time sailed: ${formatDuration(stats.movingHours)} · Average speed: ${stats.averageKn.toFixed(1)} kn` : "No times recorded"
+    stats.movingHours ? `Time sailed: ${formatDuration(stats.movingHours)} · Average speed: ${averageKn.toFixed(1)} kn` : "No times recorded"
   ].join("\n");
 }
 

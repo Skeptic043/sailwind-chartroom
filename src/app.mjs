@@ -1,5 +1,5 @@
 // Entry point: connects to the host, loads the workspace and wires the page's controls.
-import { archiveActiveRoute, createLine, revealLayer, sailMasterRoute, savedRouteForPoint } from "./model.mjs";
+import { MAX_CLOCK_PERCENT, MIN_CLOCK_PERCENT, archiveActiveRoute, createLine, revealLayer, sailMasterRoute, savedRouteForPoint } from "./model.mjs";
 import { connectHost } from "./host.mjs";
 import { clamp } from "./format.mjs";
 import { canvas, elements, showToast } from "./dom.mjs";
@@ -116,6 +116,14 @@ elements["route-speed"].addEventListener("change", (event) => {
   commit((chart) => { chart.speedKn = clamp(speed, 0.1, 30); }, { history: false });
   event.target.value = activeChart().speedKn;
 });
+// The game clock is one setting for the chart, shown in the route panel and the dead reckoning panel.
+for (const id of ["route-clock", "dr-clock"]) {
+  elements[id].addEventListener("change", (event) => {
+    const percent = event.target.valueAsNumber;
+    if (Number.isFinite(percent)) commit((chart) => { chart.clockPercent = clamp(percent, MIN_CLOCK_PERCENT, MAX_CLOCK_PERCENT); }, { history: false });
+    event.target.value = activeChart().clockPercent;
+  });
+}
 
 // Layers
 for (const [elementId, key] of LAYER_CONTROLS) {

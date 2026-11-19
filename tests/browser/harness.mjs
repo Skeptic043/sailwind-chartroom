@@ -104,7 +104,7 @@ export class Chartroom {
 
   // Waits for the debounced save to reach the host, then returns what it holds.
   async saved() {
-    await expect(this.page.locator("#save-status")).toContainText("Saved");
+    await expect(this.page.locator("#save-status")).toHaveAttribute("title", "Saved");
     return this.page.evaluate(() => window.__host.workspace);
   }
 

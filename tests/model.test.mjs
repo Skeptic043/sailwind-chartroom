@@ -57,6 +57,7 @@ import {
   translateChartItems
 } from "../src/model.mjs";
 import { ISLAND_CATALOG, ISLAND_GROUPS, VANILLA_ISLANDS, assignedIsland, islandGroup, islandById, islandByName, normalizeIslandName, searchIsland, visibleIsland } from "../src/islands.mjs";
+import { LOCATION_ICONS } from "../src/icons.mjs";
 import { importedMapIslands, parseScrambledSeasXml } from "../src/scrambled-seas.mjs";
 import { readFileSync } from "node:fs";
 import { BOAT_CATALOG, assignedBoats, boatById, boatMarkerSize } from "../src/boats.mjs";
@@ -982,6 +983,27 @@ test("a port reached removes the rough areas marked for it and charts the island
   applyMarks(chart, marks);
   assert.deepEqual(chart.features.map((feature) => [feature.name, feature.lat, feature.lon, feature.rangeNm, feature.islandId ?? ""]),
     [["Oasis", 30, -2, 20, ""], ["Senna", 31.2, -2.9, 0, "firefish/senna"]]);
+});
+
+test("a location placed or named by hand answers the search areas and rough areas for it", async () => {
+  const { answeredByLocation, removeAnswered } = await import("../src/discoveries.mjs");
+  const chart = createChart();
+  const byName = createSearch({ lat: 30, lon: -4, bearing: 45, distanceNm: 80, label: "Dragon CLiffs" });
+  const byIsland = Object.assign(createSearch({ lat: 29, lon: -5, bearing: 90, distanceNm: 60 }), { islandId: "firefish/senna" });
+  const elsewhere = createSearch({ lat: 28, lon: -6, bearing: 10, distanceNm: 40, label: "Oasis" });
+  const rough = createFeature({ lat: 31, lon: -3, name: "dragon cliffs", rangeNm: 20 });
+  chart.searches.push(byName, byIsland, elsewhere);
+  chart.features.push(rough);
+  const location = createFeature({ lat: 31.1, lon: -3.1, name: "Dragon Cliffs", islandId: "firefish/senna" });
+  const marks = answeredByLocation(chart, location);
+  assert.deepEqual([marks.answered, marks.cleared], [[byName.id, byIsland.id], [rough.id]]);
+  removeAnswered(chart, marks);
+  assert.deepEqual([chart.searches.map((search) => search.label), chart.features.length], [["Oasis"], 0]);
+  // A rough area and an encounter with the same name are not the place itself.
+  chart.searches.push(byName);
+  const answers = (feature) => answeredByLocation(chart, feature).answered.length;
+  assert.equal(answers(createFeature({ lat: 31, lon: -3, name: "Dragon Cliffs", rangeNm: 10 })), 0);
+  assert.equal(answers(createFeature({ lat: 31, lon: -3, name: "Dragon Cliffs", icon: Object.keys(LOCATION_ICONS)[0] })), 0);
 });
 
 test("with clearing turned off, a port reached keeps its areas and still becomes a location", async () => {
