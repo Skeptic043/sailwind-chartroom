@@ -890,7 +890,7 @@ test("dead reckoning carries on from the latest position, or from a point clicke
   await expect.poll(async () => (await chartroom.chart()).layers.deadReckoning).toBe(false);
 });
 
-test("the game clock speeds up passages and dead reckoning on a slowed clock, set from either panel", async ({ chartroom, page }) => {
+test("a slowed game clock shortens the chart's miles, set from either panel", async ({ chartroom, page }) => {
   await chartroom.open(atSea({ speedKn: 6, track: [{ id: "cv", lat: 30.6, lon: -4.6, t: 3 * 24 + 10, day: "3", time: "10:00" }] }));
   await chartroom.press("r");
   await chartroom.clickChart(400, 300);
@@ -908,9 +908,8 @@ test("the game clock speeds up passages and dead reckoning on a slowed clock, se
   await page.locator("#dr-hours").fill("2");
   await page.getByRole("button", { name: "Plot DR position" }).click();
   const [dr] = (await chartroom.chart()).drPositions;
-  expect(dr.lon, "6 kn for 2 game hours at half clock covers 24 nm").toBeCloseTo(-4.6 + 24 / 140, 9);
-  await expect(page.locator("#dr-detail")).toContainText("Distance: 24");
-  await expect(page.locator("#dr-detail")).toContainText("Game clock: 50%");
+  expect(dr.lon, "6 kn for 2 game hours is 12 miles, at 70 miles a degree").toBeCloseTo(-4.6 + 12 / 70, 9);
+  await expect(page.locator("#dr-detail")).toContainText("Distance: 12.0 nm");
 });
 
 test("Chart details sets the game clock, and a new chart starts on the open chart's clock", async ({ chartroom, page }) => {

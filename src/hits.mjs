@@ -1,5 +1,5 @@
 // Finds what is under the pointer and where drawing clicks snap to.
-import { NM_PER_DEGREE, destinationPoint, insideSearch, legPieces, searchExtent, searchIconAnchors, itemShown, shownItems, summarizeRoute } from "./model.mjs";
+import { destinationPoint, milesPerDegree, insideSearch, legPieces, searchExtent, searchIconAnchors, itemShown, shownItems, summarizeRoute } from "./model.mjs";
 import { islandById, islandContains } from "./islands.mjs";
 import { assignedBoats } from "./boats.mjs";
 import { clamp } from "./format.mjs";
@@ -132,7 +132,7 @@ export function onSelectedAreaEdge(screen) {
   const item = selection?.kind === "feature" ? selectedItem() : null;
   if (!item?.rangeNm || item.locked || !itemShown(activeChart(), "feature", item)) return false;
   const center = worldToScreen(item);
-  const radius = item.rangeNm / NM_PER_DEGREE * activeChart().view.zoom;
+  const radius = item.rangeNm / milesPerDegree * activeChart().view.zoom;
   return Math.abs(Math.hypot(screen.x - center.x, screen.y - center.y) - radius) <= 6;
 }
 
@@ -207,7 +207,7 @@ export function snapAlongRay(origin, bearing, screen) {
   }
   const cursor = along(screen);
   const best = candidates.filter((t) => t > 1).sort((a, b) => Math.abs(a - cursor) - Math.abs(b - cursor))[0];
-  return best !== undefined && Math.abs(best - cursor) <= POINT_MAGNET_PX ? best / activeChart().view.zoom * NM_PER_DEGREE : null;
+  return best !== undefined && Math.abs(best - cursor) <= POINT_MAGNET_PX ? best / activeChart().view.zoom * milesPerDegree : null;
 }
 
 function cross(u, v) {

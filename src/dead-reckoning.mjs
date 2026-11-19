@@ -1,11 +1,10 @@
 // Dead reckoning on Sailwind's flat chart: where the boat is after sailing a compass course at a chip
 // log speed for so many game hours, how far off that may be, and which position on the chart is the latest.
-import { destinationPoint, milesPerGameHour } from "./model.mjs";
+import { destinationPoint } from "./model.mjs";
 import { hasTime, wrappedLonDelta } from "./track.mjs";
 
-// clockPercent is the game clock's speed (see milesPerGameHour): at 50%, an hour sailed covers twice the miles.
-export function deadReckon(origin, course, speedKn, hours, clockPercent = 100) {
-  const nm = milesPerGameHour({ clockPercent }, Math.max(0, speedKn)) * Math.max(0, hours);
+export function deadReckon(origin, course, speedKn, hours) {
+  const nm = Math.max(0, speedKn) * Math.max(0, hours);
   const end = destinationPoint(origin, course, nm);
   // A run across the chart's east or west edge comes back in from the other side.
   return { lat: end.lat, lon: wrappedLonDelta(end.lon), nm };

@@ -1,7 +1,7 @@
 // Comparing other players' voyages with this chart's track. Comparison voyages are drawn in their own
 // colours beside your track. Show location by time elapsed puts a marker on every
 // voyage at the same time since its start, so you can see who was where after the same hours at sea.
-import { createComparison, formatCoordinate, formatDuration, MAX_COMPARISONS, milesPerGameHour } from "./model.mjs";
+import { createComparison, formatCoordinate, formatDuration, MAX_COMPARISONS } from "./model.mjs";
 import { exportablePoints, parseVoyageFile, positionAtElapsed, sameWorld } from "./voyages.mjs";
 import { sailedStats, trackSegments, unwrapStretch } from "./track.mjs";
 import { formatGameTime } from "./gametime.mjs";
@@ -241,7 +241,7 @@ function startPlayback() {
   elements["compare-play"].setAttribute("aria-label", "Pause");
   let last = performance.now();
   const frame = (now) => {
-    elapsed = Math.min(max, elapsed + (now - last) / 1000 / (REAL_SECONDS_PER_GAME_HOUR * milesPerGameHour(activeChart(), 1)) * playbackSpeed());
+    elapsed = Math.min(max, elapsed + (now - last) / 1000 / (REAL_SECONDS_PER_GAME_HOUR * 100 / activeChart().clockPercent) * playbackSpeed());
     last = now;
     renderElapsed();
     redraw();

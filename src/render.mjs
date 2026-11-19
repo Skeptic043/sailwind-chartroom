@@ -1,6 +1,6 @@
 // Draws the chart canvas and moves its view. Tool previews are drawn by interaction.mjs through setOverlay().
 import { mapPalette, paperTile } from "./theme.mjs";
-import { MAX_ZOOM, MIN_ZOOM, NM_PER_DEGREE, WORLD_BOUNDS, bearingDegrees, clusteredLabelIds, destinationPoint, distanceNm, formatDuration, legPieces, milesPerGameHour, searchChartLabel, searchEvidenceOpacity, searchExtent, searchIconAnchors, searchNameLabelIds, searchOverlapGroups, shownItems, summarizeRoute, trackLayerShown, tradeWindAt, iconScale } from "./model.mjs";
+import { MAX_ZOOM, MIN_ZOOM, NM_PER_DEGREE, WORLD_BOUNDS, bearingDegrees, clusteredLabelIds, destinationPoint, distanceNm, formatDuration, legPieces, milesPerDegree, searchChartLabel, searchEvidenceOpacity, searchExtent, searchIconAnchors, searchNameLabelIds, searchOverlapGroups, shownItems, summarizeRoute, trackLayerShown, tradeWindAt, iconScale } from "./model.mjs";
 import { islandWorldBounds } from "./islands.mjs";
 import { VANILLA_MAP, importedMapIslands } from "./scrambled-seas.mjs";
 import { assignedBoats, boatMarkerSize, drawBoatSilhouette } from "./boats.mjs";
@@ -431,7 +431,7 @@ function drawDrPositions(palette) {
     // A run across the chart's east or west edge is drawn the short way, off the edge.
     strokeDashed([worldToScreen(unwrapNear(position, position.from)), screen], [6, 4]);
     if (position.sigmaNm > 0) {
-      const radius = position.sigmaNm / NM_PER_DEGREE * chart.view.zoom;
+      const radius = position.sigmaNm / milesPerDegree * chart.view.zoom;
       if (radius >= 3) {
         context.beginPath();
         context.arc(screen.x, screen.y, radius, 0, Math.PI * 2);
@@ -466,12 +466,12 @@ function drawAreas(palette) {
 export function drawAreaCircle(center, rangeNm, selected, palette) {
   const screen = worldToScreen(center);
   context.beginPath();
-  context.arc(screen.x, screen.y, rangeNm / NM_PER_DEGREE * activeChart().view.zoom, 0, Math.PI * 2);
+  context.arc(screen.x, screen.y, rangeNm / milesPerDegree * activeChart().view.zoom, 0, Math.PI * 2);
   context.fillStyle = palette.areaFill;
   context.fill();
   context.strokeStyle = selected ? palette.select : palette.accent;
   context.lineWidth = selected ? 2 : 1.4;
-  strokeDashedCircle(screen, rangeNm / NM_PER_DEGREE * activeChart().view.zoom, [6, 4]);
+  strokeDashedCircle(screen, rangeNm / milesPerDegree * activeChart().view.zoom, [6, 4]);
 }
 
 function drawSearches(palette) {
@@ -638,10 +638,9 @@ export function drawMeasureLine(from, to, selected, palette) {
 function lineLabel(from, to, palette) {
   const a = worldToScreen(from);
   const b = worldToScreen(to);
-  const chart = activeChart();
-  const speed = chart.speedKn;
+  const speed = activeChart().speedKn;
   const nm = distanceNm(from, to);
-  const text = `${formatNm(nm)} nm · ${formatBearing(bearingDegrees(from, to))} · ${formatDuration(nm / milesPerGameHour(chart, speed))} at ${speed} kn`;
+  const text = `${formatNm(nm)} nm · ${formatBearing(bearingDegrees(from, to))} · ${formatDuration(nm / speed)} at ${speed} kn`;
   // The label sits beside the middle of the line, on its upper side, far enough out to clear it at any angle.
   context.save();
   context.font = PILL_FONT;
@@ -1051,7 +1050,7 @@ function roundedRect(x, y, width, height, radius) {
 }
 
 function updateZoomLabel() {
-  const nmPerHundredPixels = 100 / activeChart().view.zoom * NM_PER_DEGREE;
+  const nmPerHundredPixels = 100 / activeChart().view.zoom * milesPerDegree;
   const digits = nmPerHundredPixels >= 10 ? 0 : nmPerHundredPixels >= 1 ? 1 : 2;
   elements["zoom-label"].textContent = `${nmPerHundredPixels.toFixed(digits)} nm / 100 px`;
 }

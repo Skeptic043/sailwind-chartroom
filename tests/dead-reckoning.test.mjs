@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { createChart, createDrPosition, importChartData, milesPerGameHour, sanitizeWorkspace, windFromMathAngle } from "../src/model.mjs";
+import { createChart, createDrPosition, destinationPoint, distanceNm, importChartData, sanitizeWorkspace, useGameClock, windFromMathAngle } from "../src/model.mjs";
 import { formatGameTime, parseClock, parseDayTime } from "../src/gametime.mjs";
 import { connectionBetween, sailedStats, simplifyTrack, trackSegments, trackToRoutePoints } from "../src/track.mjs";
 import { deadReckon, drSigma, latestPosition } from "../src/dead-reckoning.mjs";
@@ -71,15 +71,36 @@ test("dead reckoning runs the course, wraps across the chart's edge, and grows l
   assert.equal(drSigma(1, 10, 12), 1 + 1.2);
 });
 
-test("a slowed game clock stretches each game hour: dead reckoning goes further and passages take fewer hours", () => {
-  // TimeScale at 50%: 6 kn on the chip log covers 12 nm of chart in a game hour.
-  assert.equal(deadReckon({ lat: 30, lon: -5 }, 90, 6, 2, 50).nm, 24);
-  assert.equal(milesPerGameHour({ clockPercent: 50 }, 6), 12);
-  assert.equal(milesPerGameHour(createChart(), 6), 6);
+test("a slowed game clock shortens the game's miles, as the mission screen counts them", () => {
+  // TimeScale at 50%: a degree is 70 miles, so 6 kn for 2 game hours is 12 miles and twice as far on the chart.
+  useGameClock(50);
+  try {
+    near(distanceNm({ lat: 0, lon: 0 }, { lat: 0, lon: 1 }), 70, 1e-9);
+    near(destinationPoint({ lat: 0, lon: 0 }, 90, 35).lon, 0.5, 1e-12);
+    const end = deadReckon({ lat: 30, lon: -5 }, 90, 6, 2);
+    assert.equal(end.nm, 12);
+    near(end.lon, -5 + 24 / 140, 1e-12);
+  } finally {
+    useGameClock(100);
+  }
+  near(distanceNm({ lat: 0, lon: 0 }, { lat: 0, lon: 1 }), 140, 1e-9);
   const chart = sanitizeWorkspace({ charts: [{ ...createChart(), clockPercent: 50 }, { ...createChart(), clockPercent: 0 }] }).charts;
   assert.deepEqual(chart.map((each) => each.clockPercent), [50, 1]);
-  const position = createDrPosition({ lat: 30, lon: -4.8, from: { lat: 30, lon: -5 }, speedKn: 6, hours: 2, clockPercent: 50 });
-  assert.equal(milesPerGameHour(position, position.speedKn) * position.hours, 24);
+});
+
+test("a 0.9.14 chart on a slowed clock keeps its mission distances and its rough areas where they were drawn", () => {
+  const older = {
+    ...createChart(), clockPercent: 50, gameMiles: undefined,
+    searches: [{ id: "s", lat: 0, lon: 0, bearing: 90, distanceNm: 140, spreadDeg: 10 }],
+    features: [{ id: "a", lat: 1, lon: 1, name: "Area", rangeNm: 20 }, { id: "l", lat: 2, lon: 2, name: "Port" }],
+    drPositions: [{ id: "d", lat: 0, lon: 1, from: { lat: 0, lon: 0 }, sigmaNm: 4, speedKn: 6, hours: 2 }]
+  };
+  const [chart] = sanitizeWorkspace({ charts: [older] }).charts;
+  assert.deepEqual([chart.searches[0].distanceNm, chart.features.map((feature) => feature.rangeNm), chart.drPositions[0].sigmaNm, chart.gameMiles], [140, [10, 0], 2, true]);
+  const [again] = sanitizeWorkspace({ charts: [chart] }).charts;
+  assert.equal(again.features[0].rangeNm, 10, "only once");
+  const [vanilla] = sanitizeWorkspace({ charts: [{ ...older, clockPercent: 100 }] }).charts;
+  assert.equal(vanilla.features[0].rangeNm, 20);
 });
 
 test("selected positions give distance and speed, skipping breaks, and simplify into a route", () => {

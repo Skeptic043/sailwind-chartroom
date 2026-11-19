@@ -1,5 +1,5 @@
 // Owns the workspace, the selection and undo history. Every chart edit goes through commit().
-import { createWorkspace, followAnchors, itemForRef, sanitizeWorkspace } from "./model.mjs";
+import { createWorkspace, followAnchors, itemForRef, sanitizeWorkspace, useGameClock } from "./model.mjs";
 import { elements } from "./dom.mjs";
 
 const UNDO_LIMIT = 60;
@@ -23,8 +23,11 @@ export function initState(connectedHost, renderers) {
   Object.assign(views, renderers);
 }
 
+// Everything that measures miles works on the open chart, so its game clock sets the miles in a degree here.
 export function activeChart() {
-  return workspace.charts.find((chart) => chart.id === workspace.activeChartId) ?? workspace.charts[0];
+  const chart = workspace.charts.find((chart) => chart.id === workspace.activeChartId) ?? workspace.charts[0];
+  useGameClock(chart?.clockPercent);
+  return chart;
 }
 
 // The top bar shows saving as a coloured dot only, with its state in the tooltip, so the buttons beside it

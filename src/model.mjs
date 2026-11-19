@@ -16,7 +16,19 @@ export const FILE_FORMAT = "sailwind-chartroom";
 //    voyages and chart folders. All are new fields, so older charts load unchanged; an older Chartroom would
 //    drop them, so it refuses a version 4 file instead.
 export const SCHEMA_VERSION = 4;
+// Miles in a degree at the game's normal clock speed.
 export const NM_PER_DEGREE = 140;
+// Sailwind's miles are what a 1 knot boat covers in a game hour (MissionDetailsUI: metres × the clock rate /
+// 0.514444), so a slower clock makes them shorter: at 50% (TimeScale), a degree is 70 miles. Distances on
+// the chart follow the open chart's game clock, set through useGameClock, so they match the mission screen,
+// the chip log and a traverse board, and passage times stay miles over knots.
+export let milesPerDegree = NM_PER_DEGREE;
+export const MIN_CLOCK_PERCENT = 1;
+export const MAX_CLOCK_PERCENT = 1000;
+
+export function useGameClock(clockPercent = 100) {
+  milesPerDegree = NM_PER_DEGREE * clockPercent / 100;
+}
 // Longitude reaches all the way round, so Scrambled Seas worlds as wide as the globe fit on a chart.
 export const WORLD_BOUNDS = Object.freeze({ minLat: -90, maxLat: 90, minLon: -180, maxLon: 180 });
 export const MIN_ZOOM = 1.5;
@@ -42,9 +54,11 @@ export function createChart({ name = "Uncharted Sea", seed = "" } = {}) {
     // A circumnavigation chart's routes take the short way round, across the east and west edges.
     circumnavigation: false,
     speedKn: 6,
-    // The game clock's speed as a percentage of normal, for the TimeScale mod. Speeds stay in chip log knots;
-    // passage times, dead reckoning, average speeds and replay follow the clock (milesPerGameHour).
+    // The game clock's speed as a percentage of normal, for the TimeScale mod. Sets the miles in a degree
+    // (useGameClock) and how fast replay runs.
     clockPercent: 100,
+    // Its miles follow the game clock. Charts from 0.9.13 and 0.9.14 lack this (see sanitizeChart).
+    gameMiles: true,
     features: [],
     route: [],
     savedRoutes: [],
@@ -324,6 +338,14 @@ export function sanitizeChart(value, { legacyWind = false } = {}) {
   if (scramble && value.layers?.importedMap === undefined) {
     base.layers.importedMap = value.layers?.vanillaMap === true;
     base.layers.vanillaMap = false;
+  }
+  // 0.9.13 and 0.9.14 kept 140 miles a degree whatever the game clock. A search's distance came from the
+  // mission screen in the game's miles, so it stays as entered and now lands where the game means. Rough areas
+  // and DR error circles were sized on the chart, so they're rescaled once to stay where they were drawn.
+  if (value.gameMiles !== true && base.clockPercent !== 100) {
+    const scale = base.clockPercent / 100;
+    for (const feature of base.features) if (feature.rangeNm > 0) feature.rangeNm = Math.min(MAX_RANGE_NM, feature.rangeNm * scale);
+    for (const position of base.drPositions) position.sigmaNm = position.sigmaNm * scale;
   }
   followAnchors(base);
   return base;
@@ -1073,7 +1095,6 @@ function sanitizeDrPosition(value) {
     speedKn: clampNumber(worked.speedKn, 0, 40, 0),
     hours: clampNumber(worked.hours, 0, 1000, 0),
     percent: clampNumber(worked.percent, 0, 100, 0),
-    clockPercent: clampNumber(worked.clockPercent, MIN_CLOCK_PERCENT, MAX_CLOCK_PERCENT, 100),
     from: { lat: Number(from.lat), lon: Number(from.lon), label: cleanText(from.label, 120) },
     createdAt: validDate(value.createdAt) || new Date().toISOString(),
     ...lockedFlag(value)
@@ -1129,7 +1150,7 @@ export function formatCoordinate(value, axis, precision = 2) {
 }
 
 export function distanceNm(a, b) {
-  return Math.hypot(Number(b.lon) - Number(a.lon), Number(b.lat) - Number(a.lat)) * NM_PER_DEGREE;
+  return Math.hypot(Number(b.lon) - Number(a.lon), Number(b.lat) - Number(a.lat)) * milesPerDegree;
 }
 
 export function bearingDegrees(a, b) {
@@ -1139,7 +1160,7 @@ export function bearingDegrees(a, b) {
 
 export function destinationPoint(origin, bearing, nm) {
   const radians = Number(bearing) * Math.PI / 180;
-  const degrees = Number(nm) / NM_PER_DEGREE;
+  const degrees = Number(nm) / milesPerDegree;
   return {
     lat: Number(origin.lat) + Math.cos(radians) * degrees,
     lon: Number(origin.lon) + Math.sin(radians) * degrees
@@ -1154,15 +1175,6 @@ export function parseBearing(input) {
   const numeric = Number(text.replace(/[°\sT]+$/u, ""));
   if (!Number.isFinite(numeric) || numeric < 0 || numeric > 360) throw new Error("Bearing must be 0–360° or a compass point such as NE or NbE.");
   return numeric % 360;
-}
-
-// A chip log reads the boat's speed through the water, which the game clock doesn't change. At a slower clock
-// each game hour lasts longer, so the boat covers more of the chart in it: at 50%, twice the knots.
-export const MIN_CLOCK_PERCENT = 1;
-export const MAX_CLOCK_PERCENT = 1000;
-
-export function milesPerGameHour({ clockPercent = 100 }, knots) {
-  return knots * 100 / clockPercent;
 }
 
 export function formatDuration(hours) {

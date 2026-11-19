@@ -117,8 +117,7 @@ function plotDeadReckoning() {
   const hours = readHours();
   const percent = readNumber("dr-percent", "the error as a percentage", 100);
   const startT = readStartTime(start);
-  const { clockPercent } = activeChart();
-  const end = deadReckon(start, course, speedKn, hours, clockPercent);
+  const end = deadReckon(start, course, speedKn, hours);
   const position = createDrPosition({
     lat: end.lat,
     lon: end.lon,
@@ -128,7 +127,6 @@ function plotDeadReckoning() {
     speedKn,
     hours,
     percent,
-    clockPercent,
     from: { lat: start.lat, lon: start.lon, label: start.label }
   });
   picked = null;

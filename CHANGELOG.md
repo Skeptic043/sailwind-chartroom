@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.17
+
+### Fixed
+- `Game clock %` distances now match the game's with the TimeScale mod
+
 ## 0.9.14
 
 ### Added

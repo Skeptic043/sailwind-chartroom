@@ -46,7 +46,7 @@ export function discoveredMarks(chart, { ports = [], missions = [] }, { clearRea
       const cellDegrees = 10 ** -mission.decimals;
       features.push(createFeature({
         lat: mission.approxLat, lon: mission.approxLon, name: mission.destination, day: mission.day, time: mission.time,
-        rangeNm: Math.round(cellDegrees / 2 * Math.SQRT2 * NM_PER_DEGREE * 10) / 10
+        rangeNm: Math.round(cellDegrees / 2 * Math.SQRT2 * NM_PER_DEGREE * chart.clockPercent / 100 * 10) / 10
       }));
     }
   }

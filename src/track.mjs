@@ -4,7 +4,7 @@
 // carries on across its gap. Crossing the chart's east and west edges
 // does not break it; distances there take the short way round. Also the figures for selected positions
 // and the route they make.
-import { NM_PER_DEGREE, bearingDegrees, createRoutePoint } from "./model.mjs";
+import { bearingDegrees, createRoutePoint, milesPerDegree } from "./model.mjs";
 
 // Far faster than any boat sails, even with a mod that drives it at many times its usual speed, so a fast
 // race stays one stretch and only a jump exceeds it.
@@ -36,7 +36,7 @@ export function unwrapStretch(segment) {
 }
 
 function trackLegNm(a, b) {
-  return Math.hypot(wrappedLonDelta(b.lon - a.lon), b.lat - a.lat) * NM_PER_DEGREE;
+  return Math.hypot(wrappedLonDelta(b.lon - a.lon), b.lat - a.lat) * milesPerDegree;
 }
 
 export function trackBearing(a, b) {
@@ -132,7 +132,7 @@ function distanceToSegmentNm(point, a, b) {
   const d = { x: b.lon - a.lon, y: b.lat - a.lat };
   const length = d.x * d.x + d.y * d.y;
   const t = length ? Math.min(1, Math.max(0, ((p.lon - a.lon) * d.x + (p.lat - a.lat) * d.y) / length)) : 0;
-  return Math.hypot(p.lon - (a.lon + d.x * t), p.lat - (a.lat + d.y * t)) * NM_PER_DEGREE;
+  return Math.hypot(p.lon - (a.lon + d.x * t), p.lat - (a.lat + d.y * t)) * milesPerDegree;
 }
 
 // Fewer points that stay within the tolerance of the track (Douglas-Peucker), stretch by stretch.
