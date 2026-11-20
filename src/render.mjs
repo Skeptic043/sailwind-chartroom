@@ -729,9 +729,19 @@ function drawRoute(palette) {
 
 // The map islands on show: the game's own map, and the chart's imported Scrambled Seas world.
 function vanillaIslands() {
-  const layers = activeChart().layers;
-  return [...(layers.vanillaMap ? VANILLA_MAP : []), ...(layers.importedMap ? importedMapIslands(activeChart()) : [])]
-    .filter(({ island }) => layers.secretIslands || !island.secret);
+  const chart = activeChart();
+  const { layers } = chart;
+  const discoveryOutlines = layers.vanillaMap && layers.locations && layers.islands && layers.locationIslands ? new Set() : null;
+  if (discoveryOutlines) {
+    for (const feature of chart.features) {
+      if (!feature.discovery || feature.rangeNm > 0) continue;
+      const island = chartIsland(feature);
+      if (island?.sourceCenter?.lat === feature.lat && island.sourceCenter.lon === feature.lon) discoveryOutlines.add(island.id);
+    }
+  }
+  // The interactive location already draws this outline at the vanilla position.
+  return [...(layers.vanillaMap ? VANILLA_MAP : []), ...(layers.importedMap ? importedMapIslands(chart) : [])]
+    .filter(({ island, item }) => (item || !discoveryOutlines?.has(island.id)) && (layers.secretIslands || !island.secret));
 }
 
 // The game's own map, drawn faintly beneath the player's chart. It cannot be selected or edited.
@@ -804,16 +814,9 @@ function drawFeatures(palette) {
     const selected = isSelected("feature", feature.id);
     const island = chartIsland(feature);
     context.save();
-    // A location showing its island needs no yellow mark; the outline is the mark. Far out, where the
-    // outline is smaller than a few pixels, a land-coloured dot keeps the island visible.
+    // The outline is the location's mark.
     if (island) {
       drawIslandSilhouette(feature, island, selected, palette);
-      if (islandPixelSpan(island) < MIN_VISIBLE_ISLAND_PX) {
-        context.fillStyle = palette.islandDot;
-        context.beginPath();
-        context.arc(screen.x, screen.y, symbolSize("mark"), 0, Math.PI * 2);
-        context.fill();
-      }
     } else if (feature.icon && !feature.rangeNm) {
       drawLocationIcon(context, feature.icon, screen.x, screen.y, locationIconRadius() * iconScale(feature, workspace.settings.iconSize), palette, selected);
     } else {

@@ -14,7 +14,7 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
     private let appearance = NSPopUpButton()
     private let interfaceSize = NSPopUpButton()
     private let checkUpdates = NSButton(checkboxWithTitle: "Check for updates when Chartroom starts", target: nil, action: nil)
-    private let clearReachedAreas = NSButton(checkboxWithTitle: "Clear search areas and rough areas for ports you reach", target: nil, action: nil)
+    private let clearReachedAreas = NSButton(checkboxWithTitle: "Clear search areas and rough areas for places you reach", target: nil, action: nil)
 
     /// - Parameter apply: Receives the settings on OK and Apply, after they have been checked.
     init(settings: AppSettings, defaults: [ToolShortcut], apply: @escaping (AppSettings) -> Void) {

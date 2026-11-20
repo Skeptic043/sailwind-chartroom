@@ -17,6 +17,29 @@ function ringBounds(rings) {
   return bounds;
 }
 
+const rotatedTerraOutlines = new Map();
+
+// Chart rings are east/north pairs. Positive Unity yaw turns north toward east.
+export function terraOutlineAtYaw(island, yaw) {
+  const key = `${island.id}@${yaw}`;
+  if (!rotatedTerraOutlines.has(key)) {
+    const angle = yaw * Math.PI / 180;
+    const cos = Math.round(Math.cos(angle));
+    const sin = Math.round(Math.sin(angle));
+    const shapes = island.shapes.map((shape) => ({ ...shape, rings: shape.rings.map((ring) => {
+      const rotated = [];
+      for (let i = 0; i < ring.length; i += 2) {
+        const east = ring[i];
+        const north = ring[i + 1];
+        rotated.push(cos * east + sin * north, cos * north - sin * east);
+      }
+      return rotated;
+    }) }));
+    rotatedTerraOutlines.set(key, { ...island, shapes, bounds: ringBounds(shapes.flatMap((shape) => shape.rings)) });
+  }
+  return rotatedTerraOutlines.get(key);
+}
+
 function modIsland(id, name, provider, port, sourceCenter, shapes) {
   return { id, name, region: provider, provider, port, secret: false, sourceCenter, bounds: ringBounds(shapes.flatMap((shape) => shape.rings)), shapes };
 }

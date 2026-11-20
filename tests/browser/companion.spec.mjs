@@ -129,6 +129,119 @@ test("following Voyage Recorder adds its notes once and shows its keys in the ov
   await expect(page.locator("#key-overlay")).toBeHidden();
 });
 
+test("landfall-only imports and live updates share map locations across reloads", async ({ chartroom, page }) => {
+  const session = { type: "session", game: "g1", world: { kind: "vanilla" } };
+  const atoll = { type: "landfall", day: 3, hour: 9, source: "terra-incognita", islandId: "terra incognita Atoll (route) #12", name: "Atoll (route) #12", lat: 30.201, lon: -2.451, islandLat: 30.205, islandLon: -2.455 };
+  const atollLabel = "Atoll #12";
+  const boneIsle = { type: "landfall", day: 3, hour: 10, source: "native", islandId: "36", lat: 39, lon: 4, islandLat: 39.01, islandLon: 4.01 };
+  const file = { name: "slot1.jsonl", mimeType: "text/plain", buffer: Buffer.from(lines(session, atoll)) };
+  const workspace = { activeChartId: "landfalls", charts: [{ id: "landfalls", layers: { vanillaMap: true, secretIslands: true }, searches: [
+    { id: "bone-search", lat: 39, lon: 3.5, bearing: 90, distanceNm: 70, label: "bone isle" },
+    { id: "oasis-search", lat: 31, lon: -4, bearing: 90, distanceNm: 70, label: "Oasis" }
+  ] }] };
+  await chartroom.open(workspace, { recording: { name: file.name, runs: [lines(session, atoll), lines({ ...atoll, lat: 30.208 }, boneIsle)] } });
+  await page.locator("#track-file").setInputFiles(file);
+  await expect(chartroom.items().filter({ hasText: atollLabel })).toHaveCount(1);
+  const screen = await page.evaluate(async ({ lat, lon }) => (await import("/src/viewport.mjs")).worldToScreen({ lat, lon }), atoll);
+  await chartroom.clickChart(screen.x, screen.y);
+  await expect(page.locator("#feature-name")).toHaveValue(atollLabel);
+
+  await page.locator('.app-menu[data-menu="voyage"] > summary').click();
+  await page.locator("#follow-track").click();
+  await expect.poll(() => page.evaluate(() => window.__host.workspace?.charts?.[0]?.features?.length ?? 0)).toBe(2);
+  await expect(chartroom.items().filter({ hasText: "Bone Isle" })).toHaveCount(1);
+  const chart = await chartroom.chart();
+  expect(chart.features[0]).toMatchObject({ name: atollLabel, lat: atoll.lat, lon: atoll.lon, showIsland: false });
+  expect(chart.features[1]).toMatchObject({ name: "Bone Isle", islandId: "aestrin/bone_isle", showIsland: true });
+  expect(chart.searches.map(({ label }) => label)).toEqual(["Oasis"]);
+  expect(chart.track).toHaveLength(0);
+
+  await page.reload();
+  await expect(chartroom.items().filter({ hasText: "Bone Isle" })).toHaveCount(1);
+  await page.locator("#track-file").setInputFiles(file);
+  expect((await chartroom.chart()).features.map(({ id }) => id)).toEqual(chart.features.map(({ id }) => id));
+});
+
+test("a recorded location on a relocated island draws the shifted outline", async ({ chartroom, page }) => {
+  const session = { type: "session", game: "g1", world: { kind: "scrambled", layout: "test" } };
+  const mark = { type: "position", event: "mark", day: 3, hour: 9, lat: 34.3, lon: 13.02 };
+  const landfall = { ...mark, type: "landfall", source: "native", islandId: "38", islandLat: 34.32, islandLon: 13.03, offsetLat: 2.875, offsetLon: 7.75 };
+  await chartroom.open(null, { recording: { name: "slot1.jsonl", runs: [lines(session), lines(mark, landfall)] } });
+  await page.locator('.app-menu[data-menu="voyage"] > summary').click();
+  await page.locator("#follow-track").click();
+  await expect(chartroom.items().filter({ hasText: "Turtle Island" })).toHaveCount(1);
+  const chart = await chartroom.chart();
+  expect(chart.features[0]).toMatchObject({ islandId: "emerald/turtle_island", showIsland: true });
+  expect(chart.features[0].lat).toBeCloseTo(31.43298 + landfall.offsetLat, 6);
+  expect(chart.features[0].lon).toBeCloseTo(5.2606 + landfall.offsetLon, 6);
+});
+
+test("small island locations draw their outlines without oversized dots", async ({ chartroom, page }) => {
+  await chartroom.open({ activeChartId: "islands", charts: [{ id: "islands", view: { lat: 34, lon: 13, zoom: 16 }, features: [
+    { id: "discovered", lat: 34.3, lon: 13.02, name: "Turtle Island", islandId: "emerald/turtle_island",
+      discovery: { source: "native", islandId: "38", islandLat: 34.32, islandLon: 13.03 } },
+    { id: "manual", lat: 31.43, lon: 10, name: "My island", islandId: "emerald/turtle_island" },
+    { id: "pin", lat: 35, lon: 15, name: "Just a pin", showIsland: false }
+  ] }] });
+  const result = await page.evaluate(async () => {
+    const { activeChart } = await import("/src/state.mjs");
+    const { drawChart } = await import("/src/render.mjs");
+    const { chartIsland, islandPixelSpan, worldToScreen } = await import("/src/viewport.mjs");
+    const points = activeChart().features.map((feature) => ({ ...worldToScreen(feature), arcs: 0 }));
+    const context = document.querySelector("#chart-canvas").getContext("2d");
+    const arc = context.arc;
+    context.arc = function (x, y, ...args) {
+      for (const point of points) {
+        if (Math.abs(point.x - x) < 1e-6 && Math.abs(point.y - y) < 1e-6) point.arcs++;
+      }
+      return arc.call(this, x, y, ...args);
+    };
+    try { drawChart(); } finally { context.arc = arc; }
+    return { span: islandPixelSpan(chartIsland(activeChart().features[0])), arcs: points.map(({ arcs }) => arcs) };
+  });
+  expect(result.span).toBeLessThan(5);
+  expect(result.arcs).toEqual([0, 0, 1]);
+});
+
+test("following a later port arrival upgrades the imported landing and preserves it through undo", async ({ chartroom, page }) => {
+  const session = { type: "session", game: "g1", world: { kind: "scrambled", layout: "test" } };
+  const landing = { type: "landfall", day: 3, hour: 9, source: "native", islandId: "38",
+    lat: 34.31, lon: 13.02, islandLat: 34.32, islandLon: 13.03 };
+  const port = { type: "port", day: 3, hour: 10, island: 38, port: "Turtle Island",
+    lat: landing.islandLat, lon: landing.islandLon, offsetLat: 2.875, offsetLon: 7.75 };
+  const depart = { type: "depart", day: 3, hour: 11, island: port.island, port: port.port };
+  const file = { name: "slot1.jsonl", mimeType: "text/plain" };
+  await chartroom.open(null, { recording: { name: file.name, runs: [lines(session, port, depart)] } });
+  await page.locator("#track-file").setInputFiles({ ...file, buffer: Buffer.from(lines(session, landing)) });
+  const imported = (await chartroom.chart()).features[0];
+  expect(imported).toMatchObject({ islandId: "emerald/turtle_island", showIsland: false });
+
+  const screen = await page.evaluate(async ({ lat, lon }) => (await import("/src/viewport.mjs")).worldToScreen({ lat, lon }), landing);
+  await chartroom.clickChart(screen.x, screen.y);
+  const name = page.locator("#feature-name");
+  await expect(name).toHaveValue("Turtle Island");
+  await name.fill("My landing");
+  await name.press("Tab");
+  await page.locator('.app-menu[data-menu="voyage"] > summary').click();
+  await page.locator("#follow-track").click();
+  await expect.poll(async () => (await chartroom.chart()).visits.map(({ kind }) => kind)).toEqual(["arrive", "depart"]);
+  const checkOutline = async (expectedName) => {
+    const { features } = await chartroom.chart();
+    expect(features).toHaveLength(1);
+    expect(features[0]).toMatchObject({ id: imported.id, name: expectedName, showIsland: true });
+    expect(features[0].lat).toBeCloseTo(34.30798, 6);
+    expect(features[0].lon).toBeCloseTo(13.01060, 6);
+  };
+  await checkOutline("My landing");
+
+  await chartroom.press("Control+z");
+  await checkOutline("Turtle Island");
+  await page.reload();
+  await page.locator("#track-file").setInputFiles({ ...file, buffer: Buffer.from(lines(session, landing, port, depart)) });
+  await checkOutline("Turtle Island");
+  expect((await chartroom.chart()).visits.map(({ kind }) => kind)).toEqual(["arrive", "depart"]);
+});
+
 test("equipment readings are switched on per chart with the instruments the player has", async ({ chartroom, page }) => {
   await chartroom.open();
   await page.locator("#equipment-panel > summary").click();

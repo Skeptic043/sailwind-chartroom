@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.26
+
+### Added
+- Islands can now be automatically charted with the new `Island landfalls` setting in [Voyage Recorder 0.2.8](https://github.com/Skeptic043/sailwind-voyage-recorder/releases/latest)
+- Landfalls clear nearby matching search areas and rough areas when automatic clearing is enabled
+- Automatically charted Terra Incognita islands use short names such as Volcanic Bay #13
+
 ## 0.9.18
 
 ### Added

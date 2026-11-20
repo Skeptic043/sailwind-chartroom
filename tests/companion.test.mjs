@@ -2,14 +2,26 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { ICON_SIZES, iconScale, createChart, createFeature, createNote, createWorkspace, importChartData, itemShown, newRecorderNotes, newVisits, readVoyageRecorder, removeChartItems, sanitizeChart, sanitizeWorkspace, SCHEMA_VERSION } from "../src/model.mjs";
+import { ICON_SIZES, iconScale, createChart, createFeature, createNote, createSearch, createWorkspace, importChartData, itemShown, newRecorderNotes, newVisits, readVoyageRecorder, removeChartItems, sanitizeChart, sanitizeWorkspace, SCHEMA_VERSION } from "../src/model.mjs";
 import { instrumentsAt, localHours, readingKnowledge, sanitizeEquipment, setInstruments } from "../src/equipment.mjs";
 import { chartGroups, createFolder, deleteFolder, moveChartToFolder, shiftChart, shiftFolder } from "../src/folders.mjs";
 import { buildVoyageFile, defaultShare, exportablePoints, hashGameId, parseVoyageFile, positionAtElapsed, sameWorld } from "../src/voyages.mjs";
+import { applyMarks, discoveredMarks } from "../src/discoveries.mjs";
+import { islandById, visibleIsland } from "../src/islands.mjs";
 
 const fixture = async (name) => JSON.parse(await readFile(new URL(`./fixtures/${name}`, import.meta.url), "utf8"));
 
 const log = (...records) => records.map((record) => JSON.stringify(record)).join("\n");
+
+function relocatedArrivals() {
+  const session = { type: "session", game: "g1", world: { kind: "scrambled" } };
+  const landing = { type: "landfall", day: 3, hour: 9, source: "native", islandId: "38",
+    lat: 34.31, lon: 13.02, islandLat: 34.32, islandLon: 13.03 };
+  const offset = { offsetLat: 2.8751234, offsetLon: 7.7504321 };
+  const port = { type: "port", day: 3, hour: 10, island: 38, port: "Turtle Island",
+    lat: landing.islandLat, lon: landing.islandLon, ...offset };
+  return { session, landing, port, offset, outline: { lat: 34.3081034, lon: 13.0110321 } };
+}
 
 test("a 0.8.11 chart opens unchanged, with the new parts empty", async () => {
   const [chart] = importChartData(await fixture("chartroom-0.8.11-chart.json"));
@@ -81,6 +93,229 @@ test("Voyage Recorder 0.2.0 lines give notes, visits, the world, mods and keys",
   const chart = createChart();
   chart.visits.push(...newVisits(chart, voyage.visits));
   assert.deepEqual(newVisits(chart, voyage.visits), [], "visits already on the chart aren't added twice");
+});
+
+test("return visits and reimports keep one landfall per island, including after reopening the chart", () => {
+  const atoll = { type: "landfall", day: 3, hour: 9, source: "terra-incognita", islandId: "terra incognita Atoll (route) #12", name: "Atoll (route) #12", lat: 30.201, lon: -2.451, islandLat: 30.205, islandLon: -2.455 };
+  const returned = { ...atoll, hour: 10, lat: 30.208, islandLat: 30.20501 };
+  const otherAtoll = { ...atoll, islandId: "terra incognita Atoll (route) #13", name: "Atoll (route) #13", lat: 30.21, islandLat: 30.22 };
+  const regenerated = { ...atoll, lat: 30.301, islandLat: 30.305 };
+  const recorded = readVoyageRecorder(log(atoll, returned, otherAtoll, regenerated, { ...atoll, islandLat: null }));
+  assert.equal(recorded.landfalls.length, 4);
+  const chart = createChart();
+  applyMarks(chart, discoveredMarks(chart, recorded));
+  assert.deepEqual(chart.features.map(({ name, lat }) => [name, lat]), [["Atoll #12", atoll.lat], ["Atoll #13", otherAtoll.lat], ["Atoll #12", regenerated.lat]]);
+  assert.ok(chart.features.every((feature) => !feature.islandId && !feature.showIsland));
+  chart.features[0].name = "My landing";
+  chart.features[0].lat += 0.01;
+  const reopened = sanitizeChart(JSON.parse(JSON.stringify(chart)));
+  assert.equal(discoveredMarks(reopened, recorded).features.length, 0);
+  assert.equal(reopened.features[0].name, "My landing");
+  // Live updates also apply to older undo snapshots, which may already have the location.
+  applyMarks(reopened, discoveredMarks(createChart(), recorded));
+  assert.equal(reopened.features.length, 3);
+});
+
+test("a SeaStacks landfall upgrades its old pin to the recorded variant and orientation", () => {
+  const landing = { type: "landfall", day: 3, hour: 9, source: "terra-incognita",
+    islandId: "terra incognita SeaStacks (scatter:archipelago0@(41000,-43000)) #1",
+    name: "SeaStacks (scatter:archipelago0@(41000,-43000)) #1",
+    lat: 31.4105, lon: 3.559, islandLat: 31.413, islandLon: 3.5569 };
+  const visit = { ...landing, prefab: "stacks_13", yaw: 270 };
+  const update = (chart, record) => applyMarks(chart, discoveredMarks(chart, readVoyageRecorder(log(record))));
+  const fresh = createChart();
+  fresh.features.push(createFeature({ lat: landing.lat, lon: landing.lon, name: landing.name, rangeNm: 5 }));
+  update(fresh, visit);
+  assert.deepEqual(fresh.features.map(({ name, rangeNm }) => [name, rangeNm]), [["Sea Stacks #1", 0]],
+    "the display label is shortened while the recorded name still resolves the matching area");
+  const old = createChart();
+  update(old, landing);
+  const [pin] = old.features;
+  assert.equal(visibleIsland(pin), null, "a family name does not identify an outline");
+  pin.notes = "A sheltered landing";
+
+  const chart = sanitizeChart(JSON.parse(JSON.stringify(old)));
+  update(chart, visit);
+  assert.deepEqual(chart.features.map(({ id, islandId, lat, lon, notes }) => [id, islandId, lat, lon, notes]),
+    [[pin.id, "terra-incognita/stacks_13", landing.islandLat, landing.islandLon, pin.notes]]);
+  const reopened = sanitizeChart(JSON.parse(JSON.stringify(chart)));
+  const island = visibleIsland(reopened.features[0]);
+  const [east, north] = islandById("terra-incognita/stacks_13").shapes[0].rings[0];
+  assert.deepEqual(island.shapes[0].rings[0].slice(0, 2), [-north, east], "a 270° yaw rotates the outline around the recorded root");
+  update(reopened, visit);
+  assert.equal(reopened.features.length, 1);
+});
+
+test("Terra Incognita locations display the family and number while keeping recorded identity and custom labels", () => {
+  const name = "VolcanicBay (scatter:archipelago2@(43000,-33000)) #13";
+  const landing = { type: "landfall", day: 3, hour: 9, source: "terra-incognita",
+    islandId: `terra incognita ${name}`, name, prefab: "volcanic_3", yaw: 0,
+    lat: 31.4, lon: 3.559, islandLat: 31.401, islandLon: 3.5569 };
+  const chart = createChart();
+  const recorded = readVoyageRecorder(log(landing));
+  applyMarks(chart, discoveredMarks(chart, recorded));
+  const [feature] = chart.features;
+  assert.equal(feature.name, "Volcanic Bay #13");
+  assert.equal(feature.discovery.islandId, landing.islandId);
+  assert.equal(recorded.landfalls[0].name, name);
+
+  feature.name = name;
+  const reopened = sanitizeChart(JSON.parse(JSON.stringify(chart)));
+  assert.equal(reopened.features[0].name, "Volcanic Bay #13", "an existing automatic label is shortened on load");
+  assert.equal(reopened.features[0].id, feature.id);
+  feature.name = "My volcanic anchorage (west) #13";
+  assert.equal(sanitizeChart(chart).features[0].name, feature.name, "a custom label is preserved");
+});
+
+test("known native landfalls share a chart location with their island or port", () => {
+  const island = islandById("alankh/gold_rock_city");
+  const landfall = { type: "landfall", day: 3, hour: 9, source: "native", islandId: "1", lat: island.sourceCenter.lat + 0.01, lon: island.sourceCenter.lon, islandLat: island.sourceCenter.lat, islandLon: island.sourceCenter.lon };
+  const port = { type: "port", day: 3, hour: 10, island: 1, port: island.name, lat: landfall.islandLat, lon: landfall.islandLon };
+  const previousGame = { type: "session", game: "g1", world: { kind: "scrambled", layout: "ff00" } };
+  const vanillaGame = { type: "session", game: "g2", world: { kind: "vanilla" } };
+  const carry = {};
+  const chart = createChart();
+  chart.layers.vanillaMap = true;
+  const recorded = readVoyageRecorder(log(previousGame, landfall, vanillaGame, landfall), carry, { latestGame: true });
+  assert.equal(recorded.landfalls.length, 1);
+  const landingMarks = discoveredMarks(chart, recorded);
+  assert.deepEqual(landingMarks.features.map(({ islandId, lat, lon, showIsland }) => ({ islandId, lat, lon, showIsland })), [{ islandId: island.id, ...island.sourceCenter, showIsland: true }]);
+  applyMarks(chart, landingMarks);
+  const portLater = readVoyageRecorder(log(port), carry);
+  assert.equal(portLater.visits.length, 1);
+  assert.equal(discoveredMarks(chart, portLater).features.length, 0);
+
+  const portFirst = createChart();
+  applyMarks(portFirst, discoveredMarks(portFirst, portLater));
+  assert.equal(discoveredMarks(portFirst, recorded).features.length, 0);
+  const both = discoveredMarks(createChart(), readVoyageRecorder(log(vanillaGame, landfall, port)));
+  assert.equal(both.features.length, 1);
+  assert.deepEqual(both.features.map(({ islandId, lat, lon, showIsland }) => ({ islandId, lat, lon, showIsland })),
+    [{ islandId: island.id, ...island.sourceCenter, showIsland: true }]);
+  const relocated = readVoyageRecorder(log(previousGame, { ...landfall, lat: 45, lon: 20, islandLat: 45.01, islandLon: 20.01 }));
+  assert.deepEqual(discoveredMarks(chart, relocated).features.map(({ lat, lon, showIsland }) => ({ lat, lon, showIsland })), [{ lat: 45, lon: 20, showIsland: false }]);
+});
+
+test("a landfall resolves its named areas like a manual location, including when replayed", () => {
+  const chart = createChart();
+  const centre = islandById("emerald/pondering_peak").sourceCenter;
+  const search = createSearch({ lat: centre.lat, lon: centre.lon - 0.5, bearing: 90, distanceNm: 70, label: "pondering  peak" });
+  const other = createSearch({ ...search, label: "New Port" });
+  const distant = createSearch({ ...search, lat: centre.lat + 3 });
+  const rough = createFeature({ ...centre, name: "Pondering Peak", rangeNm: 5 });
+  chart.searches.push(search, other, distant);
+  chart.features.push(rough);
+  const recorded = readVoyageRecorder(log(
+    { type: "session", game: "g1", world: { kind: "vanilla" } },
+    { type: "landfall", day: 3, hour: 9, source: "native", islandId: "39", ...centre, islandLat: centre.lat, islandLon: centre.lon },
+    { type: "mission", day: 3, hour: 9, origin: "New Port", originIsland: 12, originLat: search.lat, originLon: search.lon,
+      destination: "Pondering Peak", destinationIsland: 39, heading: 90, miles: 70, points: 16 }
+  ));
+  const retained = discoveredMarks(chart, recorded, { clearReached: false });
+  assert.deepEqual([retained.answered, retained.cleared], [[], []]);
+  const marks = discoveredMarks(chart, recorded);
+  assert.deepEqual([marks.answered, marks.cleared, marks.searches], [[search.id], [rough.id], []]);
+  applyMarks(chart, marks);
+  assert.deepEqual(chart.searches.map(({ id }) => id), [other.id, distant.id]);
+  chart.searches.push(search);
+  const replay = discoveredMarks(chart, recorded);
+  assert.deepEqual([replay.answered, replay.features], [[search.id], []]);
+});
+
+test("a relocated native landfall applies its recorded outline offset and upgrades an old pin", () => {
+  const island = islandById("emerald/turtle_island");
+  const session = { type: "session", game: "g1", world: { kind: "scrambled" } };
+  const landing = { type: "landfall", day: 3, hour: 9, source: "native", islandId: "38", lat: 34.31, lon: 13.02, islandLat: 34.32, islandLon: 13.03 };
+  const withOffset = { ...landing, lat: 34.315, offsetLat: 2.8751234, offsetLon: 7.7504321 };
+  const position = { lat: island.sourceCenter.lat + withOffset.offsetLat, lon: island.sourceCenter.lon + withOffset.offsetLon };
+  const found = readVoyageRecorder(log(session, landing, withOffset));
+  const fresh = discoveredMarks(createChart(), found);
+  assert.deepEqual(fresh.features.map(({ lat, lon, showIsland }) => ({ lat, lon, showIsland })), [{ ...position, showIsland: true }]);
+
+  const portFirst = createChart();
+  const port = { type: "port", day: 3, hour: 8, island: 38, port: "Turtle Island", lat: withOffset.islandLat, lon: withOffset.islandLon,
+    offsetLat: withOffset.offsetLat, offsetLon: withOffset.offsetLon };
+  applyMarks(portFirst, discoveredMarks(portFirst, readVoyageRecorder(log(session, port))));
+  const portLocation = portFirst.features[0].id;
+  assert.equal(discoveredMarks(portFirst, readVoyageRecorder(log(session, withOffset))).features.length, 0,
+    "a later shifted landfall reuses the port's outline position even when the game root is outside the outline");
+  applyMarks(portFirst, fresh);
+  assert.deepEqual(portFirst.features.map(({ id }) => id), [portLocation], "applying the landfall to an older undo snapshot also reuses the port outline");
+
+  const old = {
+    ...createFeature({ lat: landing.lat, lon: landing.lon, islandId: island.id, showIsland: false, name: "My landing", notes: "Walked ashore" }),
+    landfall: { source: landing.source, islandId: landing.islandId, islandLat: landing.islandLat, islandLon: landing.islandLon }
+  };
+  const chart = sanitizeChart({ ...createChart(), features: [old] });
+  const moved = sanitizeChart({ ...createChart(), features: [{ ...old, lat: old.lat + 0.01 }] });
+  assert.equal(discoveredMarks(moved, found).outlines.length, 0, "a manually moved marker keeps its placement");
+  applyMarks(chart, discoveredMarks(chart, found));
+  assert.deepEqual(chart.features.map(({ id, name, notes, lat, lon, showIsland }) => ({ id, name, notes, lat, lon, showIsland })),
+    [{ id: old.id, name: "My landing", notes: "Walked ashore", ...position, showIsland: true }]);
+});
+
+test("a later port record upgrades the same relocated landfall pin after reopening", () => {
+  const { session, landing, port, outline } = relocatedArrivals();
+  const chart = createChart();
+  applyMarks(chart, discoveredMarks(chart, readVoyageRecorder(log(session, landing))));
+  const { id } = chart.features[0];
+  chart.features[0].name = "My landing";
+  chart.features[0].notes = "First time ashore";
+  const reopened = sanitizeChart(JSON.parse(JSON.stringify(chart)));
+  const incoming = readVoyageRecorder(log(session, port));
+  for (const edit of [{ lat: 34 }, { locked: true }]) {
+    const edited = sanitizeChart({ ...chart, features: [{ ...chart.features[0], ...edit }] });
+    applyMarks(edited, discoveredMarks(edited, incoming));
+    assert.deepEqual(edited.features.map((feature) => [feature.id, feature.lat, feature.showIsland]),
+      [[id, edit.lat ?? landing.lat, false]], "a moved or locked pin keeps its placement");
+  }
+  applyMarks(reopened, discoveredMarks(reopened, incoming));
+  assert.deepEqual(reopened.features.map(({ id, name, notes, showIsland }) => ({ id, name, notes, showIsland })),
+    [{ id, name: "My landing", notes: "First time ashore", showIsland: true }]);
+  assert.ok(Math.abs(reopened.features[0].lat - outline.lat) < 1e-7 &&
+    Math.abs(reopened.features[0].lon - outline.lon) < 1e-7, "the port supplies the shifted outline position");
+
+  const imported = readVoyageRecorder(log(session, landing, port));
+  assert.equal(imported.landfalls.length, 1);
+  assert.deepEqual(imported.visits.map(({ kind, port }) => [kind, port]), [["arrive", "Turtle Island"]]);
+  const batch = discoveredMarks(createChart(), imported);
+  assert.deepEqual(batch.features.map(({ lat, lon, showIsland }) => ({ lat, lon, showIsland })),
+    reopened.features.map(({ lat, lon, showIsland }) => ({ lat, lon, showIsland })));
+  assert.equal(discoveredMarks(reopened, imported).features.length, 0, "replaying the same arrivals adds nothing");
+});
+
+test("a relocated port marker keeps its edit when the same island is reached ashore", () => {
+  const { session, landing, port, offset } = relocatedArrivals();
+  const chart = createChart();
+  applyMarks(chart, discoveredMarks(chart, readVoyageRecorder(log(session, port))));
+  const existing = chart.features[0];
+  Object.assign(existing, { lat: existing.lat + 1, name: "My anchorage", notes: "Sheltered" });
+  const reopened = sanitizeChart(JSON.parse(JSON.stringify(chart)));
+  const landingMarks = discoveredMarks(reopened, readVoyageRecorder(log(session, { ...landing, ...offset })));
+  applyMarks(reopened, landingMarks);
+  assert.deepEqual(reopened.features.map(({ id, lat, lon, name, notes }) => [id, lat, lon, name, notes]),
+    [[existing.id, existing.lat, existing.lon, existing.name, existing.notes]]);
+});
+
+test("nearby recorded islands with the same label have separate locations", () => {
+  const { session, port } = relocatedArrivals();
+  const arrivals = readVoyageRecorder(log(session, port, { ...port, island: 37, lat: port.lat + 0.0005 }));
+  const chart = createChart();
+  applyMarks(chart, discoveredMarks(chart, arrivals));
+  assert.deepEqual(chart.features.map(({ islandId }) => islandId), ["emerald/turtle_island", "emerald/dead_cove"]);
+});
+
+test("a same-name port record without an island ID reuses a known discovery at the reported root", () => {
+  const { session, port } = relocatedArrivals();
+  const chart = createChart();
+  applyMarks(chart, discoveredMarks(chart, readVoyageRecorder(log(session, port))));
+  const [existing] = chart.features;
+  const withoutIsland = { ...port, island: -1, port: "Turtle  Island" };
+  applyMarks(chart, discoveredMarks(chart, readVoyageRecorder(log(session, withoutIsland))));
+  assert.deepEqual(chart.features.map(({ id }) => id), [existing.id]);
+  const elsewhere = { ...withoutIsland, lat: port.lat + 0.1 };
+  applyMarks(chart, discoveredMarks(chart, readVoyageRecorder(log(session, elsewhere))));
+  assert.equal(chart.features.length, 2, "an unrecognized port elsewhere has its own pin");
 });
 
 test("equipment readings show only what the instruments could find", () => {

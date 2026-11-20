@@ -1,7 +1,11 @@
 import { test as base, expect } from "@playwright/test";
 import { readFile } from "node:fs/promises";
+import { pathToFileURL } from "node:url";
+import { resolve, sep } from "node:path";
 
-const root = new URL("../../", import.meta.url);
+const root = process.env.SAILWIND_PAIR_WEB_DIR
+  ? pathToFileURL(resolve(process.env.SAILWIND_PAIR_WEB_DIR) + sep)
+  : new URL("../../", import.meta.url);
 const types = { ".html": "text/html", ".css": "text/css", ".mjs": "text/javascript", ".txt": "text/plain", ".png": "image/png", ".jpg": "image/jpeg" };
 // The same served names and headers as desktop/MainForm.cs, so the page runs under the shipped CSP.
 const served = { "/LICENSE.txt": "LICENSE", "/THIRD-PARTY-NOTICES.txt": "THIRD-PARTY-NOTICES.md" };

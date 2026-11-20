@@ -19,7 +19,7 @@ internal sealed class SettingsForm : Form
     private readonly ComboBox interfaceSize = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 190 };
     private readonly ComboBox iconSize = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 190 };
     private readonly CheckBox checkUpdates = new() { Text = "Check for updates when Chartroom starts", AutoSize = true };
-    private readonly CheckBox clearReachedAreas = new() { Text = "Clear search areas and rough areas for ports you reach", AutoSize = true };
+    private readonly CheckBox clearReachedAreas = new() { Text = "Clear search areas and rough areas for places you reach", AutoSize = true };
     private readonly AppSettings current;
     private readonly Action<AppSettings> apply;
 

@@ -11,12 +11,12 @@ export function importTrackText(text) {
   // A save slot's log can hold earlier games; only the latest is imported.
   const voyage = isVoyageRecorderText(text) ? readVoyageRecorder(text, undefined, { latestGame: true }) : null;
   const points = voyage ? voyage.points : parseTrackText(text);
-  if (!points.length && !voyage?.ports.length && !voyage?.missions.length && !voyage?.notes.length) throw new Error("No valid recorded positions were found.");
+  if (!points.length && !voyage?.ports.length && !voyage?.landfalls.length && !voyage?.missions.length && !voyage?.notes.length) throw new Error("No valid recorded positions were found.");
   if (voyage?.keys) workspace.settings.recorderKeys = voyage.keys;
   commit((chart) => {
     for (const point of points) chart.track.push(point);
     if (points.length) revealLayer(chart, "track", points[0]);
-    // A recording's ports and missions become marks too, as when following it.
+    // Ports, landfalls and missions become marks too, as when following the recording.
     if (!voyage) return;
     const marks = discoveredMarks(chart, voyage, { clearReached: workspace.settings.clearReachedAreas });
     applyMarks(chart, marks);

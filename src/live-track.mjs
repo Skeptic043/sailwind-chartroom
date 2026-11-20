@@ -1,7 +1,7 @@
 // Follows Voyage Recorder or Coordinate Viewer as it records: the desktop host finds or asks for the file,
 // watches it and sends each new run of lines.
 import { isVoyageRecorderText, parseTrackText, readVoyageRecorder, revealLayer } from "./model.mjs";
-import { addRecordingExtras, discoveredMarks, hasMarks, removeAnswered } from "./discoveries.mjs";
+import { addRecordingExtras, applyMarks, discoveredMarks, hasMarks } from "./discoveries.mjs";
 import { elements, showToast } from "./dom.mjs";
 import { activeChart, appendOutsideHistory, changeOutsideHistory, host, insertOutsideHistory, live, persist, workspace } from "./state.mjs";
 import { joinRecording } from "./track.mjs";
@@ -36,6 +36,7 @@ export function initLiveTrack() {
     wholeFile = resumed !== true;
     carry.newSession = false;
     carry.game = null;
+    carry.vanilla = resumed === true && workspace.charts.find((chart) => chart.id === followedChartId)?.recording?.world?.kind === "vanilla";
     fileName = String(name ?? "");
     startedFrom = /\.jsonl$/i.test(fileName) ? "follow-track" : "follow-track-cv";
     renderButton();
@@ -71,7 +72,7 @@ function addPositions(text) {
   // Its chart was deleted, so there is nowhere left to put the positions.
   if (!chart) return host.stopTrack();
   let points;
-  let found = { ports: [], missions: [], notes: [], visits: [], session: null, keys: null, newGames: 0, undone: [] };
+  let found = { ports: [], landfalls: [], missions: [], notes: [], visits: [], session: null, keys: null, newGames: 0, undone: [] };
   // Only the latest game in the whole file joins the chart.
   const firstRun = wholeFile;
   wholeFile = false;
@@ -125,16 +126,14 @@ function addPositions(text) {
   if (first) centerOn(latest);
 }
 
-// Ports reached and missions read change the chart outside undo, like the positions, and show their layers.
+// Automatic discoveries change the chart outside undo, like the positions, and show their layers.
 function addMarks(chart, marks) {
   if (!hasMarks(marks)) return;
-  const { features, searches, cleared, answered } = marks;
-  changeOutsideHistory(chart, (target) => removeAnswered(target, marks));
-  appendOutsideHistory(chart, "features", features);
-  appendOutsideHistory(chart, "searches", searches);
+  const { features, searches, outlines, cleared, answered } = marks;
+  changeOutsideHistory(chart, (target) => applyMarks(target, target === chart ? marks : structuredClone(marks)));
   for (const feature of features) revealLayer(chart, "feature", feature);
   for (const search of searches) revealLayer(chart, "search", search);
-  const names = [...features.map((item) => item.name), ...searches.map((item) => item.label)].filter(Boolean);
+  const names = [...features, ...outlines, ...searches].map((item) => item.name ?? item.label).filter(Boolean);
   const count = answered.length + cleared.length;
   const resolved = count ? ` Resolved ${count} area${count === 1 ? "" : "s"}.` : "";
   showToast(`From Voyage Recorder: ${names.join(", ") || "nothing new"}.${resolved}`);

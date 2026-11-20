@@ -1,4 +1,6 @@
 # Tests, publishes and packages Sailwind Chartroom as artifacts/SailwindChartroom-<version>.zip.
+param([string]$ArtifactDirectory = (Join-Path (Split-Path -Parent $PSScriptRoot) 'artifacts'))
+
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 Push-Location $root
@@ -31,7 +33,7 @@ try {
         if ($unexpected) { throw "Publish produced files the package would leave out: $($unexpected.Name -join ', ')" }
 
         Add-Type -AssemblyName System.IO.Compression.FileSystem
-        $outputDir = Join-Path $root 'artifacts'
+        $outputDir = $ArtifactDirectory
         New-Item -ItemType Directory -Force $outputDir | Out-Null
         $destination = Join-Path $outputDir "SailwindChartroom-$version.zip"
         $temporary = "$destination.$([Guid]::NewGuid().ToString('N')).tmp"

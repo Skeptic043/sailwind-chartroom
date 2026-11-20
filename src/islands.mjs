@@ -1,5 +1,5 @@
 import { ISLAND_CATALOG as SOURCE_ISLANDS } from "./island-catalog.generated.mjs";
-import { MOD_ISLANDS } from "./mod-islands.mjs";
+import { MOD_ISLANDS, terraOutlineAtYaw } from "./mod-islands.mjs";
 
 // Rock of Despair is marked secret in the source map, but it is not a secret island.
 const NOT_SECRET = new Set(["aestrin/rock_of_despair"]);
@@ -73,7 +73,10 @@ export function assignedIsland(feature) {
 }
 
 export function visibleIsland(feature) {
-  return feature?.showIsland === false ? null : assignedIsland(feature);
+  if (feature?.showIsland === false) return null;
+  const island = assignedIsland(feature);
+  const { prefab, yaw } = feature?.discovery ?? {};
+  return yaw && island?.id === `terra-incognita/${prefab}` ? terraOutlineAtYaw(island, yaw) : island;
 }
 
 // A search area shows the island it is looking for: the one chosen for it, or the one it is named after.

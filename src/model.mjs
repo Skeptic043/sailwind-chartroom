@@ -365,8 +365,8 @@ function sanitizeLayout(value) {
   };
 }
 
-export function createFeature({ lat, lon, name = "New location", notes = "", day = "", time = "", rangeNm = 0, islandId = "", showIsland = true, boatIds = [], icon = "", size = "" }) {
-  return sanitizeFeature({ id: makeId("feature"), lat, lon, name, notes, day, time, rangeNm, islandId, showIsland, boatIds, icon, size });
+export function createFeature({ lat, lon, name = "New location", notes = "", day = "", time = "", rangeNm = 0, islandId = "", showIsland = true, boatIds = [], icon = "", size = "", discovery = null }) {
+  return sanitizeFeature({ id: makeId("feature"), lat, lon, name, notes, day, time, rangeNm, islandId, showIsland, boatIds, icon, size, discovery });
 }
 
 export function locationRangeForType(type, rangeNm) {
@@ -854,11 +854,16 @@ function sanitizeFeature(value) {
   if (!value || !isFiniteCoordinate(value.lat, value.lon)) return null;
   const islandId = cleanText(value.islandId, 120);
   const boatIds = sanitizeBoatIds(value);
+  const discovery = sanitizeDiscovery(value.discovery) ?? sanitizeDiscovery(value.landfall);
+  const pin = value.discovery?.pin;
+  if (discovery && Number.isFinite(pin?.lat) && Number.isFinite(pin?.lon) && isFiniteCoordinate(pin.lat, pin.lon)) {
+    discovery.pin = { lat: pin.lat, lon: pin.lon };
+  }
   return {
     id: cleanText(value.id, 120) || makeId("feature"),
     lat: Number(value.lat),
     lon: Number(value.lon),
-    name: cleanText(value.name, 100),
+    name: discoveryLabel(cleanText(value.name, 100), discovery),
     notes: cleanText(value.notes, MAX_ENCOUNTER_NOTES),
     day: cleanText(value.day, 30),
     time: cleanText(value.time, 30),
@@ -869,8 +874,30 @@ function sanitizeFeature(value) {
     ...(boatIds.length && { boatIds }),
     // An icon for what was seen there, drawn instead of the plain mark (icons.mjs).
     ...(isLocationIcon(value.icon) && { icon: value.icon }),
+    ...(discovery && { discovery }),
     ...sizeField(value),
     ...lockedFlag(value)
+  };
+}
+
+function discoveryLabel(name, discovery) {
+  if (discovery?.source !== "terra-incognita") return name;
+  const generated = /^terra incognita (([A-Za-z]+) \(.+\) (#\d+))$/.exec(discovery.islandId);
+  if (!generated || (name !== cleanText(generated[1], 100) && name !== cleanText(discovery.islandId, 100))) return name;
+  return `${generated[2].replace(/([a-z])([A-Z])/g, "$1 $2")} ${generated[3]}`;
+}
+
+// The recorder's identity and island root stay with the location when the player renames or moves it.
+function sanitizeDiscovery(value) {
+  if (value?.source !== "native" && value?.source !== "terra-incognita") return null;
+  const { source, islandLat, islandLon } = value;
+  if (!Number.isFinite(islandLat) || !Number.isFinite(islandLon) || !isFiniteCoordinate(islandLat, islandLon)) return null;
+  const islandId = typeof value.islandId === "string" ? cleanText(value.islandId, 120) : "";
+  if (!islandId || (source === "native" && !/^[1-9]\d*$/.test(islandId))) return null;
+  const { prefab, yaw } = value;
+  return { source, islandId, islandLat, islandLon,
+    ...(source === "terra-incognita" && typeof prefab === "string" && /^[a-z]+_\d+$/.test(prefab) &&
+      Number.isInteger(yaw) && yaw >= 0 && yaw <= 270 && yaw % 90 === 0 && { prefab, yaw })
   };
 }
 
@@ -1279,7 +1306,7 @@ export function parseVoyageRecorder(text, carry = { newSession: false }) {
   return points;
 }
 
-// Everything a Voyage Recorder log holds: positions, the ports reached and the missions read from the mission
+// Everything a Voyage Recorder log holds: positions, landfalls, ports reached and missions read from the mission
 // book (FORMAT.md). A run of lines can hold ports or missions without any position.
 // A save slot's log holds every game played in it. Session lines name their game, and newGames counts the
 // changes from one game to another; with latestGame only what follows the last change is kept. Sessions
@@ -1287,6 +1314,7 @@ export function parseVoyageRecorder(text, carry = { newSession: false }) {
 export function readVoyageRecorder(text, carry = { newSession: false }, { latestGame = false } = {}) {
   let points = [];
   let ports = [];
+  let landfalls = [];
   let missions = [];
   let notes = [];
   // Every arrival and departure, timed, for comparing and sharing voyages.
@@ -1298,6 +1326,7 @@ export function readVoyageRecorder(text, carry = { newSession: false }, { latest
   let newSession = carry.newSession === true;
   // null until a session line has been read.
   let game = typeof carry.game === "string" ? carry.game : null;
+  let vanilla = carry.vanilla === true;
   let newGames = 0;
   // The next position is the first of a different game from the one before it.
   let newGame = false;
@@ -1321,6 +1350,7 @@ export function readVoyageRecorder(text, carry = { newSession: false }, { latest
         if (latestGame) {
           points = [];
           ports = [];
+          landfalls = [];
           missions = [];
           notes = [];
           visits = [];
@@ -1328,6 +1358,7 @@ export function readVoyageRecorder(text, carry = { newSession: false }, { latest
       }
       game = named;
       session = sanitizeRecording({ ...record, game: named });
+      vanilla = session.world?.kind === "vanilla";
     }
     if ((record?.type === "session" || record?.type === "keys") && record.keys) keys = sanitizeRecorderKeys(record.keys) ?? keys;
     if (record?.type === "undo" && cleanText(record.id, 40)) {
@@ -1341,6 +1372,16 @@ export function readVoyageRecorder(text, carry = { newSession: false }, { latest
     const t = day && Number.isFinite(hours) ? parseDayTime(day, hours) : null;
     const when = { day, time: t === null ? "" : clockText(hours) };
     const utc = Number.isFinite(record?.utc) && record.utc > 0 ? Number(record.utc) : null;
+    if (record?.type === "landfall") {
+      const landfall = sanitizeDiscovery(record);
+      if (landfall && t !== null && Number.isFinite(record.hour) && hours >= 0 && hours < 24 &&
+          Number.isFinite(record.lat) && Number.isFinite(record.lon) && isFiniteCoordinate(record.lat, record.lon)) {
+        const offset = landfall.source === "native" && Number.isFinite(record.offsetLat) && Number.isFinite(record.offsetLon)
+          ? { offsetLat: record.offsetLat, offsetLon: record.offsetLon } : {};
+        landfalls.push({ ...landfall, ...when, ...offset, name: cleanText(record.name, 100), lat: record.lat, lon: record.lon, vanilla });
+      }
+      continue;
+    }
     if ((record?.type === "port" || record?.type === "depart") && cleanText(record.port, 100) && t !== null) {
       visits.push({ kind: record.type === "port" ? "arrive" : "depart", port: cleanText(record.port, 100), island: Number.isInteger(record.island) ? record.island : -1, t, ...(utc && { utc }) });
     }
@@ -1367,6 +1408,7 @@ export function readVoyageRecorder(text, carry = { newSession: false }, { latest
         island: Number.isInteger(record.island) ? record.island : -1,
         lat: record.lat,
         lon: record.lon,
+        vanilla,
         ...(Number.isFinite(record.offsetLat) && Number.isFinite(record.offsetLon) && { offsetLat: record.offsetLat, offsetLon: record.offsetLon })
       });
       continue;
@@ -1416,7 +1458,8 @@ export function readVoyageRecorder(text, carry = { newSession: false }, { latest
   }
   carry.newSession = newSession;
   carry.game = game;
-  return { points, ports, missions, notes, visits, session, keys, newGames, undone };
+  carry.vanilla = vanilla;
+  return { points, ports, landfalls, missions, notes, visits, session, keys, newGames, undone };
 }
 
 // What a Voyage Recorder session line says about the game it records: which game, the world (vanilla or a
