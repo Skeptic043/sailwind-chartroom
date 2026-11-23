@@ -66,10 +66,14 @@ function coursePlaces(course) {
   };
 }
 
-// The fastest valid run of the course in the voyage, or { ok: false, reason }.
+// The fastest valid run of the course in the voyage, or { ok: false, reason }. A run from an older recording
+// that lacks what a rule needs isn't turned away: it's accepted with notes saying what wasn't recorded.
 export function checkRun(course, voyage) {
+  const edited = editedRecording(voyage);
+  if (edited) return { ok: false, reason: edited };
   const ruleProblem = checkMods(course.rules?.mods, voyage.plugins);
   if (ruleProblem) return { ok: false, reason: ruleProblem };
+  const notes = !voyage.plugins && course.rules?.mods && course.rules.mods.mode !== "any" ? ["mods-not-recorded"] : [];
   const places = coursePlaces(course);
   // With no fixed start, the run starts by leaving any checkpoint, which then counts as reached.
   const starts = places.start
@@ -80,6 +84,8 @@ export function checkRun(course, voyage) {
   const finishes = places.finish ? reaches(voyage, places.finish) : null;
   const irl = course.rules?.sortBy === "irl";
   let best = null;
+  // On a real-time board, the fastest run by game time among runs without a real time, used only when none has one.
+  let untimed = null;
   let firstReason = "";
   for (const start of starts.sort((a, b) => a.time.t - b.time.t)) {
     const attempt = runFrom(course, places, start, reached, finishes);
@@ -102,15 +108,19 @@ export function checkRun(course, voyage) {
       splits: attempt.splits,
       startedFrom: start.from >= 0 ? places.checkpoints[start.from].name : places.start.name
     };
-    // A real-time board picks the fastest run by real time, and can only use runs that have it.
+    // A real-time board picks the fastest run by real time. A run without one is listed after the timed runs.
     if (irl && !(Number.isFinite(run.irlSeconds) && run.irlSeconds >= 0)) {
-      firstReason ||= "This board sorts by real time, but the run has no real time recorded.";
+      if (!untimed || run.gameHours < untimed.gameHours) untimed = { ...run, irlSeconds: null };
       continue;
     }
     if (!best || (irl ? run.irlSeconds < best.irlSeconds : run.gameHours < best.gameHours)) best = run;
   }
+  if (!best && untimed) {
+    best = untimed;
+    notes.push("no-real-time");
+  }
   if (!best) return { ok: false, reason: firstReason || "The run doesn't complete the race." };
-  return { ...best, ...summary(voyage, best.start, best.finish) };
+  return { ...best, ...summary(voyage, best.start, best.finish), ...(notes.length && { notes }) };
 }
 
 function runFrom(course, places, start, reached, finishes) {
@@ -147,9 +157,18 @@ function runFrom(course, places, start, reached, finishes) {
   return { ok: true, finish, splits: splits.map(({ name, t }) => ({ name, t })) };
 }
 
+// Voyage Recorder 0.2.2 and later write the loaded mods with every session, along with real time, and Chartroom
+// always includes them in a race entry. Only an older recording has neither, so a file with real time but no
+// mod list had it removed. (The world can be missing legitimately: it's left out when the Scrambled Seas save
+// can't be read.)
+export function editedRecording(voyage) {
+  if (voyage.plugins || !voyage.points.some((point) => Number.isFinite(point.utc))) return "";
+  return "This file has no mod list, but its recording always has one. Save the run with Enter a race in Chartroom, which always includes it, and attach that file.";
+}
+
 export function checkMods(mods, plugins) {
-  if (!mods || mods.mode === "any") return "";
-  if (!plugins) return "This race has mod rules, but the route file doesn't list its mods. Save it again with Loaded mods ticked.";
+  // A recording from before Voyage Recorder 0.2.2 has no mod list; checkRun notes that instead.
+  if (!mods || mods.mode === "any" || !plugins) return "";
   const loaded = new Set(plugins.map((plugin) => plugin.guid.toLowerCase()));
   const listed = (mods.plugins ?? []).map((guid) => guid.toLowerCase());
   if (mods.mode === "block") {

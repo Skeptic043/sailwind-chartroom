@@ -54,6 +54,7 @@ export function createChart({ name = "Uncharted Sea", seed = "" } = {}) {
     // A circumnavigation chart's routes take the short way round, across the east and west edges.
     circumnavigation: false,
     speedKn: 6,
+    measureSpeedKn: 6,
     // The game clock's speed as a percentage of normal, for the TimeScale mod. Sets the miles in a degree
     // (useGameClock) and how fast replay runs.
     clockPercent: 100,
@@ -106,9 +107,35 @@ function defaultLayers() {
   return { ...LAYER_DEFAULTS };
 }
 
+const CHART_ONLY_LAYERS = new Set(["vanillaMap", "notes"]);
+
+function sanitizeSharedViewLayers(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const layers = {};
+  for (const [key, fallback] of Object.entries(LAYER_DEFAULTS)) {
+    if (CHART_ONLY_LAYERS.has(key)) continue;
+    if (typeof value[key] === "boolean") layers[key] = value[key];
+    else if (key !== "expandedWinds") layers[key] = fallback;
+  }
+  return layers;
+}
+
+export function setShareViewSettings(workspace, enabled) {
+  const { settings } = workspace;
+  settings.shareViewSettings = enabled;
+  if (!enabled || settings.sharedViewLayers) return;
+  const chart = workspace.charts.find((chart) => chart.id === workspace.activeChartId);
+  // Border Expander winds follow the chart's imported world until the user chooses a shared value.
+  settings.sharedViewLayers = sanitizeSharedViewLayers({ ...chart.layers, expandedWinds: undefined });
+}
+
+export function resolveViewLayers(chart, settings) {
+  if (!settings.shareViewSettings) return chart.layers;
+  return { ...chart.layers, expandedWinds: chart.scramble?.borderExpander === true, ...settings.sharedViewLayers };
+}
+
 // Whether a chart item is drawn, clickable and a magnet. Hidden items stay listed under Chart items.
-export function itemShown(chart, kind, item) {
-  const layers = chart.layers;
+export function itemShown(chart, kind, item, layers = chart.layers) {
   if (kind === "feature") return item.rangeNm ? layers.areas : layers.locations;
   if (kind === "route") return layers.routes;
   if (kind === "saved-point" || kind === "saved-route") return layers.routes && layers.savedRoutes;
@@ -118,7 +145,7 @@ export function itemShown(chart, kind, item) {
   if (kind === "line") return layers.measure && layers[`${item.color}Lines`];
   // With equipment readings on, a position whose place the player couldn't have found stays hidden until
   // equipment readings are turned off again. Latitude-only readings are drawn as lines of latitude instead.
-  if (kind === "track") return trackLayerShown(chart, item) && (!chart.equipment?.enabled || fullyKnown(chart, item));
+  if (kind === "track") return trackLayerShown(chart, item, layers) && (!chart.equipment?.enabled || fullyKnown(chart, item));
   if (kind === "dr") return layers.deadReckoning;
   if (kind === "note") return layers.notes;
   if (kind === "map-island") return layers.importedMap && (layers.secretIslands || !islandById(item.id)?.secret);
@@ -126,15 +153,14 @@ export function itemShown(chart, kind, item) {
 }
 
 // The items of one kind the chart draws. A saved route also hides on its own.
-export function shownItems(chart, kind) {
-  if (kind === "saved-route") return itemShown(chart, kind) ? visibleSavedRoutes(chart) : [];
-  if (kind === "saved-point") return shownItems(chart, "saved-route").flatMap((route) => route.points);
-  return chartItems(chart, kind).filter((item) => itemShown(chart, kind, item));
+export function shownItems(chart, kind, layers = chart.layers) {
+  if (kind === "saved-route") return itemShown(chart, kind, undefined, layers) ? visibleSavedRoutes(chart) : [];
+  if (kind === "saved-point") return shownItems(chart, "saved-route", layers).flatMap((route) => route.points);
+  return chartItems(chart, kind).filter((item) => itemShown(chart, kind, item, layers));
 }
 
 // Whether island outlines show for a location, rough area or search area.
-export function islandsShown(chart, kind, item) {
-  const layers = chart.layers;
+export function islandsShown(chart, kind, item, layers = chart.layers) {
   if (!layers.islands) return false;
   if (kind === "search") return layers.searchIslands;
   return item?.rangeNm ? layers.areaIslands : layers.locationIslands;
@@ -163,8 +189,7 @@ function trackSourceLayer(point) {
 // Whether View shows a recorded position, before equipment readings: its source, and for Voyage Recorder
 // whether it was recorded automatically or by hand. A hidden position takes its dot, wind, line and
 // arrow with it. Race markers follow only their source.
-export function trackLayerShown(chart, point) {
-  const layers = chart.layers;
+export function trackLayerShown(chart, point, layers = chart.layers) {
   if (!layers.track || !layers[trackSourceLayer(point)]) return false;
   if (point?.source !== "voyage" || point.event?.startsWith("race-")) return true;
   return layers[point.event === "mark" ? "trackVoyageManualLocations" : "trackVoyageAutomaticLocations"];
@@ -224,7 +249,7 @@ export const APPEARANCE_IDS = Object.freeze(["system", "light", "dark"]);
 
 // App settings live in the workspace so the host saves them with the charts.
 export function defaultSettings() {
-  return { shortcuts: defaultShortcuts(), checkForUpdates: true, skippedUpdate: "", interfaceSize: 0, theme: "chartroom", appearance: "system", searchPoints: DEFAULT_SEARCH_POINTS, clearReachedAreas: true, iconSize: "normal", trackKey: false, recorderKeys: null, overlay: defaultOverlay(), routePanel: defaultRoutePanel(), trackKeyPanel: defaultTrackKeyPanel() };
+  return { shortcuts: defaultShortcuts(), checkForUpdates: true, skippedUpdate: "", interfaceSize: 0, theme: "chartroom", appearance: "system", searchPoints: DEFAULT_SEARCH_POINTS, clearReachedAreas: true, iconSize: "normal", shareViewSettings: false, sharedViewLayers: null, trackKey: false, recorderKeys: null, overlay: defaultOverlay(), routePanel: defaultRoutePanel(), trackKeyPanel: defaultTrackKeyPanel() };
 }
 
 function sanitizeSettings(value) {
@@ -240,6 +265,8 @@ function sanitizeSettings(value) {
     clearReachedAreas: value?.clearReachedAreas !== false,
     // How big locations, encounters and notes are drawn unless one has its own size.
     iconSize: Object.hasOwn(ICON_SIZES, value?.iconSize) ? value.iconSize : "normal",
+    shareViewSettings: value?.shareViewSettings === true,
+    sharedViewLayers: sanitizeSharedViewLayers(value?.sharedViewLayers),
     // Whether the track key panel is shown over the chart.
     trackKey: value?.trackKey === true,
     // Voyage Recorder's keys as its latest recording gave them, for the keybinding overlay.
@@ -289,6 +316,7 @@ export function sanitizeWorkspace(value) {
     folders: sanitizeFolders(value.folders),
     charts
   };
+  setShareViewSettings(workspace, workspace.settings.shareViewSettings);
   settleChartFolders(workspace);
   return workspace;
 }
@@ -309,6 +337,7 @@ export function sanitizeChart(value, { legacyWind = false } = {}) {
   base.layers = Object.fromEntries(Object.entries(LAYER_DEFAULTS).map(([key, shown]) => [key, shown ? value.layers?.[key] !== false : value.layers?.[key] === true]));
   base.circumnavigation = value.circumnavigation === true;
   base.speedKn = clampNumber(value.speedKn, 0.1, 30, base.speedKn);
+  base.measureSpeedKn = clampNumber(value.measureSpeedKn ?? base.speedKn, 0.1, 30, base.speedKn);
   base.clockPercent = clampNumber(value.clockPercent, MIN_CLOCK_PERCENT, MAX_CLOCK_PERCENT, base.clockPercent);
   base.features = arrayOf(value.features, sanitizeFeature);
   base.route = arrayOf(value.route, sanitizeRoutePoint);
@@ -332,7 +361,8 @@ export function sanitizeChart(value, { legacyWind = false } = {}) {
   base.winds = arrayOf(value.winds, sanitizeWind);
   base.searches = arrayOf(value.searches, sanitizeSearch);
   base.segments = arrayOf(value.segments, sanitizeSegment);
-  const scramble = sanitizeScramble(value.scramble);
+  // Older imports saved the wind choice as a layer. Use that as the default when no import flag was saved.
+  const scramble = sanitizeScramble(value.scramble, base.layers.expandedWinds);
   if (scramble) base.scramble = scramble;
   // In 0.6.10 an imported world showed under Vanilla map; it now has its own layer.
   if (scramble && value.layers?.importedMap === undefined) {
@@ -583,7 +613,8 @@ function sanitizeSearch(value) {
   };
 }
 
-const MAX_SEARCH_NM = 5000;
+// Halfway round the world at the fastest game clock: no mission can be farther than that.
+const MAX_SEARCH_NM = 180 * NM_PER_DEGREE * MAX_CLOCK_PERCENT / 100;
 
 export function searchExtent(search) {
   const marginNm = search.distanceNm * search.tolerancePct / 100;
@@ -1483,7 +1514,10 @@ const WORLD_FIELDS = new Set(["kind", "seed", "islandSpread", "minArchipelagoSep
 
 // A comparison voyage: a parsed voyage file plus how this chart shows it.
 export const MAX_COMPARISONS = 12;
-export const COMPARISON_COLOURS = Object.freeze(["#c2410c", "#7c3aed", "#0f766e", "#be185d", "#1d4ed8", "#a16207"]);
+// Chosen to stay apart for red-green and blue-yellow colour blindness on every theme's paper.
+export const COMPARISON_COLOURS = Object.freeze(["#56b4e9", "#cc3311", "#e69f00", "#882255", "#332288", "#999999"]);
+// Before 0.10.2; a saved comparison keeps its place in the list.
+const OLD_COMPARISON_COLOURS = Object.freeze(["#c2410c", "#7c3aed", "#0f766e", "#be185d", "#1d4ed8", "#a16207"]);
 
 export function createComparison(file, index = 0) {
   return sanitizeComparison({ ...file, id: makeId("compare"), color: COMPARISON_COLOURS[index % COMPARISON_COLOURS.length], shown: true });
@@ -1496,7 +1530,7 @@ function sanitizeComparison(value) {
   } catch {
     return null;
   }
-  const colour = COMPARISON_COLOURS.includes(value.color) ? value.color : COMPARISON_COLOURS[0];
+  const colour = COMPARISON_COLOURS.includes(value.color) ? value.color : COMPARISON_COLOURS[Math.max(0, OLD_COMPARISON_COLOURS.indexOf(value.color))];
   const start = Number.isFinite(value.start) ? Number(value.start) : voyage.points[0].t;
   // Which of the voyage's own details are drawn beside its track: its wind, its port visits and its notes.
   const details = { wind: value.details?.wind === true, ports: value.details?.ports !== false, notes: value.details?.notes !== false };
@@ -1631,22 +1665,22 @@ export function importChartData(value, suggestedName = "Imported chart") {
 export function importScrambledSeas(world) {
   const seed = Number.isInteger(world.seed) ? String(world.seed) : "";
   const chart = createChart({ name: uniqueImportedName(seed ? `Scrambled Seas ${seed}` : "Scrambled Seas"), seed });
-  chart.scramble = sanitizeScramble({ islands: scrambledIslands(world) });
-  chart.layers.importedMap = true;
   // Scrambled Seas records whether Border Expander was installed, and so whether its trade winds blow.
   chart.layers.expandedWinds = world.borderExpander === true;
+  chart.scramble = sanitizeScramble({ islands: scrambledIslands(world), borderExpander: chart.layers.expandedWinds });
+  chart.layers.importedMap = true;
   return chart;
 }
 
 // A Scrambled Seas world's islands, each where that world put it and with the player's notes.
 // 0.6.10 kept them as an object of positions by island id.
-function sanitizeScramble(value) {
+function sanitizeScramble(value, borderExpander = false) {
   const entries = Array.isArray(value?.islands) ? value.islands
     : value?.islands && typeof value.islands === "object" ? Object.entries(value.islands).map(([id, point]) => ({ ...point, id })) : [];
   const islands = entries
     .filter((entry) => islandById(entry?.id) && isFiniteCoordinate(entry.lat, entry.lon))
     .map((entry) => ({ id: entry.id, lat: Number(entry.lat), lon: Number(entry.lon), notes: cleanText(entry.notes, 1000) }));
-  return islands.length ? { islands } : null;
+  return islands.length ? { islands, borderExpander: typeof value?.borderExpander === "boolean" ? value.borderExpander : borderExpander } : null;
 }
 
 // A route as a Sailwind Interactive Map export, which SailMaster's autopilot takes pasted into its

@@ -1,9 +1,9 @@
 // Entry point: connects to the host, loads the workspace and wires the page's controls.
-import { MAX_CLOCK_PERCENT, MIN_CLOCK_PERCENT, archiveActiveRoute, createLine, revealLayer, sailMasterRoute, savedRouteForPoint } from "./model.mjs";
+import { MAX_CLOCK_PERCENT, MIN_CLOCK_PERCENT, archiveActiveRoute, createLine, sailMasterRoute, savedRouteForPoint } from "./model.mjs";
 import { connectHost } from "./host.mjs";
 import { clamp } from "./format.mjs";
 import { canvas, elements, showToast } from "./dom.mjs";
-import { activeChart, clearSelection, commit, initState, persist, redo, replaceSelectionState, resetHistory, selectItem, selectedItem, selection, setSaveStatus, undo, workspace } from "./state.mjs";
+import { activeChart, changeOutsideHistory, clearSelection, commit, initState, persist, redo, replaceSelectionState, resetHistory, revealLayer, selectItem, selectedItem, selection, setSaveStatus, undo, workspace } from "./state.mjs";
 import { eventPoint, screenToWorld } from "./viewport.mjs";
 import { drawChart, fitData, resizeCanvas, setOverlay } from "./render.mjs";
 import { findHit } from "./hits.mjs";
@@ -127,7 +127,15 @@ for (const id of ["route-clock", "dr-clock"]) {
 
 // Layers
 for (const [elementId, key] of LAYER_CONTROLS) {
-  elements[elementId].addEventListener("change", (event) => commit((chart) => { chart.layers[key] = event.target.checked; }, { history: false }));
+  elements[elementId].addEventListener("change", ({ target: { checked } }) => {
+    if (workspace.settings.shareViewSettings && key !== "vanillaMap") {
+      workspace.settings.sharedViewLayers[key] = checked;
+      persist();
+      renderEverything();
+    } else {
+      commit((chart) => { chart.layers[key] = checked; }, { history: false });
+    }
+  });
 }
 
 // Inspectors
@@ -160,6 +168,16 @@ elements["dr-reckon-from"].addEventListener("click", () => {
   setMode("dr");
 });
 elements["line-form"].addEventListener("submit", (event) => event.preventDefault());
+elements["measure-speed"].addEventListener("change", (event) => {
+  const speed = event.target.valueAsNumber;
+  if (Number.isFinite(speed)) {
+    const measureSpeedKn = clamp(speed, 0.1, 30);
+    commit((chart) => {
+      changeOutsideHistory(chart, (target) => { target.measureSpeedKn = measureSpeedKn; });
+    }, { history: false });
+  }
+  event.target.value = activeChart().measureSpeedKn;
+});
 elements["map-island-form"].addEventListener("submit", (event) => event.preventDefault());
 elements["map-island-notes"].addEventListener("change", (event) => {
   const island = selection?.kind === "map-island" ? selectedItem() : null;

@@ -1,9 +1,9 @@
 // Imports from files the player chooses, and exports written through the host's save dialog.
-import { exportFile, featuresToCsv, importChartData, importScrambledSeas, isVoyageRecorderText, parseTrackText, readVoyageRecorder, revealLayer } from "./model.mjs";
+import { exportFile, featuresToCsv, importChartData, importScrambledSeas, isVoyageRecorderText, parseTrackText, readVoyageRecorder } from "./model.mjs";
 import { parseScrambledSeasXml } from "./scrambled-seas.mjs";
 import { addRecordingExtras, applyMarks, discoveredMarks } from "./discoveries.mjs";
 import { showToast } from "./dom.mjs";
-import { activeChart, commit, host, persist, resetHistory, workspace } from "./state.mjs";
+import { activeChart, commit, host, persist, resetHistory, revealLayer, workspace } from "./state.mjs";
 import { fitData } from "./render.mjs";
 import { renderEverything } from "./panels.mjs";
 

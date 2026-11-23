@@ -6,18 +6,24 @@ import { persist, workspace } from "./state.mjs";
 import { makeFloating, placeFloating } from "./overlay.mjs";
 
 const svg = (body) => `<svg viewBox="0 0 40 14" width="40" height="14" aria-hidden="true" focusable="false">${body}</svg>`;
-const flag = (colour) => svg(`<path d="M17 13V1" stroke="var(--map-ink)" stroke-width="1.4"/><path d="M17 1l9 3-9 3z" fill="var(${colour})"/>`);
+const pole = `<path d="M17 13V1" stroke="var(--map-ink)" stroke-width="1.4"/>`;
+// The same shapes as the chart's race flags: plain, pennant and chequered.
+const FLAGS = Object.freeze({
+  start: svg(`${pole}<rect x="17" y="1" width="9" height="6" fill="var(--map-line-green)"/>`),
+  checkpoint: svg(`${pole}<path d="M17 1l9 3-9 3z" fill="var(--map-accent)"/>`),
+  finish: svg(`${pole}<rect x="17" y="1" width="9" height="6" fill="var(--map-line-red)"/><path d="M20 1h3v3h-3zM17 4h3v3h-3zM23 4h3v3h-3z" fill="var(--map-paper-b)"/>`)
+});
 
 // Each row: a sample drawn like the chart draws it, and what it means.
 const ROWS = Object.freeze([
   [svg(`<path d="M2 7h36" stroke="var(--map-track)" stroke-width="1.6" stroke-dasharray="3 5"/>`), "Your recorded track"],
-  [svg(`<circle cx="20" cy="7" r="2.6" fill="var(--map-track)"/>`), "A recorded position by day"],
-  [svg(`<circle cx="20" cy="7" r="2.6" fill="var(--map-night)"/>`), "A recorded position at night"],
+  [svg(`<circle cx="20" cy="7" r="2.8" fill="var(--map-track)"/>`), "A recorded position by day"],
+  [svg(`<circle cx="20" cy="7" r="2.2" fill="var(--map-paper-a)" stroke="var(--map-night)" stroke-width="1.4"/>`), "A recorded position at night"],
   [svg(`<path d="M5 7h27" stroke="var(--wind)" stroke-width="1.8" stroke-linecap="round"/><path d="M36 7l-9-5 3 5-3 5z" fill="var(--wind)"/>`), "Wind direction"],
   [svg(`<path d="M2 7h36" stroke="var(--map-track)" stroke-width="1.6" stroke-dasharray="3 5"/><circle cx="20" cy="7" r="2.2" fill="var(--map-track)"/><circle cx="20" cy="7" r="5" fill="none" stroke="var(--map-track)" stroke-width="1.3"/>`), "Manually connected track"],
-  [flag("--map-line-green"), "Race start"],
-  [flag("--map-accent"), "Race checkpoint"],
-  [flag("--map-line-red"), "Race finish"]
+  [FLAGS.start, "Race start"],
+  [FLAGS.checkpoint, "Race checkpoint"],
+  [FLAGS.finish, "Race finish"]
 ]);
 
 export function initTrackKey() {

@@ -1,10 +1,10 @@
 // Chart edits started from panels, dialogs and tools.
 import { LOCATION_ICONS } from "./icons.mjs";
-import { createFeature, createNote, createSearch, createWind, destinationPoint, locationRangeForType, parseBearing, parseCoordinate, removeChartItems, revealLayer, searchExtent, setLocked, translateChartItems } from "./model.mjs";
+import { createFeature, createNote, createSearch, createWind, destinationPoint, locationRangeForType, parseBearing, parseCoordinate, removeChartItems, searchExtent, setLocked, translateChartItems } from "./model.mjs";
 import { clamp, positiveNumber } from "./format.mjs";
 import { parseDayTime } from "./gametime.mjs";
 import { elements, showToast } from "./dom.mjs";
-import { clearSelection, commit, refreshSelection, replaceSelectionState, selectedItem, selectedRefs, selection } from "./state.mjs";
+import { clearSelection, commit, refreshSelection, replaceSelectionState, revealLayer, selectedItem, selectedRefs, selection } from "./state.mjs";
 import { fitPoints } from "./render.mjs";
 import { answeredByLocation, removeAnswered } from "./discoveries.mjs";
 

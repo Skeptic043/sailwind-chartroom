@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.10.2
+
+### Added
+- `Share View settings across charts` allows your View tab options to persist either per chart or globally
+- The measure line now has a `Speed (kn)` field for proper measurement
+- Runs recorded with Voyage Recorder before 0.2.2 can enter races on Chartroom Voyages. The race board will note what the recording didn't include.
+
+### Changed
+- Chart marks no longer rely on color alone and all have unique shapes. Thank you to aram12_ on Discord for the suggestion
+  - Night positions on the track are hollow rings, and all positions are a little larger
+  - Saved measure lines have their own patterns: red is a solid line, blue is a dashed line and green a dash-dot line
+  - Race flags have their own shapes: a start flag, a pennant for checkpoints and a chequered flag for the finish
+  - Compared voyages use colors that color-blind players should be able to tell apart
+  - The save status dot changes shape while saving and when a save fails
+- Zoomed out, the track shows fewer position dots, and the rest fill in as you zoom in
+
+### Fixed
+- Search areas farther than 5000 nm no longer shrink back to 5000 nm when Chartroom restarts. Thank you to Alex on Discord for the report
+
 ## 0.9.26
 
 ### Added

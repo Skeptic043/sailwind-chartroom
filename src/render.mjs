@@ -6,7 +6,7 @@ import { VANILLA_MAP, importedMapIslands } from "./scrambled-seas.mjs";
 import { assignedBoats, boatMarkerSize, drawBoatSilhouette } from "./boats.mjs";
 import { clamp, formatBearing, formatDirection, formatNm, isNightTime, nearlyMultiple, shortCoordinate } from "./format.mjs";
 import { canvas, context, elements } from "./dom.mjs";
-import { activeChart, isSelected, persist, workspace } from "./state.mjs";
+import { activeChart, isSelected, persist, viewLayers, workspace } from "./state.mjs";
 import { trackBearing, trackSegments, unwrapNear, unwrapStretch } from "./track.mjs";
 import { formatGameTime } from "./gametime.mjs";
 import { drawLocationIcon } from "./icons.mjs";
@@ -35,10 +35,9 @@ function labelVisible(kind, id) {
   return visibleChartLabels.has(labelKey(kind, id));
 }
 
-function chartLabelCandidates() {
-  const chart = activeChart();
+function chartLabelCandidates(chart, layers) {
   const candidates = [];
-  const searches = shownItems(chart, "search");
+  const searches = shownItems(chart, "search", layers);
   const namedSearchLabels = searchNameLabelIds(searches);
   const searchAnchors = searchIconAnchors(searches);
   context.font = LABEL_FONT;
@@ -49,27 +48,27 @@ function chartLabelCandidates() {
     candidates.push({ id: labelKey(kind, id), name, x: screen.x, y: screen.y + below, width: context.measureText(name).width, selected, priority });
   };
   // The player's own names come first; a vanilla name shows only where it has room.
-  for (const { island, centre, item } of vanillaIslands()) if (!island.partOf) add(item ? "imported" : "vanilla", island.id, island.name, centre, false, 60);
-  for (const feature of shownItems(chart, "feature")) if (feature.showName !== false) add("feature", feature.id, feature.name, feature, isSelected("feature", feature.id), 0);
+  for (const { island, centre, item } of vanillaIslands(chart, layers)) if (!island.partOf) add(item ? "imported" : "vanilla", island.id, island.name, centre, false, 60);
+  for (const feature of shownItems(chart, "feature", layers)) if (feature.showName !== false) add("feature", feature.id, feature.name, feature, isSelected("feature", feature.id), 0);
   for (const search of searches) {
     const selected = isSelected("search", search.id);
     if (search.label && !namedSearchLabels.has(search.id) && !selected) continue;
     add("search", search.id, search.label || "Search area", searchAnchors.get(search.id) ?? searchExtent(search).centre, selected, 0, -24);
   }
-  for (const point of shownItems(chart, "route")) add("route", point.id, point.name, point, isSelected("route", point.id), 30);
-  for (const route of shownItems(chart, "saved-route")) {
+  for (const point of shownItems(chart, "route", layers)) add("route", point.id, point.name, point, isSelected("route", point.id), 30);
+  for (const route of shownItems(chart, "saved-route", layers)) {
     const active = isSelected("saved-route", route.id) || route.points.some((point) => isSelected("saved-point", point.id));
     for (const point of route.points) add("saved-point", point.id, point.name, point, isSelected("saved-point", point.id), 35);
-    if (active && chart.layers.routeDistances) summarizeRoute(route.points, chart.circumnavigation).legs.forEach((leg, index) => {
+    if (active && layers.routeDistances) summarizeRoute(route.points, chart.circumnavigation).legs.forEach((leg, index) => {
       add("saved-leg", `${route.id}:${index}`, "Route distance", leg.mid, false, 40);
     });
   }
-  summarizeRoute(shownItems(chart, "route"), chart.circumnavigation).legs.forEach((leg, index) => {
-    if (!chart.layers.routeDistances) return;
+  summarizeRoute(shownItems(chart, "route", layers), chart.circumnavigation).legs.forEach((leg, index) => {
+    if (!layers.routeDistances) return;
     add("route-leg", index, "Route distance", leg.mid, false, 40);
   });
-  if (chart.layers.winds) for (const wind of chart.winds) add("wind", wind.id, wind.label, wind, isSelected("wind", wind.id));
-  const track = shownItems(chart, "track");
+  if (layers.winds) for (const wind of chart.winds) add("wind", wind.id, wind.label, wind, isSelected("wind", wind.id));
+  const track = shownItems(chart, "track", layers);
   if (track.length) add("track", "last", "Last position", track.at(-1));
   return candidates;
 }
@@ -97,7 +96,9 @@ export function drawChart() {
   const height = rectangle.height;
   if (!width || !height) return;
   const palette = mapPalette();
-  visibleChartLabels = clusteredLabelIds(chartLabelCandidates());
+  const chart = activeChart();
+  const layers = viewLayers(chart);
+  visibleChartLabels = clusteredLabelIds(chartLabelCandidates(chart, layers));
 
   const gradient = context.createRadialGradient(width * .45, height * .4, 0, width * .45, height * .4, Math.max(width, height));
   gradient.addColorStop(0, palette.paperA);
@@ -118,39 +119,39 @@ export function drawChart() {
     context.fillRect(0, 0, width, height);
     context.restore();
   }
-  if (activeChart().layers.grid) drawGrid(width, height, palette);
+  if (layers.grid) drawGrid(width, height, palette, layers.labels);
   drawWorldBorder(palette);
-  if (activeChart().layers.tradeWinds) {
+  if (layers.tradeWinds) {
     // As faint as the vanilla map, so the arrows sit beneath the chart's own marks.
     context.save();
     context.globalAlpha = 0.55;
-    drawTradeWinds(width, height, palette);
+    drawTradeWinds(width, height, palette, layers.expandedWinds);
     context.restore();
   }
-  drawVanillaMap(width, height, palette);
+  drawVanillaMap(width, height, palette, chart, layers);
   drawHeatmap(palette);
-  drawLines(palette);
-  drawAreas(palette);
-  drawSearches(palette);
-  if (activeChart().layers.winds) drawWinds(palette);
-  drawSavedRoutes(palette);
-  drawRoute(palette);
+  drawLines(palette, chart, layers);
+  drawAreas(palette, chart, layers);
+  drawSearches(palette, chart, layers);
+  if (layers.winds) drawWinds(palette, chart, layers);
+  drawSavedRoutes(palette, chart, layers);
+  drawRoute(palette, chart, layers);
   // Recorded positions sit above route lines, which often run along them.
   drawComparisons(palette);
   drawExportRange(palette);
-  const lastPosition = activeChart().layers.track ? drawTrack(palette) : null;
-  if (activeChart().layers.deadReckoning) drawDrPositions(palette);
-  drawFeatures(palette);
+  const lastPosition = layers.track ? drawTrack(palette, chart, layers) : null;
+  if (layers.deadReckoning) drawDrPositions(palette, chart, layers);
+  drawFeatures(palette, chart, layers);
   drawNotes(palette);
   // Where you are now stays in sight above islands and locations.
-  if (lastPosition) drawLastPosition(lastPosition, palette);
+  if (lastPosition) drawLastPosition(lastPosition, palette, layers.labels);
   overlay(palette);
   drawCompassRose(width - 56, height - 64, palette);
   updateZoomLabel();
   positionNotePopout();
 }
 
-function drawGrid(width, height, palette) {
+function drawGrid(width, height, palette, showLabels) {
   const zoom = activeChart().view.zoom;
   const candidates = [.0005, .001, .002, .005, .01, .02, .05, .1, .25, .5, 1, 2, 5, 10, 20, 30, 45];
   const step = candidates.find((candidate) => candidate * zoom >= 64) ?? 45;
@@ -172,7 +173,7 @@ function drawGrid(width, height, palette) {
     context.moveTo(x, 0);
     context.lineTo(x, height);
     context.stroke();
-    if (major && activeChart().layers.labels) gridLabel(shortCoordinate(lon, "lon", step), x + 5, 6, palette);
+    if (major && showLabels) gridLabel(shortCoordinate(lon, "lon", step), x + 5, 6, palette);
   }
   for (let lat = startLat; lat <= endLat + .0001; lat += fineStep) {
     const y = worldToScreen({ lat, lon: 0 }).y;
@@ -183,7 +184,7 @@ function drawGrid(width, height, palette) {
     context.moveTo(0, y);
     context.lineTo(width, y);
     context.stroke();
-    if (major && activeChart().layers.labels) gridLabel(shortCoordinate(lat, "lat", step), 6, y + 5, palette);
+    if (major && showLabels) gridLabel(shortCoordinate(lat, "lat", step), 6, y + 5, palette);
   }
   context.restore();
 }
@@ -209,9 +210,12 @@ function drawWorldBorder(palette) {
   context.restore();
 }
 
-// Kept lines in their own colours. A selected line also shows its distance and bearing.
-function drawLines(palette) {
-  for (const line of shownItems(activeChart(), "line")) {
+// Kept lines in their own colours, each with its own pattern so they differ without colour too: red solid,
+// blue dashed, green dash-dot. A selected line also shows its distance and bearing.
+export const LINE_DASHES = Object.freeze({ red: null, blue: [12, 6], green: [12, 5, 1, 5] });
+
+function drawLines(palette, chart, layers) {
+  for (const line of shownItems(chart, "line", layers)) {
     const selected = isSelected("line", line.id);
     const a = worldToScreen(line);
     const b = worldToScreen(line.end);
@@ -220,7 +224,8 @@ function drawLines(palette) {
     context.fillStyle = palette.lines[line.color];
     context.lineWidth = selected ? 3 : 2;
     context.lineCap = "round";
-    drawLine(a, b);
+    if (LINE_DASHES[line.color]) strokeDashed([a, b], LINE_DASHES[line.color]);
+    else drawLine(a, b);
     if (selected) {
       for (const end of [a, b]) { context.beginPath(); context.arc(end.x, end.y, 4.5, 0, Math.PI * 2); context.fill(); }
       selectionHalo(a, palette);
@@ -231,20 +236,21 @@ function drawLines(palette) {
   }
 }
 
-// Positions closer together on screen than this share one dot. The line skips positions less than a
-// pixel from the last one it drew, which a long recording seen from far out is mostly made of.
-const TRACK_DOT_SPACING_PX = 4;
+// Like the track's wind arrows, a position only gets a dot this far on screen from the last one drawn, so far
+// out the track shows a few dots along its dashed line and the rest fill in as you zoom in. The line skips
+// positions less than a pixel from the last one it drew, which a long recording seen from far out is mostly made of.
+const TRACK_DOT_SPACING_PX = 18;
+const TRACK_DOT_RADIUS_PX = 2.8;
 const TRACK_LINE_SPACING_PX = 1;
 const TRACK_WIND_SPACING_PX = 70;
 
 // Each stretch of the track is drawn on its own, so a reload or a jump leaves a gap instead of a false
 // line. A stretch that crosses the chart's east or west edge is drawn again from the other side.
 // Returns the last position and the one before it in its stretch, for drawLastPosition.
-function drawTrack(palette) {
-  const chart = activeChart();
+function drawTrack(palette, chart, layers) {
   const gated = chart.equipment?.enabled === true;
-  if (gated) drawLatitudeLines(palette);
-  const track = shownItems(chart, "track");
+  if (gated) drawLatitudeLines(palette, chart, layers);
+  const track = shownItems(chart, "track", layers);
   if (!track.length) return null;
   const { width, height } = canvas.getBoundingClientRect();
   const project = projector();
@@ -254,9 +260,9 @@ function drawTrack(palette) {
   // Stretches come from the whole recording of each shown source, then keep only the shown positions, so
   // hidden readings (equipment, or automatic or manual locations) don't break a stretch into gaps.
   const shownSet = new Set(track);
-  const segments = trackSegments(chart.track.filter((point) => chart.layers[point.source === "voyage" ? "trackVoyageRecorder" : "trackCoordinateViewer"]))
+  const segments = trackSegments(chart.track.filter((point) => layers[point.source === "voyage" ? "trackVoyageRecorder" : "trackCoordinateViewer"]))
     .map((segment) => segment.filter((point) => shownSet.has(point))).filter((segment) => segment.length);
-  if (chart.layers.trackLines) {
+  if (layers.trackLines) {
     for (const segment of segments) {
       const line = unwrapStretch(segment);
       const offsets = [0];
@@ -281,7 +287,7 @@ function drawTrack(palette) {
     const screen = project(point);
     const selected = isSelected("track", point.id);
     if (!selected && !visible(screen)) continue;
-    if (chart.layers.trackWinds && Number.isFinite(point.windDeg) && (!lastWind || Math.hypot(screen.x - lastWind.x, screen.y - lastWind.y) >= TRACK_WIND_SPACING_PX)) {
+    if (layers.trackWinds && Number.isFinite(point.windDeg) && (!lastWind || Math.hypot(screen.x - lastWind.x, screen.y - lastWind.y) >= TRACK_WIND_SPACING_PX)) {
       drawTrackWind(screen, point.windDeg, palette);
       lastWind = screen;
     }
@@ -296,12 +302,22 @@ function drawTrack(palette) {
       context.stroke();
       context.restore();
     }
-    if (!selected && lastDot && Math.abs(screen.x - lastDot.x) < TRACK_DOT_SPACING_PX && Math.abs(screen.y - lastDot.y) < TRACK_DOT_SPACING_PX) continue;
+    if (!selected && lastDot && Math.hypot(screen.x - lastDot.x, screen.y - lastDot.y) < TRACK_DOT_SPACING_PX) continue;
     lastDot = screen;
-    context.fillStyle = isNightTime(point.time) ? palette.night : palette.track;
+    // Day positions are filled dots and night ones hollow rings, so they differ without colour too.
     context.beginPath();
-    context.arc(screen.x, screen.y, 2.2, 0, Math.PI * 2);
-    context.fill();
+    if (isNightTime(point.time)) {
+      context.arc(screen.x, screen.y, TRACK_DOT_RADIUS_PX - .6, 0, Math.PI * 2);
+      context.fillStyle = palette.paperA;
+      context.fill();
+      context.strokeStyle = palette.night;
+      context.lineWidth = 1.4;
+      context.stroke();
+    } else {
+      context.arc(screen.x, screen.y, TRACK_DOT_RADIUS_PX, 0, Math.PI * 2);
+      context.fillStyle = palette.track;
+      context.fill();
+    }
     context.globalAlpha = 1;
     if (selected) selectionHalo(screen, palette);
   }
@@ -316,9 +332,8 @@ function drawTrack(palette) {
 const LATITUDE_LINE_NM = 20;
 const LATITUDE_LINE_MIN_PX = 10;
 
-function drawLatitudeLines(palette) {
-  const chart = activeChart();
-  if (!chart.layers.track) return;
+function drawLatitudeLines(palette, chart, layers) {
+  if (!layers.track) return;
   const zoom = chart.view.zoom;
   const halfPx = Math.max(LATITUDE_LINE_MIN_PX, LATITUDE_LINE_NM / NM_PER_DEGREE * zoom);
   let lastKnown = null;
@@ -328,7 +343,7 @@ function drawLatitudeLines(palette) {
   context.lineWidth = 1.6;
   context.lineCap = "round";
   for (const point of chart.track) {
-    if (!trackLayerShown(chart, point)) continue;
+    if (!trackLayerShown(chart, point, layers)) continue;
     const knowledge = readingKnowledge(chart, point);
     if (knowledge.lat && knowledge.lon) {
       lastKnown = point;
@@ -349,7 +364,7 @@ function drawLatitudeLines(palette) {
 }
 
 // The arrow at the last position, pointing along the last leg, with its label.
-function drawLastPosition({ last, previous }, palette) {
+function drawLastPosition({ last, previous }, palette, showLabels) {
   const screen = worldToScreen(last);
   context.save();
   context.translate(screen.x, screen.y);
@@ -360,7 +375,7 @@ function drawLastPosition({ last, previous }, palette) {
   context.beginPath(); context.moveTo(0, -9); context.lineTo(6, 7); context.lineTo(0, 4); context.lineTo(-6, 7); context.closePath();
   context.fill(); context.stroke();
   context.restore();
-  if (activeChart().layers.labels && labelVisible("track", "last")) labelText(`Last position${last.day ? ` · day ${last.day}` : ""}${last.time ? ` ${last.time}` : ""}`, screen.x, screen.y + 11, palette);
+  if (showLabels && labelVisible("track", "last")) labelText(`Last position${last.day ? ` · day ${last.day}` : ""}${last.time ? ` ${last.time}` : ""}`, screen.x, screen.y + 11, palette);
 }
 
 // A race marker from Voyage Recorder's marker menu: a small flag on a pole, green at the start, red at the
@@ -378,13 +393,23 @@ function drawRaceFlag(screen, event, palette) {
     context.lineTo(screen.x, screen.y - 18);
     context.stroke();
   }
+  // Each flag has its own shape as well as colour: a plain flag starts, a pennant marks a checkpoint and a
+  // chequered flag finishes.
   context.beginPath();
-  context.moveTo(screen.x, screen.y - 18);
-  context.lineTo(screen.x + 11, screen.y - 14);
-  context.lineTo(screen.x, screen.y - 10);
-  context.closePath();
+  if (event === "race-checkpoint") {
+    context.moveTo(screen.x, screen.y - 18);
+    context.lineTo(screen.x + 11, screen.y - 14);
+    context.lineTo(screen.x, screen.y - 10);
+    context.closePath();
+  } else context.rect(screen.x, screen.y - 18, 11, 7.5);
   context.fillStyle = colour;
   context.fill();
+  if (event === "race-finish") {
+    context.fillStyle = palette.paperB;
+    for (let column = 0; column < 3; column += 1) {
+      for (let row = 0; row < 2; row += 1) if ((column + row) % 2) context.fillRect(screen.x + column * 11 / 3, screen.y - 18 + row * 3.75, 11 / 3, 3.75);
+    }
+  }
   context.strokeStyle = palette.paperB;
   context.lineWidth = 1;
   context.stroke();
@@ -419,9 +444,8 @@ export function drawTrackWind(screen, degrees, palette, colour = palette.wind) {
 
 // Dead reckoning positions, each with a dashed line from where it was reckoned from. As on paper
 // charts, a DR position is a half circle round its dot, and its circle shows how far off it may be.
-function drawDrPositions(palette) {
-  const chart = activeChart();
-  for (const position of shownItems(chart, "dr")) {
+function drawDrPositions(palette, chart, layers) {
+  for (const position of shownItems(chart, "dr", layers)) {
     const selected = isSelected("dr", position.id);
     const colour = selected ? palette.select : palette.accent;
     const screen = worldToScreen(position);
@@ -451,13 +475,13 @@ function drawDrPositions(palette) {
     context.fill();
     context.restore();
     if (selected) selectionHalo(screen, palette);
-    if (chart.layers.labels && (selected || position.label)) labelText(position.label || ["DR", formatGameTime(position.t)].filter(Boolean).join(" · "), screen.x, screen.y + 10, palette);
+    if (layers.labels && (selected || position.label)) labelText(position.label || ["DR", formatGameTime(position.t)].filter(Boolean).join(" · "), screen.x, screen.y + 10, palette);
   }
 }
 
-function drawAreas(palette) {
+function drawAreas(palette, chart, layers) {
   context.save();
-  for (const feature of shownItems(activeChart(), "feature")) {
+  for (const feature of shownItems(chart, "feature", layers)) {
     if (feature.rangeNm) drawAreaCircle(feature, feature.rangeNm, isSelected("feature", feature.id), palette);
   }
   context.restore();
@@ -474,21 +498,21 @@ export function drawAreaCircle(center, rangeNm, selected, palette) {
   strokeDashedCircle(screen, rangeNm / milesPerDegree * activeChart().view.zoom, [6, 4]);
 }
 
-function drawSearches(palette) {
-  const searches = shownItems(activeChart(), "search");
+function drawSearches(palette, chart, layers) {
+  const searches = shownItems(chart, "search", layers);
   const namedLabels = searchNameLabelIds(searches);
   const groups = searchOverlapGroups(searches);
   const overlapping = new Set(groups.flatMap((group) => group.map((search) => search.id)));
   const anchors = searchIconAnchors(searches);
   // The shared island is whichever one the group's searches show, whoever carries the name.
   const sharedIslands = new Map(groups.flatMap((group) => {
-    const island = group.map(chartSearchIsland).find(Boolean) ?? null;
+    const island = group.map((search) => chartSearchIsland(search, layers)).find(Boolean) ?? null;
     return group.map((search) => [search.id, island]);
   }));
   for (const group of groups) drawSearchOverlap(group);
   for (const search of searches) {
     const selected = isSelected("search", search.id);
-    drawSearchWedge(search, selected, palette, searchEvidenceOpacity(overlapping.has(search.id)), namedLabels.has(search.id) || selected, labelVisible("search", search.id), anchors.get(search.id), sharedIslands.get(search.id), activeChart().layers.searchLines);
+    drawSearchWedge(search, selected, palette, searchEvidenceOpacity(overlapping.has(search.id)), namedLabels.has(search.id) || selected, labelVisible("search", search.id), anchors.get(search.id), sharedIslands.get(search.id), layers.searchLines, layers);
   }
 }
 
@@ -518,10 +542,10 @@ function drawSearchOverlap(group) {
 
 // iconAt moves the island and name off the search's own centre, to where overlapping searches for the
 // same place meet; null leaves them to the search that carries them.
-export function drawSearchWedge(search, selected, palette, evidenceOpacity = .12, showName = true, showLabel = true, iconAt = undefined, sharedIsland = null, showLine = true) {
+export function drawSearchWedge(search, selected, palette, evidenceOpacity = .12, showName = true, showLabel = true, iconAt = undefined, sharedIsland = null, showLine = true, layers = viewLayers()) {
   const { nearNm, farNm, fromDeg, toDeg, centre } = searchExtent(search);
   const shared = iconAt !== undefined;
-  const previewIsland = iconAt === null ? null : shared ? sharedIsland : chartSearchIsland(search);
+  const previewIsland = iconAt === null ? null : shared ? sharedIsland : chartSearchIsland(search, layers);
   const far = worldToScreen(destinationPoint(search, search.bearing, farNm));
   const origin = worldToScreen(search);
   const middle = worldToScreen(iconAt ?? centre);
@@ -555,7 +579,7 @@ export function drawSearchWedge(search, selected, palette, evidenceOpacity = .12
   }
   let labelOffset = Math.max(14, previewHeight / 2 + 11);
   // The boats stay at their own search's centre, beside the island only when the island is there too.
-  const boats = activeChart().layers.boats ? boatRowAt(centre, shared ? null : previewIsland, previewScale, assignedBoats(search)) : [];
+  const boats = layers.boats ? boatRowAt(centre, shared ? null : previewIsland, previewScale, assignedBoats(search)) : [];
   for (const { boat, bounds } of boats) {
     drawBoatSilhouette(context, boat, bounds, {
       ...boatColours(palette, selected),
@@ -564,7 +588,7 @@ export function drawSearchWedge(search, selected, palette, evidenceOpacity = .12
     });
     if (!iconAt) labelOffset = Math.max(labelOffset, worldToScreen(centre).y - (bounds.y - bounds.height / 2) + 8);
   }
-  if (activeChart().layers.labels && showLabel) {
+  if (layers.labels && showLabel) {
     const label = searchChartLabel(search, showName) || `${formatDirection(search.bearing)} · ${formatNm(search.distanceNm)} nm`;
     labelPill(label, middle.x, middle.y - labelOffset, palette);
   }
@@ -579,13 +603,13 @@ export function magnetRing(screen, palette) {
   context.restore();
 }
 
-function drawWinds(palette) {
-  for (const wind of activeChart().winds) drawWindIndicator(wind, isSelected("wind", wind.id), palette);
+function drawWinds(palette, chart, layers) {
+  for (const wind of chart.winds) drawWindIndicator(wind, isSelected("wind", wind.id), palette, layers.labels);
 }
 
 const WIND_ARROW_PX = 34;
 
-export function drawWindIndicator(wind, selected, palette) {
+export function drawWindIndicator(wind, selected, palette, showLabels = viewLayers().labels) {
   const length = symbolSize("wind");
   const size = length / WIND_ARROW_PX;
   const { start, end } = windArrowEnds(wind);
@@ -611,10 +635,10 @@ export function drawWindIndicator(wind, selected, palette) {
   context.restore();
   const centre = worldToScreen(wind);
   if (selected) selectionHalo(centre, palette);
-  if (activeChart().layers.labels && wind.label && labelVisible("wind", wind.id)) labelText(wind.label, centre.x, centre.y + 12, palette);
+  if (showLabels && wind.label && labelVisible("wind", wind.id)) labelText(wind.label, centre.x, centre.y + 12, palette);
 }
 
-// The measure line, and the one being drawn: distance, bearing and passage time at the chart's speed.
+// The measure line and its drawing preview show distance, bearing and passage time.
 export function drawMeasureLine(from, to, selected, palette) {
   const a = worldToScreen(from);
   const b = worldToScreen(to);
@@ -638,7 +662,7 @@ export function drawMeasureLine(from, to, selected, palette) {
 function lineLabel(from, to, palette) {
   const a = worldToScreen(from);
   const b = worldToScreen(to);
-  const speed = activeChart().speedKn;
+  const speed = activeChart().measureSpeedKn;
   const nm = distanceNm(from, to);
   const text = `${formatNm(nm)} nm · ${formatBearing(bearingDegrees(from, to))} · ${formatDuration(nm / speed)} at ${speed} kn`;
   // The label sits beside the middle of the line, on its upper side, far enough out to clear it at any angle.
@@ -654,8 +678,8 @@ function lineLabel(from, to, palette) {
 }
 
 // Saved routes sit back at reduced opacity until the route or one of its waypoints is selected.
-function drawSavedRoutes(palette) {
-  for (const route of shownItems(activeChart(), "saved-route")) {
+function drawSavedRoutes(palette, chart, layers) {
+  for (const route of shownItems(chart, "saved-route", layers)) {
     const routeSelected = isSelected("saved-route", route.id);
     const active = routeSelected || route.points.some((point) => isSelected("saved-point", point.id));
     context.save();
@@ -668,7 +692,7 @@ function drawSavedRoutes(palette) {
     drawRouteLine(legs);
     legs.forEach((leg, index) => {
       if (active) drawLegArrow(leg, palette.route);
-      if (active && activeChart().layers.routeDistances && labelVisible("saved-leg", `${route.id}:${index}`)) {
+      if (active && layers.routeDistances && labelVisible("saved-leg", `${route.id}:${index}`)) {
         const mid = worldToScreen(leg.mid);
         labelPill(`${formatNm(leg.nm)} nm · ${Math.round(leg.bearing)}°`, mid.x, mid.y - 12, palette);
       }
@@ -679,14 +703,14 @@ function drawSavedRoutes(palette) {
       context.beginPath();
       context.arc(screen.x, screen.y, symbolSize("dot"), 0, Math.PI * 2);
       context.fill();
-      if (point.name && activeChart().layers.labels && labelVisible("saved-point", point.id)) labelText(point.name, screen.x, screen.y + 10, palette);
+      if (point.name && layers.labels && labelVisible("saved-point", point.id)) labelText(point.name, screen.x, screen.y + 10, palette);
     }
     context.restore();
   }
 }
 
-function drawRoute(palette) {
-  const route = shownItems(activeChart(), "route");
+function drawRoute(palette, chart, layers) {
+  const route = shownItems(chart, "route", layers);
   if (!route.length) return;
   context.save();
   context.strokeStyle = palette.route;
@@ -700,7 +724,7 @@ function drawRoute(palette) {
   context.textBaseline = "middle";
   summary.legs.forEach((leg, index) => {
     drawLegArrow(leg, palette.route);
-    if (activeChart().layers.routeDistances && labelVisible("route-leg", index)) {
+    if (layers.routeDistances && labelVisible("route-leg", index)) {
       const mid = worldToScreen(leg.mid);
       labelPill(`${formatNm(leg.nm)} nm · ${Math.round(leg.bearing)}°`, mid.x, mid.y - 12, palette);
     }
@@ -722,20 +746,18 @@ function drawRoute(palette) {
       context.font = "bold 8px ui-sans-serif, system-ui";
       context.fillText(String(index + 1), screen.x, screen.y + .5);
     }
-    if (point.name && activeChart().layers.labels && labelVisible("route", point.id)) labelText(point.name, screen.x, screen.y + 12, palette);
+    if (point.name && layers.labels && labelVisible("route", point.id)) labelText(point.name, screen.x, screen.y + 12, palette);
   });
   context.restore();
 }
 
 // The map islands on show: the game's own map, and the chart's imported Scrambled Seas world.
-function vanillaIslands() {
-  const chart = activeChart();
-  const { layers } = chart;
+function vanillaIslands(chart, layers) {
   const discoveryOutlines = layers.vanillaMap && layers.locations && layers.islands && layers.locationIslands ? new Set() : null;
   if (discoveryOutlines) {
     for (const feature of chart.features) {
       if (!feature.discovery || feature.rangeNm > 0) continue;
-      const island = chartIsland(feature);
+      const island = chartIsland(feature, layers);
       if (island?.sourceCenter?.lat === feature.lat && island.sourceCenter.lon === feature.lon) discoveryOutlines.add(island.id);
     }
   }
@@ -745,10 +767,10 @@ function vanillaIslands() {
 }
 
 // The game's own map, drawn faintly beneath the player's chart. It cannot be selected or edited.
-function drawVanillaMap(width, height, palette) {
+function drawVanillaMap(width, height, palette, chart, layers) {
   context.save();
   context.globalAlpha = 0.55;
-  for (const { island, centre, item } of vanillaIslands()) {
+  for (const { island, centre, item } of vanillaIslands(chart, layers)) {
     const screen = worldToScreen(centre);
     const selected = item ? isSelected("map-island", item.id) : false;
     if (selected) context.globalAlpha = 1;
@@ -760,7 +782,7 @@ function drawVanillaMap(width, height, palette) {
       context.arc(screen.x, screen.y, symbolSize("mark"), 0, Math.PI * 2);
       context.fill();
     }
-    if (activeChart().layers.labels && labelVisible(item ? "imported" : "vanilla", island.id)) labelText(island.name, screen.x, screen.y + 13, palette);
+    if (layers.labels && labelVisible(item ? "imported" : "vanilla", island.id)) labelText(island.name, screen.x, screen.y + 13, palette);
   }
   context.restore();
 }
@@ -768,7 +790,7 @@ function drawVanillaMap(width, height, palette) {
 const TRADE_WIND_SPACING_PX = 56;
 const TRADE_WIND_ARROW_PX = 22;
 
-function drawTradeWinds(width, height, palette) {
+function drawTradeWinds(width, height, palette, borderExpander) {
   // One arrow per degree close in; further out the arrows thin to keep their spacing on screen.
   const step = [1, 2, 5, 10, 20].find((degrees) => degrees * activeChart().view.zoom >= TRADE_WIND_SPACING_PX) ?? 30;
   const northwest = screenToWorld(0, 0);
@@ -780,7 +802,6 @@ function drawTradeWinds(width, height, palette) {
   // further apart than that, the bands get a row of their own so they never drop off the chart.
   const rows = step > 2 ? [...latitudes.filter((lat) => lat < 30 || lat > 33), 31] : latitudes;
   const colours = { aestrin: palette.bearing, alankh: palette.accent, emerald: palette.track, southEasterly: palette.route, southWesterly: palette.lines.blue };
-  const borderExpander = activeChart().layers.expandedWinds;
   context.lineWidth = 1.5;
   for (let lon = first(northwest.lon); lon <= southeast.lon; lon += step) {
     for (const lat of rows) {
@@ -808,11 +829,11 @@ function drawTradeWinds(width, height, palette) {
   }
 }
 
-function drawFeatures(palette) {
-  for (const feature of shownItems(activeChart(), "feature")) {
+function drawFeatures(palette, chart, layers) {
+  for (const feature of shownItems(chart, "feature", layers)) {
     const screen = worldToScreen(feature);
     const selected = isSelected("feature", feature.id);
-    const island = chartIsland(feature);
+    const island = chartIsland(feature, layers);
     context.save();
     // The outline is the location's mark.
     if (island) {
@@ -830,7 +851,7 @@ function drawFeatures(palette) {
       context.fill();
       context.stroke();
     }
-    for (const { boat, bounds } of activeChart().layers.boats ? featureBoats(feature) : []) {
+    for (const { boat, bounds } of layers.boats ? featureBoats(feature, layers) : []) {
       // Outlines thicken as a boat grows with its island, so a large boat still reads clearly.
       const weight = clamp(bounds.width / boatMarkerSize(boat).width, 1, 3);
       drawBoatSilhouette(context, boat, bounds, {
@@ -839,7 +860,7 @@ function drawFeatures(palette) {
         detail: "marker"
       });
     }
-    if (activeChart().layers.labels && labelVisible("feature", feature.id)) labelText(feature.name, screen.x, screen.y + (feature.icon && !feature.rangeNm ? locationIconRadius() * iconScale(feature, workspace.settings.iconSize) * 1.6 + 4 : 9 + symbolSize("mark") * iconScale(feature, workspace.settings.iconSize)), palette);
+    if (layers.labels && labelVisible("feature", feature.id)) labelText(feature.name, screen.x, screen.y + (feature.icon && !feature.rangeNm ? locationIconRadius() * iconScale(feature, workspace.settings.iconSize) * 1.6 + 4 : 9 + symbolSize("mark") * iconScale(feature, workspace.settings.iconSize)), palette);
     context.restore();
   }
 }
@@ -1060,25 +1081,26 @@ function updateZoomLabel() {
 
 export function fitData() {
   const chart = activeChart();
+  const layers = viewLayers(chart);
   // Only what the chart shows; hidden layers stay out of the fit.
-  const points = [...shownItems(chart, "route"), ...shownItems(chart, "saved-point"), ...shownItems(chart, "track"), ...shownItems(chart, "dr"),
-    ...shownItems(chart, "measure").flatMap((measure) => [measure, measure.end]), ...shownItems(chart, "wind"), ...shownItems(chart, "line").flatMap((line) => [line, line.end])];
+  const points = [...shownItems(chart, "route", layers), ...shownItems(chart, "saved-point", layers), ...shownItems(chart, "track", layers), ...shownItems(chart, "dr", layers),
+    ...shownItems(chart, "measure", layers).flatMap((measure) => [measure, measure.end]), ...shownItems(chart, "wind", layers), ...shownItems(chart, "line", layers).flatMap((line) => [line, line.end])];
   // A Scrambled Seas world's map counts while it is shown, so the whole world fits on screen.
-  for (const { centre, item } of vanillaIslands()) if (item) points.push(centre);
-  for (const feature of shownItems(chart, "feature")) {
+  for (const { centre, item } of vanillaIslands(chart, layers)) if (item) points.push(centre);
+  for (const feature of shownItems(chart, "feature", layers)) {
     points.push(feature);
     if (feature.rangeNm) points.push(...[0, 90, 180, 270].map((bearing) => destinationPoint(feature, bearing, feature.rangeNm)));
-    const island = chartIsland(feature);
+    const island = chartIsland(feature, layers);
     if (island) {
       const bounds = islandWorldBounds(island, feature);
       points.push({ lat: bounds.minLat, lon: bounds.minLon }, { lat: bounds.maxLat, lon: bounds.maxLon });
     }
   }
-  for (const search of shownItems(chart, "search")) {
+  for (const search of shownItems(chart, "search", layers)) {
     const extent = searchExtent(search);
     // Without its search line, a search is just its area, from the near edge out.
-    const edges = chart.layers.searchLines ? [extent.farNm] : [extent.nearNm, extent.farNm];
-    if (chart.layers.searchLines) points.push(search);
+    const edges = layers.searchLines ? [extent.farNm] : [extent.nearNm, extent.farNm];
+    if (layers.searchLines) points.push(search);
     for (const nm of edges) points.push(...[extent.fromDeg, search.bearing, extent.toDeg].map((bearing) => destinationPoint(search, bearing, nm)));
   }
   if (!points.length) {

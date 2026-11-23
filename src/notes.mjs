@@ -4,7 +4,7 @@
 // side near the chart's edge. It hides while its icon is out of view and shows again when it returns.
 import { MAX_ENCOUNTER_NOTES, MAX_NOTE_LENGTH, itemShown, iconScale } from "./model.mjs";
 import { canvas, context, elements, keysBelongTo } from "./dom.mjs";
-import { activeChart, commit, isSelected, workspace } from "./state.mjs";
+import { activeChart, commit, isSelected, viewLayers, workspace } from "./state.mjs";
 import { symbolSize, worldToScreen } from "./viewport.mjs";
 import { LOCATION_ICONS, drawLocationIcon } from "./icons.mjs";
 import { mapPalette } from "./theme.mjs";
@@ -126,7 +126,8 @@ export function positionNotePopout() {
   }
   const stage = canvas.getBoundingClientRect();
   const icon = worldToScreen(note);
-  if (!itemShown(activeChart(), opened.kind, note) || icon.x < 0 || icon.y < 0 || icon.x > stage.width || icon.y > stage.height) {
+  const chart = activeChart();
+  if (!itemShown(chart, opened.kind, note, viewLayers(chart)) || icon.x < 0 || icon.y < 0 || icon.x > stage.width || icon.y > stage.height) {
     popout.hidden = true;
     return;
   }

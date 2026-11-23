@@ -289,6 +289,7 @@ final class ChartWindow: NSObject, NSWindowDelegate, WKScriptMessageHandler, WKN
                 "shortcuts": Dictionary(uniqueKeysWithValues: applied.tools.map { ($0.mode, $0.key) }),
                 "checkForUpdates": applied.checkForUpdates,
                 "clearReachedAreas": applied.clearReachedAreas,
+                "shareViewSettings": applied.shareViewSettings,
                 "interfaceSize": applied.interfaceSize,
                 "theme": applied.theme,
                 "appearance": applied.appearance,

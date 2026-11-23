@@ -98,10 +98,11 @@ final class AppSettingsTests: XCTestCase {
     }
 
     func testReadsTheSettingsThePageSends() {
-        let settings = parse(#"{"tools":[{"mode":"select","label":"Select","key":"v"}],"checkForUpdates":false,"clearReachedAreas":false,"interfaceSize":150,"theme":"sailwind","appearance":"light","dark":false,"themes":[{"id":"chartroom","label":"Chartroom"},{"id":"sailwind","label":"Sailwind paper"}],"appearances":[{"id":"system","label":"Match macOS"},{"broken":true}]}"#)
+        let settings = parse(#"{"tools":[{"mode":"select","label":"Select","key":"v"}],"checkForUpdates":false,"clearReachedAreas":false,"shareViewSettings":true,"interfaceSize":150,"theme":"sailwind","appearance":"light","dark":false,"themes":[{"id":"chartroom","label":"Chartroom"},{"id":"sailwind","label":"Sailwind paper"}],"appearances":[{"id":"system","label":"Match macOS"},{"broken":true}]}"#)
         XCTAssertEqual(settings?.tools.first?.key, "v")
         XCTAssertEqual(settings?.checkForUpdates, false)
         XCTAssertEqual(settings?.clearReachedAreas, false)
+        XCTAssertEqual(settings?.shareViewSettings, true)
         XCTAssertEqual(settings?.interfaceSize, 150)
         XCTAssertEqual(settings?.theme, "sailwind")
         XCTAssertEqual(settings?.appearance, "light")
@@ -115,6 +116,7 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertEqual(settings?.interfaceSize, 0)
         XCTAssertEqual(settings?.checkForUpdates, true)
         XCTAssertEqual(settings?.clearReachedAreas, true)
+        XCTAssertEqual(settings?.shareViewSettings, false)
     }
 
     func testIncompleteSettingsAreIgnored() {

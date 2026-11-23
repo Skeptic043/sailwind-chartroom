@@ -15,6 +15,7 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
     private let interfaceSize = NSPopUpButton()
     private let checkUpdates = NSButton(checkboxWithTitle: "Check for updates when Chartroom starts", target: nil, action: nil)
     private let clearReachedAreas = NSButton(checkboxWithTitle: "Clear search areas and rough areas for places you reach", target: nil, action: nil)
+    private let shareViewSettings = NSButton(checkboxWithTitle: "Share View settings across charts", target: nil, action: nil)
 
     /// - Parameter apply: Receives the settings on OK and Apply, after they have been checked.
     init(settings: AppSettings, defaults: [ToolShortcut], apply: @escaping (AppSettings) -> Void) {
@@ -49,6 +50,7 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
         ]
         checkUpdates.state = settings.checkForUpdates ? .on : .off
         clearReachedAreas.state = settings.clearReachedAreas ? .on : .off
+        shareViewSettings.state = settings.shareViewSettings ? .on : .off
 
         let ok = NSButton(title: "OK", target: self, action: #selector(confirm))
         ok.keyEquivalent = "\r"
@@ -62,7 +64,7 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
 
         let layout = NSStackView(views: [
             heading("Tool shortcuts"), grid(shortcutRows), restore,
-            heading("Display"), grid(displayRows),
+            heading("Display"), grid(displayRows), shareViewSettings,
             heading("Voyage Recorder"), clearReachedAreas,
             heading("Updates"), checkUpdates,
             buttons
@@ -72,7 +74,7 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
         layout.spacing = 10
         layout.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
         layout.setCustomSpacing(18, after: restore)
-        layout.setCustomSpacing(18, after: layout.views[4])
+        layout.setCustomSpacing(18, after: shareViewSettings)
         layout.setCustomSpacing(18, after: clearReachedAreas)
         layout.setCustomSpacing(18, after: checkUpdates)
         buttons.trailingAnchor.constraint(equalTo: layout.trailingAnchor, constant: -20).isActive = true
@@ -142,6 +144,7 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
                                   interfaceSize: AppSettings.interfaceSizes[max(0, interfaceSize.indexOfSelectedItem)],
                                   theme: pick(theme, current.themes, current.theme), appearance: pick(appearance, current.appearances, current.appearance))
         applied.clearReachedAreas = clearReachedAreas.state == .on
+        applied.shareViewSettings = shareViewSettings.state == .on
         applied.iconSize = pick(iconSize, current.iconSizes, current.iconSize)
         apply(applied)
         return true

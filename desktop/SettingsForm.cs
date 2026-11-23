@@ -19,6 +19,7 @@ internal sealed class SettingsForm : Form
     private readonly ComboBox interfaceSize = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 190 };
     private readonly ComboBox iconSize = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 190 };
     private readonly CheckBox checkUpdates = new() { Text = "Check for updates when Chartroom starts", AutoSize = true };
+    private readonly CheckBox shareViewSettings = new() { Text = "Share View settings across charts", AutoSize = true };
     private readonly CheckBox clearReachedAreas = new() { Text = "Clear search areas and rough areas for places you reach", AutoSize = true };
     private readonly AppSettings current;
     private readonly Action<AppSettings> apply;
@@ -75,6 +76,9 @@ internal sealed class SettingsForm : Form
             display.Controls.Add(new Label { Text = label, AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 6, 12, 3) });
             display.Controls.Add(control);
         }
+        shareViewSettings.Checked = current.ShareViewSettings;
+        display.Controls.Add(shareViewSettings);
+        display.SetColumnSpan(shareViewSettings, 2);
 
         checkUpdates.Checked = current.CheckForUpdates;
         var updates = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, Padding = new Padding(6, 4, 6, 6) };
@@ -162,6 +166,7 @@ internal sealed class SettingsForm : Form
             Pick(theme, current.Themes, current.Theme), Pick(appearance, current.Appearances, current.Appearance))
         {
             ClearReachedAreas = clearReachedAreas.Checked,
+            ShareViewSettings = shareViewSettings.Checked,
             IconSize = Pick(iconSize, current.IconSizes, current.IconSize)
         });
         return true;

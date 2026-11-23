@@ -34,6 +34,7 @@ public struct AppSettings: Equatable {
     public var iconSize = "normal"
     public var iconSizes: [SettingChoice] = []
     public var dark = true
+    public var shareViewSettings = false
     /// Whether a port reached with Voyage Recorder clears its search areas and rough areas.
     public var clearReachedAreas = true
 
@@ -68,6 +69,7 @@ public struct AppSettings: Equatable {
         settings.iconSize = object["iconSize"] as? String ?? "normal"
         settings.iconSizes = choices(object["iconSizes"])
         settings.dark = JSONValue.bool(object["dark"]) != false
+        settings.shareViewSettings = JSONValue.bool(object["shareViewSettings"]) == true
         settings.clearReachedAreas = JSONValue.bool(object["clearReachedAreas"]) != false
         return settings
     }

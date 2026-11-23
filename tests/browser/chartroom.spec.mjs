@@ -1,4 +1,5 @@
 import { test, expect } from "./harness.mjs";
+import { commonSearchOverlap, defaultShortcuts } from "../../src/model.mjs";
 
 test("starts from the host's workspace and reports the host's version", async ({ chartroom, page }) => {
   await chartroom.open();
@@ -126,6 +127,58 @@ test("a search area takes an island from the library and can drop it again", asy
   await expect(page.locator("#search-island-status")).toHaveText("None");
   expect((await chartroom.chart()).searches[0].islandId).toBeUndefined();
 });
+
+for (const shareViewSettings of [false, true]) {
+  test(`overlapping searches draw their shared island with ${shareViewSettings ? "shared" : "per-chart"} View settings`, async ({ chartroom, page }) => {
+    const label = shareViewSettings ? "Dead Cove" : "Uncharted cove";
+    const search = { lon: 0, bearing: 90, distanceNm: 100, spreadDeg: 33, tolerancePct: 30, label };
+    const searches = [
+      { ...search, id: "south", lat: 19.78, showIsland: false },
+      { ...search, id: "north", lat: 20.22, ...(shareViewSettings ? {} : { islandId: "emerald/dead_cove" }) }
+    ];
+    // Centre the canvas on the overlap. The individual search centres are 55 pixels away.
+    const view = { ...commonSearchOverlap(searches), zoom: 250 };
+    await chartroom.open({
+      settings: { shareViewSettings, sharedViewLayers: { labels: false, searchIslands: true } },
+      charts: [{ id: "sea", name: "Sea", view, searches, layers: { labels: false, searchIslands: !shareViewSettings } }]
+    });
+    await chartroom.items().filter({ hasText: label }).nth(1).click({ modifiers: ["Shift"] });
+    await expect(page.locator("#search-island-status")).toHaveText(shareViewSettings ? "Dead Cove · matched by name" : "Dead Cove");
+
+    const picture = () => chartroom.canvas.evaluate((canvas) => {
+      const sample = document.createElement("canvas");
+      const size = Math.round(64 * canvas.width / canvas.clientWidth);
+      sample.width = sample.height = size;
+      sample.getContext("2d").drawImage(canvas, (canvas.width - size) / 2, (canvas.height - size) / 2, size, size, 0, 0, size, size);
+      return sample.toDataURL();
+    });
+    const toggleIslands = () => page.locator("#layer-search-islands").evaluate((input) => input.click());
+    const chooseIsland = async (name) => {
+      await page.locator("#choose-search-island").click();
+      await page.locator("#island-search").fill(name);
+      await page.locator("#island-list .island-row").filter({ hasText: name }).first().click();
+    };
+
+    const original = await picture();
+    await toggleIslands();
+    const hidden = await picture();
+    expect(hidden === original, "turning off search islands hides the outline at the overlap").toBe(false);
+    await toggleIslands();
+    expect(await picture()).toBe(original);
+
+    await chooseIsland("Turtle Island");
+    await expect(page.locator("#search-island-status")).toHaveText("Turtle Island");
+    const changed = await picture();
+    expect(changed).not.toBe(original);
+    expect(changed).not.toBe(hidden);
+    await page.locator("#choose-search-island").click();
+    await page.locator("#remove-island").click();
+    await expect(page.locator("#search-island-status")).toHaveText("None");
+    expect(await picture()).toBe(hidden);
+    await chooseIsland("Dead Cove");
+    expect(await picture()).toBe(original);
+  });
+}
 
 test("shift-drag selects several items and dragging moves them together", async ({ chartroom }) => {
   await chartroom.open();
@@ -352,6 +405,94 @@ test("Settings opens the native window with the current keys and applies what it
   expect((await page.evaluate(() => window.__host.zooms)).at(-1)).toBe(1.5);
 });
 
+test("sharing View settings remembers both modes while Vanilla map follows its chart", async ({ chartroom, page }) => {
+  await chartroom.open({ activeChartId: "a", charts: [
+    { id: "a", name: "First sea", layers: { grid: false, vanillaMap: true, trackVoyageManualLocations: false } },
+    { id: "b", name: "Second sea", track: [{ id: "mark", lat: 10, lon: 0, t: 1, source: "voyage", event: "mark" }] }
+  ] });
+  const grid = page.locator("#layer-grid");
+  const manual = page.locator("#layer-track-voyage-manual");
+  const vanilla = page.locator("#layer-vanilla");
+  const picker = page.locator("#chart-select");
+  const fileMenu = page.locator('[data-menu="file"] summary');
+  const picture = () => chartroom.canvas.evaluate((canvas) => canvas.toDataURL());
+  const selectChart = async (id) => {
+    await fileMenu.click();
+    await picker.selectOption(id);
+  };
+  const applySharing = async (shareViewSettings) => {
+    await page.evaluate((settings) => { window.__host.settingsReply = settings; }, { shortcuts: defaultShortcuts(), shareViewSettings });
+    await fileMenu.click();
+    await page.locator("#open-settings").click();
+    return page.evaluate(() => window.__host.settingsOpened.settings.shareViewSettings);
+  };
+
+  await selectChart("b");
+  await expect(grid).toBeChecked();
+  await expect(manual).toBeChecked();
+  const original = await picture();
+  await selectChart("a");
+  expect(await applySharing(true)).toBe(false);
+  await selectChart("b");
+  await expect(grid).not.toBeChecked();
+  await expect(manual).not.toBeChecked();
+  await expect(vanilla).not.toBeChecked();
+  expect(await picture()).not.toBe(original);
+  const { width, height } = await chartroom.canvas.boundingBox();
+  await chartroom.clickChart(width / 2, height / 2);
+  await expect(page.locator("#track-inspector")).toBeHidden();
+
+  await grid.evaluate((input) => input.click());
+  await selectChart("a");
+  await expect(grid).toBeChecked();
+  await expect(vanilla).toBeChecked();
+  expect(await applySharing(false)).toBe(true);
+  await expect(grid).not.toBeChecked();
+  await selectChart("b");
+  await expect(manual).toBeChecked();
+  expect(await picture()).toBe(original);
+
+  await applySharing(true);
+  await chartroom.saved();
+  await page.reload();
+  await expect(grid).toBeChecked();
+  await expect(manual).not.toBeChecked();
+  await expect(vanilla).not.toBeChecked();
+});
+
+test("new and imported charts use shared View settings and importing positions respects a hidden track", async ({ chartroom, page }) => {
+  await chartroom.open({
+    settings: { shareViewSettings: true, sharedViewLayers: { grid: false, track: false } },
+    charts: [{ id: "a", name: "First sea" }]
+  });
+  await page.locator('[data-menu="file"] summary').click();
+  await page.locator("#new-chart").click();
+  await page.locator("#dialog-chart-name").fill("New sea");
+  await page.locator("#chart-form button.primary").click();
+  await expect(page.locator("#layer-grid")).not.toBeChecked();
+  await expect(page.locator("#layer-vanilla")).not.toBeChecked();
+
+  const chartFile = { name: "Imported sea", features: [], layers: { grid: true, track: false, vanillaMap: true } };
+  await page.locator("#json-file").setInputFiles({ name: "sea.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(chartFile)) });
+  await expect(page.locator("#toast")).toContainText("Imported 1 chart");
+  await expect(page.locator("#layer-grid")).not.toBeChecked();
+  await expect(page.locator("#layer-vanilla")).toBeChecked();
+
+  await page.locator('[data-menu="voyage"] summary').click();
+  await page.locator("#paste-track").click();
+  await page.locator("#paste-text").fill("10 0 1");
+  await page.locator("#paste-form button.primary").click();
+  const track = page.locator("#layer-track");
+  await expect(track).not.toBeChecked();
+  expect((await chartroom.chart()).track).toHaveLength(1);
+  expect((await chartroom.chart()).layers.track).toBe(false);
+
+  await track.evaluate((input) => input.click());
+  await chartroom.press("Control+z");
+  expect((await chartroom.chart()).track).toHaveLength(0);
+  await expect(track).toBeChecked();
+});
+
 test("Ctrl + and Ctrl - step the interface size and Ctrl 0 returns to the Windows size", async ({ chartroom, page }) => {
   await chartroom.open();
   await chartroom.press("Control+=");
@@ -515,6 +656,66 @@ test("the measure line stays until it is replaced or deleted, and View can hide 
   expect(replaced[0].id).not.toBe(first.id);
   await chartroom.press("Delete");
   expect((await chartroom.chart()).measures).toEqual([]);
+});
+
+test("Measure speed controls the line's passage time independently of Route", async ({ chartroom, page }) => {
+  await page.addInitScript(() => {
+    const original = CanvasRenderingContext2D.prototype.fillText;
+    CanvasRenderingContext2D.prototype.fillText = function (text, ...args) {
+      if (this.canvas.id === "chart-canvas" && text.endsWith(" kn")) window.__lineLabel = text;
+      original.call(this, text, ...args);
+    };
+  });
+  await chartroom.open({
+    settings: { routePanel: { shown: false } },
+    charts: [{ id: "sea", name: "Sea", speedKn: 8, view: { lat: 20, lon: 0, zoom: 140 } }]
+  });
+  const inspector = page.locator("#measure-inspector");
+  const speed = inspector.getByRole("spinbutton", { name: "Speed (kn)" });
+  const detail = page.locator("#measure-detail");
+  const lineLabel = () => page.evaluate(() => window.__lineLabel);
+  const measure = (y) => chartroom.dragChart({ x: 400, y }, { x: 520, y });
+  await expect(page.locator("#route-summary")).toBeHidden();
+  await chartroom.press("m");
+  await measure(400);
+  await expect(speed).toHaveValue("8");
+  await expect(detail).toContainText("15h 00m at 8 kn");
+  await expect(inspector).not.toContainText("Measuring again");
+
+  await speed.fill("12");
+  await speed.press("Enter");
+  await expect(detail).toContainText("10h 00m at 12 kn");
+  expect(await lineLabel()).toContain("10h 00m at 12 kn");
+  expect((await chartroom.chart()).speedKn).toBe(8);
+
+  await page.getByRole("button", { name: "Keep as a chart line" }).click();
+  await expect(page.locator("#measure-kind")).toHaveText("Chart line");
+  await expect(detail).toContainText("10h 00m at 12 kn");
+  expect(await lineLabel()).toContain("10h 00m at 12 kn");
+
+  await chartroom.press("m");
+  await chartroom.clickChart(400, 320);
+  await page.evaluate(() => { delete window.__lineLabel; });
+  const { x, y } = await chartroom.canvas.boundingBox();
+  await page.mouse.move(x + 520, y + 320);
+  expect(await lineLabel()).toContain("10h 00m at 12 kn");
+  await chartroom.clickChart(520, 320);
+  await expect(speed).toHaveValue("12");
+
+  await chartroom.press("r");
+  await chartroom.clickChart(400, 240);
+  await chartroom.clickChart(520, 240);
+  await page.locator("#show-route-panel").click();
+  const routeSpeed = page.locator("#route-speed");
+  await expect(routeSpeed).toHaveValue("8");
+  await routeSpeed.fill("10");
+  await routeSpeed.press("Tab");
+  await chartroom.saved();
+  await page.reload();
+  await chartroom.items().filter({ hasText: "Measure line" }).click();
+  await expect(speed).toHaveValue("12");
+  await expect(detail).toContainText("10h 00m at 12 kn");
+  await expect(routeSpeed).toHaveValue("10");
 });
 
 test("island outlines can be hidden while their locations stay", async ({ chartroom, page }) => {

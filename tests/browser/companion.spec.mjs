@@ -414,6 +414,41 @@ test("Publish world/route and Enter a race save the file, check the run and open
   await expect(page.locator("#export-voyage-dialog")).toBeHidden();
 });
 
+test("a recording from before Voyage Recorder 0.2.2 can enter a race but not be published as a route", async ({ chartroom, page }) => {
+  const course = (id, world, rules = {}) => ({ id, version: 1, name: id, world, start: { island: "alankh/gold_rock_city" }, checkpoints: [{ island: "alankh/neverdin" }], order: "any", finish: { lastCheckpoint: true }, rules: { sortBy: "game", mods: { mode: "any", plugins: [] }, ...rules } });
+  await site(page, {
+    "data/courses.json": [{ id: "dash", name: "Dash", world: "vanilla", runs: 2 }, { id: "elsewhere", name: "Elsewhere", world: "ss-0000000000000000", runs: 0 }],
+    "data/boards/dash.json": { course: course("dash", "vanilla", { mods: { mode: "only", plugins: [] } }), runs: [] }
+  });
+  // No world, real time or mod list in the session line, as Voyage Recorder 0.1.9 wrote it.
+  const runs = [lines(
+    { type: "session", day: 3, hour: 9, game: "g1" },
+    ...Array.from({ length: 8 }, (_, step) => ({ type: "position", day: 3, hour: 9 + step, lat: GRC.lat + (NEVERDIN.lat - GRC.lat) * step / 7, lon: GRC.lon + (NEVERDIN.lon - GRC.lon) * step / 7 }))
+  )];
+  await chartroom.open(null, { recording: { name: "slot1.jsonl", runs } });
+  await page.locator('.app-menu[data-menu="voyage"] > summary').click();
+  await page.locator("#follow-track").click();
+  await page.locator("#missing-form button.primary").click();
+  await expect.poll(() => page.evaluate(() => window.__host.workspace?.charts?.[0]?.track?.length ?? 0)).toBe(8);
+
+  await page.locator('.app-menu[data-menu="voyage"] > summary').click();
+  await page.locator("#share-voyage").click();
+  await expect(page.locator("#export-voyage-dialog")).toBeHidden();
+
+  await page.locator('.app-menu[data-menu="voyage"] > summary').click();
+  await page.locator("#enter-race").click();
+  // Without a recorded world every race is offered, and the run counts as sailed in the chosen race's world.
+  await expect(page.locator("#export-course option")).toHaveText(["Dash (2 runs)", "Elsewhere (0 runs)"]);
+  await expect(page.locator("#export-world")).toHaveText("World not recorded, so the run counts as sailed in the race's world.");
+  await page.locator("#export-course").selectOption("dash");
+  await page.locator("#export-submit").click();
+  await expect(page.locator("#export-check")).toContainText("The board will note: mods not recorded.");
+  await expect.poll(() => page.evaluate(() => window.__host.links?.at(-1))).toBe("https://github.com/Skeptic043/sailwind-chartroom-voyages/issues/new?template=enter-race.yml&course=dash");
+  const entry = JSON.parse(await page.evaluate(() => window.__host.exports.at(-1).contents));
+  expect(entry.world).toEqual({ kind: "unknown" });
+  expect(entry.plugins).toBeUndefined();
+});
+
 test("Publish route as race reads the route's islands and opens the race form filled in", async ({ chartroom, page }) => {
   await site(page, { "data/courses.json": [{ id: "taken", name: "Taken", world: "vanilla", runs: 0 }] });
   const route = [{ id: "a", ...GRC }, { id: "b", lat: 31.4, lon: -5.2, name: "Buoy" }, { id: "c", ...NEVERDIN }, { id: "d", ...GRC }];

@@ -19,6 +19,7 @@ internal sealed record AppSettings(IReadOnlyList<ToolShortcut> Tools, bool Check
     internal string IconSize { get; init; } = "normal";
     internal IReadOnlyList<SettingChoice> IconSizes { get; init; } = [];
     internal bool Dark { get; init; } = true;
+    internal bool ShareViewSettings { get; init; }
 
     /// <summary>Whether a port reached with Voyage Recorder clears its search areas and rough areas.</summary>
     internal bool ClearReachedAreas { get; init; } = true;
@@ -49,6 +50,7 @@ internal sealed record AppSettings(IReadOnlyList<ToolShortcut> Tools, bool Check
             IconSize = Text(value, "iconSize") ?? "normal",
             IconSizes = Choices(value, "iconSizes"),
             Dark = !value.TryGetProperty("dark", out var dark) || dark.ValueKind != JsonValueKind.False,
+            ShareViewSettings = value.TryGetProperty("shareViewSettings", out var shareView) && shareView.ValueKind == JsonValueKind.True,
             ClearReachedAreas = !value.TryGetProperty("clearReachedAreas", out var clear) || clear.ValueKind != JsonValueKind.False
         };
     }

@@ -4,7 +4,7 @@ import { searchIsland, visibleIsland } from "./islands.mjs";
 import { assignedBoats, boatMarkerSize } from "./boats.mjs";
 import { clamp } from "./format.mjs";
 import { canvas } from "./dom.mjs";
-import { activeChart } from "./state.mjs";
+import { activeChart, viewLayers } from "./state.mjs";
 
 export function worldToScreen(point) {
   const rectangle = canvas.getBoundingClientRect();
@@ -48,16 +48,16 @@ export function islandPixelSpan(island) {
 }
 
 // The island outline a location, rough area or search area draws, unless View hides its islands.
-export function chartIsland(feature) {
-  return islandsShown(activeChart(), "feature", feature) ? visibleIsland(feature) : null;
+export function chartIsland(feature, layers = viewLayers()) {
+  return islandsShown(activeChart(), "feature", feature, layers) ? visibleIsland(feature) : null;
 }
 
-export function chartSearchIsland(search) {
-  return islandsShown(activeChart(), "search", search) ? searchIsland(search) : null;
+export function chartSearchIsland(search, layers = viewLayers()) {
+  return islandsShown(activeChart(), "search", search, layers) ? searchIsland(search) : null;
 }
 
-export function featureBoats(feature) {
-  return boatRowAt(feature, chartIsland(feature), 1, assignedBoats(feature));
+export function featureBoats(feature, layers) {
+  return boatRowAt(feature, chartIsland(feature, layers), 1, assignedBoats(feature));
 }
 
 // One size rule for every chart symbol. Each is `full` pixels at SYMBOL_FULL_SIZE_ZOOM and grows and

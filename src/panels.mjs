@@ -4,7 +4,7 @@ import { assignedIsland, islandById, searchIsland, visibleIsland } from "./islan
 import { assignedBoats } from "./boats.mjs";
 import { formatBearing, formatDirection, formatLeg, formatNm, plainDegrees } from "./format.mjs";
 import { elements } from "./dom.mjs";
-import { activeChart, isSelected, live, selectItem, selectedItem, selectedKeys, selectedRefs, selection, updateUndoButtons, workspace } from "./state.mjs";
+import { activeChart, isSelected, live, selectItem, selectedItem, selectedKeys, selectedRefs, selection, updateUndoButtons, viewLayers, workspace } from "./state.mjs";
 import { centerOn, drawChart } from "./render.mjs";
 import { renderDeadReckoning } from "./dead-reckoning-panel.mjs";
 import { renderTrackConnect, renderTrackSelection } from "./track-selection.mjs";
@@ -104,10 +104,9 @@ export const LAYER_CONTROLS = Object.freeze([
 
 function renderLayerControls() {
   const chart = activeChart();
-  const layers = chart.layers;
+  const layers = viewLayers(chart);
   // The imported map is offered only on a chart imported from Scrambled Seas.
   elements["layer-imported-row"].hidden = !chart.scramble;
-  // Hidden positions exist only with equipment readings on.
   const shown = (key) => key === "importedMap" ? layers.importedMap && Boolean(chart.scramble) : layers[key];
   for (const [elementId, key, parents] of LAYER_CONTROLS) {
     elements[elementId].checked = layers[key];
@@ -312,10 +311,9 @@ function renderMeasureInspector(measure, kept) {
   elements["line-colour-row"].hidden = !kept;
   elements["line-colour"].value = measure.color ?? "";
   elements["keep-measure"].hidden = kept;
-  elements["measure-note"].textContent = kept ? "Drag either end to adjust the line." : "Drag either end to adjust the line. Measuring again replaces it unless you keep it.";
+  const speed = activeChart().measureSpeedKn;
+  if (document.activeElement !== elements["measure-speed"]) elements["measure-speed"].value = speed;
   const nm = distanceNm(measure, measure.end);
-  const chart = activeChart();
-  const speed = chart.speedKn;
   const at = (point) => `${formatCoordinate(point.lat, "lat", 3)} · ${formatCoordinate(point.lon, "lon", 3)}`;
   elements["measure-detail"].textContent = [
     `${formatNm(nm)} nm · ${formatBearing(bearingDegrees(measure, measure.end))}`,

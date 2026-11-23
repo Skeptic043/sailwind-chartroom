@@ -106,14 +106,16 @@ async function openExport(nextMode) {
     return;
   }
   const key = worldKey(chart.recording?.world);
-  if (nextMode !== "export" && !key) {
+  // A recording from before Voyage Recorder 0.2.2 doesn't name its world. It can still enter a race, which then
+  // takes it as sailed in the race's world, but it can't be published as a route of its own.
+  if (nextMode === "share" && !key) {
     showToast("This chart's recording doesn't say which world it's from, so it can't go on Chartroom Voyages.", true);
     return;
   }
   if (nextMode === "race") {
     try {
       const all = await siteData("data/courses.json");
-      courses = all.filter((course) => course.world === key);
+      courses = key ? all.filter((course) => course.world === key) : all;
     } catch (error) {
       showToast(error.message, true);
       return;
@@ -140,7 +142,7 @@ async function openExport(nextMode) {
   elements["export-from"].value = String(points.indexOf(latest[0]));
   elements["export-to"].value = String(points.length - 1);
   const world = chart.recording?.world;
-  elements["export-world"].textContent = !world ? "" : world.kind === "vanilla" ? "World: vanilla Sailwind." : `World: Scrambled Seas, seed ${world.seed}.`;
+  elements["export-world"].textContent = !world ? (mode === "race" ? "World not recorded, so the run counts as sailed in the race's world." : "") : world.kind === "vanilla" ? "World: vanilla Sailwind." : `World: Scrambled Seas, seed ${world.seed}.`;
   elements["export-check"].hidden = true;
   elements["export-name"].value = "";
   elements["export-note"].value = "";
@@ -231,7 +233,8 @@ async function finishExport() {
         check.textContent = `This run wouldn't be accepted: ${result.reason}`;
         return;
       }
-      check.textContent = `${formatDuration(result.gameHours)} of game time, starting from ${result.startedFrom}.`;
+      const notes = (result.notes ?? []).map((note) => RUN_NOTES[note]).filter(Boolean);
+      check.textContent = `${formatDuration(result.gameHours)} of game time, starting from ${result.startedFrom}.${notes.length ? ` The board will note: ${notes.join(", ")}.` : ""}`;
       form = issueFormUrl("enter-race", { course: id });
     } else if (mode === "share") {
       form = issueFormUrl("share-voyage");
@@ -431,6 +434,9 @@ export function drawHeatmap(palette) {
   }
   context.restore();
 }
+
+// What the board notes for a run from an older recording, as Chartroom Voyages words it.
+const RUN_NOTES = Object.freeze({ "mods-not-recorded": "mods not recorded", "no-real-time": "no real time recorded" });
 
 const EVENT_NAMES = { "race-start": "Race start", "race-checkpoint": "Race checkpoint", "race-finish": "Race finish", mark: "Recorded location", start: "Recording started", stop: "Recording stopped" };
 

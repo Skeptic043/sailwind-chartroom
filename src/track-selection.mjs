@@ -1,11 +1,11 @@
 // Two or more selected Coordinate Viewer positions: their distance and average speed in the track
 // position inspector, and Save route, which keeps them as a saved route. Two positions either side of a gap
 // can be connected from the Connect track panel under the tools, making the stretches one.
-import { formatDuration, makeId, revealLayer } from "./model.mjs";
+import { formatDuration, makeId } from "./model.mjs";
 import { besideGap, connectionBetween, sailedStats, trackToRoutePoints } from "./track.mjs";
 import { formatNm } from "./format.mjs";
 import { elements, showToast } from "./dom.mjs";
-import { activeChart, commit, replaceSelectionState, selectedRefs } from "./state.mjs";
+import { activeChart, commit, replaceSelectionState, revealLayer, selectedRefs } from "./state.mjs";
 
 export function initTrackSelection() {
   elements["track-to-route"].addEventListener("click", trackSelectionToRoute);

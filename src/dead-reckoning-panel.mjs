@@ -1,11 +1,11 @@
 // The Dead reckoning tool's panel. It starts from your latest position, or from a point clicked on the
 // chart, and plots where your course, speed and hours sailed put you.
-import { createDrPosition, formatCoordinate, parseBearing, revealLayer, shownItems } from "./model.mjs";
+import { createDrPosition, formatCoordinate, parseBearing, shownItems } from "./model.mjs";
 import { deadReckon, drSigma, latestPosition, positionLabel } from "./dead-reckoning.mjs";
 import { hasTime } from "./track.mjs";
 import { formatGameTime, parseDayTime } from "./gametime.mjs";
 import { elements, showToast } from "./dom.mjs";
-import { activeChart, commit, live, replaceSelectionState } from "./state.mjs";
+import { activeChart, commit, live, replaceSelectionState, revealLayer, viewLayers } from "./state.mjs";
 
 export const DR_HINT = "Click the chart to choose a starting position. Otherwise, dead reckoning starts from your latest position.";
 
@@ -49,9 +49,10 @@ function pick(start) {
 // A click on the chart while the tool is active sets where the next position starts.
 export function pickStart(target) {
   const chart = activeChart();
+  const layers = viewLayers(chart);
   const at = (item) => item.lat === target.lat && item.lon === target.lon;
-  const position = shownItems(chart, "dr").find(at);
-  const recorded = shownItems(chart, "track").find(at);
+  const position = shownItems(chart, "dr", layers).find(at);
+  const recorded = shownItems(chart, "track", layers).find(at);
   if (position) reckonFrom(position);
   else if (recorded) pick({ lat: recorded.lat, lon: recorded.lon, t: hasTime(recorded) ? recorded.t : null, sigmaNm: 0, label: "Recorded position" });
   else pick({ lat: target.lat, lon: target.lon, t: null, sigmaNm: 0, label: `${formatCoordinate(target.lat, "lat", 3)} · ${formatCoordinate(target.lon, "lon", 3)}` });

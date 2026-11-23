@@ -77,6 +77,7 @@ internal sealed class MainForm : Form
                 shortcuts = applied.Tools.ToDictionary(tool => tool.Mode, tool => tool.Key),
                 checkForUpdates = applied.CheckForUpdates,
                 clearReachedAreas = applied.ClearReachedAreas,
+                shareViewSettings = applied.ShareViewSettings,
                 interfaceSize = applied.InterfaceSize,
                 theme = applied.Theme,
                 appearance = applied.Appearance,

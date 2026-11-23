@@ -2,7 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { ICON_SIZES, iconScale, createChart, createFeature, createNote, createSearch, createWorkspace, importChartData, itemShown, newRecorderNotes, newVisits, readVoyageRecorder, removeChartItems, sanitizeChart, sanitizeWorkspace, SCHEMA_VERSION } from "../src/model.mjs";
+import { COMPARISON_COLOURS, ICON_SIZES, iconScale, createChart, createFeature, createNote, createSearch, createWorkspace, importChartData, itemShown, newRecorderNotes, newVisits, readVoyageRecorder, removeChartItems, sanitizeChart, sanitizeWorkspace, SCHEMA_VERSION } from "../src/model.mjs";
 import { instrumentsAt, localHours, readingKnowledge, sanitizeEquipment, setInstruments } from "../src/equipment.mjs";
 import { chartGroups, createFolder, deleteFolder, moveChartToFolder, shiftChart, shiftFolder } from "../src/folders.mjs";
 import { buildVoyageFile, defaultShare, exportablePoints, hashGameId, parseVoyageFile, positionAtElapsed, sameWorld } from "../src/voyages.mjs";
@@ -532,4 +532,11 @@ test("an undo from Voyage Recorder takes back its mark, in the same text or one 
   assert.deepEqual(later.undone, ["m1"], "an undo for a mark read earlier is passed on for the chart to remove");
   const chart = sanitizeChart({ ...createChart(), track: first.points });
   assert.equal(chart.track[1].markId, "m1", "the mark keeps its id on the chart");
+});
+
+test("a comparison saved with a pre-0.10.2 colour keeps its place in the new colours", () => {
+  const voyage = { name: "Old", world: { kind: "vanilla" }, points: [{ t: 1, lat: 30, lon: 0 }, { t: 2, lat: 30.1, lon: 0.1 }] };
+  const saved = ["#7c3aed", "#a16207", "#123456"].map((color, index) => ({ ...voyage, id: `c${index}`, color }));
+  const chart = sanitizeChart({ ...createChart(), comparisons: saved });
+  assert.deepEqual(chart.comparisons.map((comparison) => comparison.color), [COMPARISON_COLOURS[1], COMPARISON_COLOURS[5], COMPARISON_COLOURS[0]]);
 });

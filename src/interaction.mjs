@@ -1,10 +1,10 @@
 // Tool modes and pointer handling on the chart canvas, including the previews tools draw while active.
-import { COMPASS_STEP_DEG, ITEM_KINDS, MAX_RANGE_NM, MAX_ZOOM, MIN_ZOOM, WORLD_BOUNDS, bearingDegrees, chartItemFocusPoint, createFeature, createMeasure, createRoutePoint, createSearch, createWind, distanceNm, formatCoordinate, isEncounter, isLocked, itemForRef, revealLayer, searchExtent, searchesAnsweredBy, shownItems, translateChartItems } from "./model.mjs";
+import { COMPASS_STEP_DEG, ITEM_KINDS, MAX_RANGE_NM, MAX_ZOOM, MIN_ZOOM, WORLD_BOUNDS, bearingDegrees, chartItemFocusPoint, createFeature, createMeasure, createRoutePoint, createSearch, createWind, distanceNm, formatCoordinate, isEncounter, isLocked, itemForRef, searchExtent, searchesAnsweredBy, shownItems, translateChartItems } from "./model.mjs";
 import { assignedIsland, islandById, searchIsland } from "./islands.mjs";
 import { assignedBoats, drawBoatSilhouette } from "./boats.mjs";
 import { clamp, formatDirection, formatNm } from "./format.mjs";
 import { canvas, context, elements } from "./dom.mjs";
-import { activeChart, commit, host, workspace, isSelected, persist, pushUndo, refreshSelection, replaceSelectionState, selectItem, selectedItem, selectedKeys, selectedRefs, selection, selectionKey, setPrimarySelection } from "./state.mjs";
+import { activeChart, commit, host, workspace, isSelected, persist, pushUndo, refreshSelection, replaceSelectionState, revealLayer, selectItem, selectedItem, selectedKeys, selectedRefs, selection, selectionKey, setPrimarySelection, viewLayers } from "./state.mjs";
 import { boatRowAt, coordinatePrecision, eventPoint, screenToWorld, worldToScreen } from "./viewport.mjs";
 import { boatColours, drawAreaCircle, drawChart, drawIslandSilhouette, drawLine, drawMeasureLine, drawSearchWedge, drawWindIndicator, labelPill, magnetRing } from "./render.mjs";
 import { findHit, resetHitCycle, nearestTrackPoint, onSelectedAreaEdge, selectedLineEnd, snapAlongRay, snapPoint } from "./hits.mjs";
@@ -195,7 +195,7 @@ export function drawPlacementDraft(palette) {
   if (!hoverTarget) return;
   const island = islandPlacement ? islandById(islandPlacement) : resolutionIsland();
   const source = resolutionDraft ? itemForRef(activeChart(), resolutionDraft) : null;
-  const boats = activeChart().layers.boats ? assignedBoats(source) : [];
+  const boats = viewLayers().boats ? assignedBoats(source) : [];
   if (!island && !boats.length) return;
   context.save();
   context.globalAlpha = .72;
@@ -235,7 +235,7 @@ export function drawMeasure(palette) {
     if (hoverTarget) drawMeasureLine(measureStart, hoverTarget, true, palette);
     return;
   }
-  if (!activeChart().layers.measure) return;
+  if (!viewLayers().measure) return;
   for (const item of activeChart().measures) drawMeasureLine(item, item.end, isSelected("measure", item.id), palette);
 }
 
@@ -586,8 +586,9 @@ function selectMarquee(start, end) {
   const bottom = Math.max(start.y, end.y);
   let last = null;
   const chart = activeChart();
+  const layers = viewLayers(chart);
   for (const kind of ITEM_KINDS.filter((candidate) => candidate !== "saved-route")) {
-    for (const item of shownItems(chart, kind)) {
+    for (const item of shownItems(chart, kind, layers)) {
       const point = worldToScreen(chartItemFocusPoint(kind, item));
       if (point.x < left || point.x > right || point.y < top || point.y > bottom) continue;
       selectedKeys.add(selectionKey(kind, item.id));

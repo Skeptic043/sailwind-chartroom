@@ -1,5 +1,5 @@
 // Owns the workspace, the selection and undo history. Every chart edit goes through commit().
-import { createWorkspace, followAnchors, itemForRef, sanitizeWorkspace, useGameClock } from "./model.mjs";
+import { createWorkspace, followAnchors, itemForRef, resolveViewLayers, revealLayer as revealChartLayer, sanitizeWorkspace, useGameClock } from "./model.mjs";
 import { elements } from "./dom.mjs";
 
 const UNDO_LIMIT = 60;
@@ -28,6 +28,14 @@ export function activeChart() {
   const chart = workspace.charts.find((chart) => chart.id === workspace.activeChartId) ?? workspace.charts[0];
   useGameClock(chart?.clockPercent);
   return chart;
+}
+
+export function viewLayers(chart = activeChart()) {
+  return resolveViewLayers(chart, workspace.settings);
+}
+
+export function revealLayer(chart, kind, item) {
+  if (!workspace.settings.shareViewSettings || kind === "note") revealChartLayer(chart, kind, item);
 }
 
 // The top bar shows saving as a coloured dot only, with its state in the tooltip, so the buttons beside it

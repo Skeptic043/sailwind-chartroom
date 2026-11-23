@@ -1,9 +1,9 @@
 // Follows Voyage Recorder or Coordinate Viewer as it records: the desktop host finds or asks for the file,
 // watches it and sends each new run of lines.
-import { isVoyageRecorderText, parseTrackText, readVoyageRecorder, revealLayer } from "./model.mjs";
+import { isVoyageRecorderText, parseTrackText, readVoyageRecorder } from "./model.mjs";
 import { addRecordingExtras, applyMarks, discoveredMarks, hasMarks } from "./discoveries.mjs";
 import { elements, showToast } from "./dom.mjs";
-import { activeChart, appendOutsideHistory, changeOutsideHistory, host, insertOutsideHistory, live, persist, workspace } from "./state.mjs";
+import { activeChart, appendOutsideHistory, changeOutsideHistory, host, insertOutsideHistory, live, persist, revealLayer, workspace } from "./state.mjs";
 import { joinRecording } from "./track.mjs";
 import { centerOn, drawChart } from "./render.mjs";
 import { renderEverything } from "./panels.mjs";
@@ -112,7 +112,7 @@ function addPositions(text) {
   const first = awaitingFirst && latest;
   if (first) {
     awaitingFirst = false;
-    // Following starts on a shown track; hiding it afterwards is left alone.
+    // Reveal the first position when the chart's own layers are in use.
     revealLayer(chart, "track", latest);
     points = joinFirstRun(chart, points);
   }
@@ -126,7 +126,7 @@ function addPositions(text) {
   if (first) centerOn(latest);
 }
 
-// Automatic discoveries change the chart outside undo, like the positions, and show their layers.
+// Automatic discoveries change the chart outside undo, like the positions.
 function addMarks(chart, marks) {
   if (!hasMarks(marks)) return;
   const { features, searches, outlines, cleared, answered } = marks;

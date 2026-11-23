@@ -45,6 +45,7 @@ import {
   parseCoordinate,
   parseCoordinateViewer,
   parseTrackText,
+  resolveViewLayers,
   sanitizeWorkspace,
   searchAreasOverlap,
   searchEvidenceOpacity,
@@ -52,6 +53,7 @@ import {
   searchIconAnchors,
   searchNameLabelIds,
   searchOverlapGroups,
+  setShareViewSettings,
   summarizeRoute,
   tradeWindAt,
   translateChartItems
@@ -196,6 +198,9 @@ test("a search area covers its compass point and distance margin", () => {
   const [restored] = sanitizeWorkspace({ charts: [{ ...createChart(), searches: [search, { ...search, distanceNm: 0 }] }] }).charts[0].searches;
   assert.deepEqual(restored, search, "saved searches survive reload; zero-distance ones are dropped");
   assert.deepEqual(assignedBoats(restored).map((boat) => boat.name), ["Dhow"]);
+  // Scrambled Seas on large world scales gives missions thousands of miles away.
+  const far = { ...search, distanceNm: 12500 };
+  assert.equal(sanitizeWorkspace({ charts: [{ ...createChart(), searches: [far] }] }).charts[0].searches[0].distanceNm, 12500, "far searches keep their distance on reload");
 });
 
 test("removes stacked fill outside the common solution for matching search areas", () => {
@@ -695,7 +700,7 @@ test("tool shortcuts are single unique keys that leave Fit and Islands alone", a
   assert.throws(() => validateShortcuts({ ...defaultShortcuts(), wind: "f" }), /fit the chart/);
   assert.throws(() => validateShortcuts({ ...defaultShortcuts(), wind: "" }), /Add wind/);
   const restored = sanitizeWorkspace({ charts: [createChart()], settings: { shortcuts: { location: "r" }, checkForUpdates: false, skippedUpdate: "0.6", interfaceSize: 137, theme: "neon", appearance: "dusk", searchPoints: 12 } });
-  assert.deepEqual(restored.settings, { shortcuts: defaultShortcuts(), checkForUpdates: false, skippedUpdate: "0.6", interfaceSize: 0, theme: "chartroom", appearance: "system", searchPoints: 16, clearReachedAreas: true, iconSize: "normal", trackKey: false, recorderKeys: null, overlay: defaultOverlay(), routePanel: defaultRoutePanel(), trackKeyPanel: defaultTrackKeyPanel() });
+  assert.deepEqual(restored.settings, { shortcuts: defaultShortcuts(), checkForUpdates: false, skippedUpdate: "0.6", interfaceSize: 0, theme: "chartroom", appearance: "system", searchPoints: 16, clearReachedAreas: true, iconSize: "normal", shareViewSettings: false, sharedViewLayers: null, trackKey: false, recorderKeys: null, overlay: defaultOverlay(), routePanel: defaultRoutePanel(), trackKeyPanel: defaultTrackKeyPanel() });
   assert.equal(sanitizeWorkspace({ charts: [createChart()], settings: { searchPoints: 8 } }).settings.searchPoints, 8);
   // 64 was a choice before 0.9.0.
   assert.equal(sanitizeWorkspace({ charts: [createChart()], settings: { searchPoints: 64 } }).settings.searchPoints, 32);
@@ -805,6 +810,26 @@ test("a Scrambled Seas save moves each island by its own offset", () => {
   assert.deepEqual(old.scramble.islands, [{ id: "alankh/oasis", lat: 1, lon: 2, notes: "" }], "0.6.10 charts keep their world");
   const shown = sanitizeWorkspace({ charts: [{ ...createChart(), layers: { vanillaMap: true }, scramble: { islands: { "alankh/oasis": { lat: 1, lon: 2 } } } }] }).charts[0].layers;
   assert.deepEqual([shown.importedMap, shown.vanillaMap], [true, false], "and show it as the imported map");
+});
+
+test("shared map settings keep the imported wind default until the user chooses one", () => {
+  const world = importScrambledSeas(parseScrambledSeasXml(scrambleXml(67)));
+  const workspace = sanitizeWorkspace({ charts: [createChart(), world] });
+  setShareViewSettings(workspace, true);
+  const [plain, scrambled] = workspace.charts;
+  assert.equal(resolveViewLayers(plain, workspace.settings).expandedWinds, false);
+  assert.equal(resolveViewLayers(scrambled, workspace.settings).expandedWinds, true);
+
+  workspace.settings.sharedViewLayers.expandedWinds = false;
+  workspace.settings.sharedViewLayers.importedMap = false;
+  const restored = sanitizeWorkspace(JSON.parse(JSON.stringify(workspace)));
+  const [, restoredWorld] = restored.charts;
+  const shared = resolveViewLayers(restoredWorld, restored.settings);
+  assert.equal(shared.expandedWinds, false);
+  assert.deepEqual(shownItems(restoredWorld, "map-island", shared), []);
+  setShareViewSettings(restored, false);
+  assert.equal(resolveViewLayers(restoredWorld, restored.settings).expandedWinds, true);
+  assert.ok(shownItems(restoredWorld, "map-island").length > 0);
 });
 
 test("an imported map's islands take notes and can be removed, but stay where the world put them", () => {

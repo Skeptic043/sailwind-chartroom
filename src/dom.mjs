@@ -10,7 +10,7 @@ export const elements = Object.fromEntries([
   "feature-icon-row", "feature-icon", "feature-size-row", "feature-size", "note-size", "feature-show-name", "feature-selection-note", "feature-island-status", "choose-feature-island", "feature-boat-status", "choose-feature-boat", "feature-navigation", "resolve-feature",
   "route-inspector", "route-form", "route-point-kind", "route-name", "route-lat", "route-lon", "route-day", "route-time", "route-notes", "route-leg-detail", "delete-route-point", "select-saved-route",
   "saved-route-inspector", "saved-route-form", "saved-route-name", "saved-route-visible", "saved-route-detail", "extend-saved-route", "delete-saved-route",
-  "measure-inspector", "measure-kind", "measure-detail", "measure-note", "line-form", "line-colour-row", "line-colour", "keep-measure", "delete-measure",
+  "measure-inspector", "measure-kind", "measure-detail", "measure-speed", "line-form", "line-colour-row", "line-colour", "keep-measure", "delete-measure",
   "search-inspector", "search-form", "search-label", "search-lat", "search-lon", "search-direction", "search-distance", "search-spread", "search-tolerance", "search-summary", "search-mark", "delete-search", "search-boat-status", "choose-search-boat",
   "map-island-inspector", "map-island-name", "map-island-detail", "map-island-form", "map-island-notes", "delete-map-island",
   "track-inspector", "track-form", "track-name", "track-lat", "track-lon", "track-day", "track-time", "track-wind", "track-recorded", "delete-track", "track-selection", "track-connect-panel", "track-connect-detail", "track-connect", "track-selection-detail", "track-route-tolerance", "track-to-route",
