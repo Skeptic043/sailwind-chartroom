@@ -3,6 +3,15 @@
     <channel>
         <title>Sailwind Chartroom</title>
         <item>
+            <title>0.10.2</title>
+            <pubDate>Mon, 23 Nov 2026 06:43:56 +0000</pubDate>
+            <link>https://github.com/Skeptic043/sailwind-chartroom/releases</link>
+            <sparkle:version>0.10.2999</sparkle:version>
+            <sparkle:shortVersionString>0.10.2</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/Skeptic043/sailwind-chartroom/releases/download/v0.10.2/SailwindChartroom-macos-universal-0.10.2.zip" length="1784132" type="application/octet-stream" sparkle:edSignature="lylIxvVPH/qg1q+qjK7X0Gp8qQsa7BQNUOgynj23HXrNLdu4Ux2erjRsSGqB0yxB12uneRwfh87961n6jMMIBQ=="/>
+        </item>
+        <item>
             <title>0.9.18</title>
             <pubDate>Thu, 19 Nov 2026 22:54:46 +0000</pubDate>
             <link>https://github.com/Skeptic043/sailwind-chartroom/releases</link>
@@ -19,15 +28,6 @@
             <sparkle:shortVersionString>0.9.17</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
             <enclosure url="https://github.com/Skeptic043/sailwind-chartroom/releases/download/v0.9.17/SailwindChartroom-macos-universal-0.9.17.zip" length="1742793" type="application/octet-stream" sparkle:edSignature="mRJudim0ed6QChYb1ArlbVRfWUXDl19SYJtIcouEdAwKTvReZMDGIdQyiwvbEn+9TfKMwSHJDc8eBNAcO/mqBQ=="/>
-        </item>
-        <item>
-            <title>0.9.14</title>
-            <pubDate>Thu, 19 Nov 2026 02:06:30 +0000</pubDate>
-            <link>https://github.com/Skeptic043/sailwind-chartroom/releases</link>
-            <sparkle:version>0.9.14999</sparkle:version>
-            <sparkle:shortVersionString>0.9.14</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
-            <enclosure url="https://github.com/Skeptic043/sailwind-chartroom/releases/download/v0.9.14/SailwindChartroom-macos-universal-0.9.14.zip" length="1742636" type="application/octet-stream" sparkle:edSignature="cKyJ7iLD/STbyXRfiNcOeneBoszNTwDTOhBpRTNr2OIwRoD8UWmvxFIhvkEmCH43V7FaxHd7mpuJ/8g4tlKRDg=="/>
         </item>
         <item>
             <title>0.6.0-rc.1</title>
