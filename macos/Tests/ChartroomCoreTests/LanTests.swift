@@ -95,7 +95,7 @@ final class LanProtocolTests: XCTestCase {
         let first: UInt8 = (fin ? 0x80 : 0) | opcode
         var frame: [UInt8] = [first]
         if payload.count < 126 { frame.append(0x80 | UInt8(payload.count)) }
-        else { frame += [0x80 | 126, UInt8(payload.count >> 8), UInt8(payload.count & 0xFF)] }
+        else { frame += [UInt8(0x80 | 126), UInt8(payload.count >> 8), UInt8(payload.count & 0xFF)] }
         frame += mask
         frame += payload.enumerated().map { $0.element ^ mask[$0.offset % 4] }
         return Data(frame)
