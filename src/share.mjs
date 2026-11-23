@@ -3,7 +3,7 @@
 // Chartroom exports the file, checks a race entry the way the site will, and opens the right form.
 import { formatDuration, savedRouteForPoint } from "./model.mjs";
 import { SHARE_OPTIONS, VOYAGE_EXTENSION, buildVoyageFile, chosenPoints, defaultShare, exportablePoints, hashGameId } from "./voyages.mjs";
-import { checkRaceLocally, courseFromRoute, heatmapSquares, issueFormUrl, siteData, siteUrl, worldKey } from "./site.mjs";
+import { checkRaceLocally, courseFromRoute, heatmapSquares, isWorldGeneratorLink, issueFormUrl, siteData, siteUrl, worldFromXml, worldKey } from "./site.mjs";
 import { addComparison } from "./compare.mjs";
 import { islandById } from "./site-islands.mjs";
 import { sailedStats, trackSegments, unwrapStretch } from "./track.mjs";
@@ -24,6 +24,10 @@ let courses = [];
 let heatmap = null;
 // Worlds the site lists, while browsing.
 let browseWorlds = [];
+// Pending voyage exports awaiting "export-result" from a desktop host with exportWithLink.
+const pendingExports = new Map();
+let nextExportId = 1;
+let exporting = false;
 
 let redraw = () => {};
 let renderAll = () => {};
@@ -31,6 +35,17 @@ let renderAll = () => {};
 export function initShare({ draw, renderAll: render }) {
   redraw = draw;
   renderAll = render;
+  host.on("export-result", ({ id, saved, opened }) => {
+    if (!id || !pendingExports.has(id)) return;
+    const pending = pendingExports.get(id);
+    pendingExports.delete(id);
+    if (!saved) return;
+    if (pending.expectsOpen && opened === false) {
+      showToast("Route saved, but your browser couldn't be opened. Open Chartroom Voyages and drag the saved file into the form.", true);
+      return;
+    }
+    showToast(pending.toast);
+  });
   elements["export-voyage"].addEventListener("click", () => openExport("export"));
   elements["share-voyage"].addEventListener("click", () => openExport("share"));
   elements["enter-race"].addEventListener("click", () => openExport("race"));
@@ -51,6 +66,10 @@ export function initShare({ draw, renderAll: render }) {
     updateExportRange();
   });
   elements["export-course"].addEventListener("change", updateExportRange);
+  elements["export-world-choice"].addEventListener("change", updateWorldChoice);
+  elements["export-world-source"].addEventListener("input", () => {
+    elements["export-check"].hidden = true;
+  });
   // Moving an end shows that position on the chart, so you can see exactly where the voyage starts and ends.
   for (const id of ["export-from", "export-to"]) elements[id].addEventListener("input", () => follow(id));
   for (const step of elements["export-voyage-form"].querySelectorAll("[data-step]")) {
@@ -106,16 +125,14 @@ async function openExport(nextMode) {
     return;
   }
   const key = worldKey(chart.recording?.world);
-  // A recording from before Voyage Recorder 0.2.2 doesn't name its world. It can still enter a race, which then
-  // takes it as sailed in the race's world, but it can't be published as a route of its own.
-  if (nextMode === "share" && !key) {
-    showToast("This chart's recording doesn't say which world it's from, so it can't go on Chartroom Voyages.", true);
-    return;
-  }
   if (nextMode === "race") {
+    let worlds = [];
     try {
       const all = await siteData("data/courses.json");
       courses = key ? all.filter((course) => course.world === key) : all;
+      if (!key && new Set(courses.map((course) => course.world)).size > 1) {
+        worlds = await siteData("data/worlds.json").catch(() => []);
+      }
     } catch (error) {
       showToast(error.message, true);
       return;
@@ -124,7 +141,15 @@ async function openExport(nextMode) {
       showToast("There are no races for this chart's world yet. Publish a route as a race to start one.", true);
       return;
     }
-    elements["export-course"].replaceChildren(...courses.map((course) => new Option(`${course.name} (${course.runs} run${course.runs === 1 ? "" : "s"})`, course.id)));
+    const worldNames = new Map(worlds.map((world) => [world.key, world.name]));
+    const multiWorld = !key && new Set(courses.map((course) => course.world)).size > 1 && worldNames.size > 0;
+    elements["export-course"].replaceChildren(...courses.map((course) => {
+      const worldLabel = multiWorld ? worldNames.get(course.world) : "";
+      const label = worldLabel
+        ? `${course.name} — ${worldLabel} (${course.runs} run${course.runs === 1 ? "" : "s"})`
+        : `${course.name} (${course.runs} run${course.runs === 1 ? "" : "s"})`;
+      return new Option(label, course.id);
+    }));
   }
   mode = nextMode;
   const text = MODES[mode];
@@ -141,8 +166,7 @@ async function openExport(nextMode) {
   const latest = trackSegments(points).at(-1);
   elements["export-from"].value = String(points.indexOf(latest[0]));
   elements["export-to"].value = String(points.length - 1);
-  const world = chart.recording?.world;
-  elements["export-world"].textContent = !world ? (mode === "race" ? "World not recorded, so the run counts as sailed in the race's world." : "") : world.kind === "vanilla" ? "World: vanilla Sailwind." : `World: Scrambled Seas, seed ${world.seed}.`;
+  setupWorldChoice(chart, key);
   elements["export-check"].hidden = true;
   elements["export-name"].value = "";
   elements["export-note"].value = "";
@@ -150,6 +174,84 @@ async function openExport(nextMode) {
   updateExportRange();
   elements["export-voyage-dialog"].show();
   follow("export-from");
+}
+
+function setupWorldChoice(chart, key) {
+  const row = elements["export-world-row"];
+  const choice = elements["export-world-choice"];
+  const source = elements["export-world-source"];
+  source.value = "";
+  if (key) {
+    row.hidden = true;
+    elements["export-world-source-row"].hidden = true;
+    const world = chart.recording?.world;
+    elements["export-world"].textContent = world?.kind === "vanilla"
+      ? "World: vanilla Sailwind."
+      : `World: Scrambled Seas, seed ${world.seed}.`;
+    return;
+  }
+  row.hidden = false;
+  elements["export-world-source-label"].textContent = mode === "share" ? "Scrambled Seas XML or World Generator link" : "Scrambled Seas XML";
+  source.placeholder = mode === "share" ? "Paste Scrambled Seas XML or a World Generator link" : "Paste Scrambled Seas XML";
+  choice.replaceChildren(
+    new Option(mode === "share" ? "Choose a world…" : "Not set (older recording)", ""),
+    new Option("Vanilla Sailwind (declared by you)", "vanilla"),
+    new Option(mode === "share" ? "Scrambled Seas (XML or link)" : "Scrambled Seas (paste XML)", "scrambled")
+  );
+  choice.value = "";
+  updateWorldChoice();
+}
+
+function updateWorldChoice() {
+  const chart = activeChart();
+  if (worldKey(chart.recording?.world)) return;
+  const choice = elements["export-world-choice"].value;
+  elements["export-world-source-row"].hidden = choice !== "scrambled";
+  elements["export-check"].hidden = true;
+  if (choice === "vanilla") {
+    elements["export-world"].textContent = "World: vanilla Sailwind (declared by you — not recorded in the log).";
+  } else if (choice === "scrambled") {
+    elements["export-world"].textContent = "World: Scrambled Seas (declared by you — not recorded in the log).";
+  } else if (mode === "race") {
+    elements["export-world"].textContent = "World not recorded, so the run counts as sailed in the race's world.";
+  } else if (mode === "share") {
+    elements["export-world"].textContent = "This recording didn't record its world. Choose the world you sailed it in to publish it (it will be noted as declared by you).";
+  } else {
+    elements["export-world"].textContent = "This recording didn't record its world. Leave unset for local comparison, or choose a world if you plan to publish this route later.";
+  }
+}
+
+// Resolves a user-declared world when the chart's recording didn't record one.
+function resolveDeclaredWorld(chart) {
+  if (worldKey(chart.recording?.world)) return { world: null, worldDeclared: false, formFields: null };
+  const choice = elements["export-world-choice"].value;
+  if (!choice) {
+    if (mode === "share") throw new Error("Choose which world this route was sailed in before publishing it.");
+    return { world: null, worldDeclared: false, formFields: null };
+  }
+  if (choice === "vanilla") return { world: { kind: "vanilla" }, worldDeclared: true, formFields: null };
+  const source = elements["export-world-source"].value.trim();
+  if (!source) {
+    throw new Error(mode === "share"
+      ? "Paste the world's Scrambled Seas XML or a World Generator share link."
+      : "Paste the world's Scrambled Seas XML.");
+  }
+  if (source.startsWith("<") || source.includes("<ScrambledSeasSaveContainer")) {
+    return { world: worldFromXml(source), worldDeclared: true, formFields: null };
+  }
+  if (isWorldGeneratorLink(source)) {
+    if (mode === "share") {
+      return {
+        world: null,
+        worldDeclared: false,
+        formFields: { world: "Scrambled Seas (paste link or XML below)", scrambled_world: source }
+      };
+    }
+    throw new Error("Save route to file and Enter a race need the Scrambled Seas XML. For a World Generator share link, use Voyage > Publish world/route.");
+  }
+  throw new Error(mode === "share"
+    ? "Paste a Scrambled Seas XML file or a World Generator share link."
+    : "Paste a Scrambled Seas XML file.");
 }
 
 // The latest race start recorded with Voyage Recorder's marker menu, and the first finish after it.
@@ -204,7 +306,7 @@ function updateExportRange() {
   redraw();
 }
 
-async function buildFile() {
+async function buildFile(declared = { world: null, worldDeclared: false }) {
   const chart = activeChart();
   const share = chosenShare();
   return buildVoyageFile(chart, {
@@ -214,17 +316,43 @@ async function buildFile() {
     name: elements["export-name"].value,
     note: elements["export-note"].value,
     gameHash: await hashGameId(chart.recording?.game),
-    version: host.version
+    version: host.version,
+    world: declared.world,
+    worldDeclared: declared.worldDeclared
   });
 }
 
+function showExportProblem(message) {
+  const check = elements["export-check"];
+  check.hidden = false;
+  check.classList.add("problem");
+  check.textContent = message;
+}
+
 async function finishExport() {
+  if (exporting) return;
+  exporting = true;
+  elements["export-submit"].disabled = true;
   try {
-    const file = await buildFile();
+    const chart = activeChart();
+    let declared;
+    try {
+      declared = resolveDeclaredWorld(chart);
+    } catch (error) {
+      showExportProblem(error.message);
+      return;
+    }
+    const file = await buildFile(declared);
     let form = null;
+    let toastText = "Route saved to file.";
     if (mode === "race") {
       const id = elements["export-course"].value;
       const { course } = await siteData(`data/boards/${encodeURIComponent(id)}.json`);
+      const fileWorldKey = worldKey(file.world);
+      if (fileWorldKey && fileWorldKey !== course.world) {
+        showExportProblem("This run wouldn't be accepted: This run was sailed in a different world from the race's.");
+        return;
+      }
       const result = checkRaceLocally(course, file);
       const check = elements["export-check"];
       check.hidden = false;
@@ -233,21 +361,34 @@ async function finishExport() {
         check.textContent = `This run wouldn't be accepted: ${result.reason}`;
         return;
       }
-      const notes = (result.notes ?? []).map((note) => RUN_NOTES[note]).filter(Boolean);
-      check.textContent = `${formatDuration(result.gameHours)} of game time, starting from ${result.startedFrom}.${notes.length ? ` The board will note: ${notes.join(", ")}.` : ""}`;
+      const worldNotes = !fileWorldKey ? ["world-not-recorded"] : file.worldDeclared === true ? ["world-declared"] : [];
+      const notes = [...worldNotes, ...(result.notes ?? [])].map((note) => RUN_NOTES[note]).filter(Boolean);
+      const summary = `${formatDuration(result.gameHours)} of game time, starting from ${result.startedFrom}.${notes.length ? ` The board will note: ${notes.join(", ")}.` : ""}`;
+      check.textContent = summary;
+      toastText = `Route saved (${formatDuration(result.gameHours)} from ${result.startedFrom}${notes.length ? `; ${notes.join(", ")}` : ""}). Drag the file into the form that opened in your browser, then submit it.`;
       form = issueFormUrl("enter-race", { course: id });
     } else if (mode === "share") {
-      form = issueFormUrl("share-voyage");
+      form = issueFormUrl("share-voyage", declared.formFields ?? {});
+      toastText = "Route saved. Drag the file into the form that opened in your browser, then submit it.";
     }
-    const base = (file.name || activeChart().name).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "voyage";
-    host.exportFile(`${base}${VOYAGE_EXTENSION}`, JSON.stringify(file), "application/json");
+    const base = (file.name || chart.name).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "voyage";
+    const fileName = `${base}${VOYAGE_EXTENSION}`;
+    const contents = JSON.stringify(file);
     elements["export-voyage-dialog"].close();
-    if (form) {
-      host.openLink(form);
-      showToast("Route saved. Drag the file into the form that opened in your browser, then submit it.");
-    } else showToast("Route saved to file.");
+    if (host.exportWithLink) {
+      const requestId = `voyage-${nextExportId++}`;
+      pendingExports.set(requestId, { toast: toastText, expectsOpen: Boolean(form) });
+      host.exportFile(fileName, contents, "application/json", { id: requestId, openUrl: form, reveal: Boolean(form) });
+    } else {
+      host.exportFile(fileName, contents, "application/json");
+      if (form) host.openLink(form);
+      showToast(toastText);
+    }
   } catch (error) {
     showToast(error.message, true);
+  } finally {
+    exporting = false;
+    elements["export-submit"].disabled = false;
   }
 }
 
@@ -436,7 +577,12 @@ export function drawHeatmap(palette) {
 }
 
 // What the board notes for a run from an older recording, as Chartroom Voyages words it.
-const RUN_NOTES = Object.freeze({ "mods-not-recorded": "mods not recorded", "no-real-time": "no real time recorded" });
+const RUN_NOTES = Object.freeze({
+  "world-not-recorded": "world not recorded",
+  "world-declared": "world declared by player",
+  "mods-not-recorded": "mods not recorded",
+  "no-real-time": "no real time recorded"
+});
 
 const EVENT_NAMES = { "race-start": "Race start", "race-checkpoint": "Race checkpoint", "race-finish": "Race finish", mark: "Recorded location", start: "Recording started", stop: "Recording stopped" };
 

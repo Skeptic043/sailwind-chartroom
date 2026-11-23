@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.11.0
+
+### Sailwind Chartroom
+
+#### Added
+- `File` > `Mobile device link` lets phones and tablets on the same Wi-Fi open Chartroom in their browser with a touch layout, QR code pairing, and two-way chart sync while Chartroom stays open on your computer
+- Older Voyage Recorder logs without world metadata can now declare a world in `Voyage` > `Publish world/route`, `Enter a race`, and `Save route to file` (Vanilla Sailwind, Scrambled Seas XML, or a World Generator link when publishing)
+
+#### Changed
+- On Windows, `Publish world/route` and `Enter a race` now wait until the file is saved before highlighting it in Explorer and opening the GitHub form, and race entries show the timed result after saving
+- `Enter a race` now shows each race's world name when the recording has no recorded world and checks declared worlds locally before saving
+
+#### Fixed
+- Updated the remaining `File` menu reference in voyage validation messages to `Voyage`
+
+### Chartroom Voyages
+
+#### Added
+- `Publish a route` now has a `World (for older recordings)` option so older routes without world metadata can be published and counted toward the world's heatmap
+- Added a `Submit` page with a race picker and a `Publish a route` button on world pages, and race boards now display their race id
+
+#### Changed
+- Race entries now accept a race's display name or board link in `Course id`
+- Rejected GitHub submissions now re-run automatically when you edit your first post instead of requiring a new issue
+
+#### Fixed
+- Updated remaining `File` menu references in Chartroom Voyages forms and validation messages to `Voyage`
+
 ## 0.10.2
 
 ### Added

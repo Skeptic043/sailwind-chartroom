@@ -15,6 +15,13 @@
     <Compile Include="..\..\desktop\TrackFollower.cs" Link="Host\TrackFollower.cs" />
     <Compile Include="..\..\desktop\SettingsRules.cs" Link="Host\SettingsRules.cs" />
     <Compile Include="..\..\desktop\Updates\*.cs" Link="Host\Updates\%(Filename)%(Extension)" />
+    <Compile Include="..\..\desktop\Lan\*.cs" Link="Host\Lan\%(Filename)%(Extension)" />
+    <Compile Include="..\..\desktop\WebResources.cs" Link="Host\WebResources.cs" />
+  </ItemGroup>
+
+  <!-- The page a device is served, under the same name as in the exe. -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\index.html" LogicalName="web/index.html" />
   </ItemGroup>
 
   <ItemGroup>

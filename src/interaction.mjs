@@ -4,7 +4,7 @@ import { assignedIsland, islandById, searchIsland } from "./islands.mjs";
 import { assignedBoats, drawBoatSilhouette } from "./boats.mjs";
 import { clamp, formatDirection, formatNm } from "./format.mjs";
 import { canvas, context, elements } from "./dom.mjs";
-import { activeChart, commit, host, workspace, isSelected, persist, pushUndo, refreshSelection, replaceSelectionState, revealLayer, selectItem, selectedItem, selectedKeys, selectedRefs, selection, selectionKey, setPrimarySelection, viewLayers } from "./state.mjs";
+import { activeChart, commit, host, input, workspace, isSelected, persist, pushUndo, refreshSelection, replaceSelectionState, revealLayer, selectItem, selectedItem, selectedKeys, selectedRefs, selection, selectionKey, setPrimarySelection, viewLayers } from "./state.mjs";
 import { boatRowAt, coordinatePrecision, eventPoint, screenToWorld, worldToScreen } from "./viewport.mjs";
 import { boatColours, drawAreaCircle, drawChart, drawIslandSilhouette, drawLine, drawMeasureLine, drawSearchWedge, drawWindIndicator, labelPill, magnetRing } from "./render.mjs";
 import { findHit, resetHitCycle, nearestTrackPoint, onSelectedAreaEdge, selectedLineEnd, snapAlongRay, snapPoint } from "./hits.mjs";
@@ -16,7 +16,10 @@ import { renderEverything, renderInspector, renderRouteSummary } from "./panels.
 import { DR_HINT, pickStart, reckoningStart, showDeadReckoning } from "./dead-reckoning-panel.mjs";
 
 // Holding Ctrl places freely. On macOS that is Option, because Ctrl-click is a right-click there.
-const placesFreely = (event) => host.platform === "mac" ? event.altKey : event.ctrlKey;
+// Holding Ctrl (Option on a Mac), or a long press on a touch screen (touch.mjs), places without snapping.
+const placesFreely = (event) => event.free === true || (host.platform === "mac" ? event.altKey : event.ctrlKey);
+// Drag labels sit below a mouse pointer and above a finger, where the finger doesn't cover them.
+const labelOffset = () => input.touch ? -40 : 20;
 
 const MODE_HINTS = {
   select: "Drag the chart to pan. Shift-click or Shift-drag to select several chart items. Drag either end of a selected line to adjust it.",
@@ -170,7 +173,7 @@ export function drawSearchDraft(palette) {
   drawSearchWedge(draft, true, palette);
   if (values.snapped) magnetRing(worldToScreen(searchExtent(draft).centre), palette);
   const cursor = pointerState.cursor;
-  labelPill(`${formatDirection(draft.bearing)} · ${formatNm(draft.distanceNm)} nm · ${formatNm(searchExtent(draft).widthNm)} nm wide`, cursor.x, cursor.y + 20, palette);
+  labelPill(`${formatDirection(draft.bearing)} · ${formatNm(draft.distanceNm)} nm · ${formatNm(searchExtent(draft).widthNm)} nm wide`, cursor.x, cursor.y + labelOffset(), palette);
 }
 
 // A ring shows where a click will land when the magnet has pulled it onto a mark or line.
@@ -188,7 +191,7 @@ export function drawWindDraft(palette) {
   const wind = createWind(windFromDrag(pointerState.origin, pointerState.cursor, pointerState.free));
   if (!wind) return;
   drawWindIndicator(wind, true, palette);
-  labelPill(`Flows toward ${formatDirection(wind.bearing)}`, pointerState.cursor.x, pointerState.cursor.y + 20, palette);
+  labelPill(`Flows toward ${formatDirection(wind.bearing)}`, pointerState.cursor.x, pointerState.cursor.y + labelOffset(), palette);
 }
 
 export function drawPlacementDraft(palette) {
@@ -304,6 +307,15 @@ function stepEdgePan(now) {
   if (edgePan === current) current.frame = requestAnimationFrame(stepEdgePan);
 }
 
+// Drops a finger's action without finishing it, as when a second finger turns it into a pinch.
+export function cancelPointer() {
+  pointerState = null;
+  measureStart = null;
+  canvas.classList.remove("dragging");
+  stopEdgePan();
+  drawChart();
+}
+
 export function stopEdgePan() {
   if (!edgePan) return;
   if (edgePan.frame) cancelAnimationFrame(edgePan.frame);
@@ -314,7 +326,8 @@ export function stopEdgePan() {
 
 export function startPointer(event) {
   if (event.button !== 0 && event.button !== 1) return;
-  canvas.setPointerCapture(event.pointerId);
+  // A tap is passed on after the finger has lifted, when its pointer can no longer be captured.
+  try { canvas.setPointerCapture(event.pointerId); } catch { /* already released */ }
   const screen = eventPoint(event);
   const forcePan = event.button === 1 || spacePressed;
   if (forcePan) return startPan(event, screen);
@@ -642,14 +655,24 @@ function resolveToLocation(point) {
 
 export function zoomAt(event) {
   event.preventDefault();
-  const screen = eventPoint(event);
-  const before = screenToWorld(screen.x, screen.y);
   const pixels = event.deltaMode === 1 ? event.deltaY * 33 : event.deltaY;
-  const factor = Math.exp(-clamp(pixels, -300, 300) * .0016);
+  zoomAround(eventPoint(event), Math.exp(-clamp(pixels, -300, 300) * .0016));
+  persist();
+  drawChart();
+}
+
+// Moves the view by a screen distance, as dragging the chart does. A pinch uses this and zoomAround (touch.mjs).
+export function panBy(dx, dy) {
+  const view = activeChart().view;
+  view.lon = clamp(view.lon - dx / view.zoom, WORLD_BOUNDS.minLon, WORLD_BOUNDS.maxLon);
+  view.lat = clamp(view.lat + dy / view.zoom, WORLD_BOUNDS.minLat, WORLD_BOUNDS.maxLat);
+}
+
+// Zooms by a factor, keeping the world point under this screen point where it is.
+export function zoomAround(screen, factor) {
+  const before = screenToWorld(screen.x, screen.y);
   activeChart().view.zoom = clamp(activeChart().view.zoom * factor, MIN_ZOOM, MAX_ZOOM);
   const after = screenToWorld(screen.x, screen.y);
   activeChart().view.lon = clamp(activeChart().view.lon + before.lon - after.lon, WORLD_BOUNDS.minLon, WORLD_BOUNDS.maxLon);
   activeChart().view.lat = clamp(activeChart().view.lat + before.lat - after.lat, WORLD_BOUNDS.minLat, WORLD_BOUNDS.maxLat);
-  persist();
-  drawChart();
 }

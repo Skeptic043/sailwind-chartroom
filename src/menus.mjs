@@ -4,6 +4,9 @@ const appMenus = [...document.querySelectorAll(".app-menu")];
 
 function closeAppMenus({ restoreFocus = false } = {}) {
   const openMenu = appMenus.find((menu) => menu.open);
+  // On a phone the menus are one sheet, which closes with them.
+  document.body.classList.remove("menu-open");
+  document.getElementById("touch-menu")?.setAttribute("aria-expanded", "false");
   for (const menu of appMenus) {
     menu.open = false;
     menu.querySelector("summary").setAttribute("aria-expanded", "false");
@@ -28,7 +31,8 @@ for (const menu of appMenus) {
   const summary = menu.querySelector("summary");
   menu.addEventListener("toggle", () => {
     summary.setAttribute("aria-expanded", String(menu.open));
-    if (menu.open) for (const other of appMenus) if (other !== menu) other.open = false;
+    // On a phone every menu is open at once, as sections of one sheet (touch.mjs).
+    if (menu.open && !document.body.classList.contains("menu-open")) for (const other of appMenus) if (other !== menu) other.open = false;
   });
   menu.addEventListener("pointerenter", () => {
     if (appMenus.some((candidate) => candidate.open) && !menu.open) openAppMenu(menu);
@@ -60,6 +64,6 @@ window.addEventListener("keydown", (event) => {
   closeAppMenus({ restoreFocus: Boolean(document.activeElement?.closest(".app-menu")) });
 }, true);
 document.addEventListener("pointerdown", (event) => {
-  if (event.target.closest(".app-menu")) return;
+  if (event.target.closest(".app-menu, #touch-menu") || (document.body.classList.contains("menu-open") && event.target.closest(".menu-bar"))) return;
   closeAppMenus();
 });

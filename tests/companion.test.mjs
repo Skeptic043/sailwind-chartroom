@@ -540,3 +540,34 @@ test("a comparison saved with a pre-0.10.2 colour keeps its place in the new col
   const chart = sanitizeChart({ ...createChart(), comparisons: saved });
   assert.deepEqual(chart.comparisons.map((comparison) => comparison.color), [COMPARISON_COLOURS[1], COMPARISON_COLOURS[5], COMPARISON_COLOURS[0]]);
 });
+
+test("legacy exports can carry a declared world and parse Scrambled Seas XML or generator links", async () => {
+  const { isWorldGeneratorLink, worldFromXml, worldKey } = await import("../src/site.mjs");
+  const chart = createChart();
+  chart.track = readVoyageRecorder(log(
+    { type: "session", day: 3, hour: 9, game: "g1" },
+    { type: "position", day: 3, hour: 9, lat: 30, lon: 0 },
+    { type: "position", day: 3, hour: 10, lat: 30.2, lon: 0.2 }
+  )).points;
+  const vanilla = buildVoyageFile(chart, { from: 0, to: 1, world: { kind: "vanilla" }, worldDeclared: true });
+  assert.deepEqual(vanilla.world, { kind: "vanilla" });
+  assert.equal(vanilla.worldDeclared, true);
+  assert.equal(parseVoyageFile(vanilla).worldDeclared, true);
+  const unknown = buildVoyageFile(chart, { from: 0, to: 1, worldDeclared: true });
+  assert.deepEqual(unknown.world, { kind: "unknown" });
+  assert.equal(unknown.worldDeclared, undefined, "unknown world is never marked declared");
+  assert.equal(parseVoyageFile({ ...unknown, worldDeclared: true }).worldDeclared, undefined);
+  assert.throws(() => parseVoyageFile({ format: "bad" }), /Voyage > Save route to file/);
+
+  const xml = `<ScrambledSeasSaveContainer><version>60</version><worldScramblerSeed>-77</worldScramblerSeed><islandSpread>6500</islandSpread><minArchipelagoSeparation>45000</minArchipelagoSeparation><minIslandSeparation>1950</minIslandSeparation><worldLonMin>-20</worldLonMin><worldLonMax>40</worldLonMax><worldLatMin>20</worldLatMin><worldLatMax>50</worldLatMax><borderExpander>1</borderExpander></ScrambledSeasSaveContainer>`;
+  const scrambled = worldFromXml(xml);
+  assert.equal(scrambled.seed, -77);
+  assert.match(worldKey(scrambled), /^ss-[0-9a-f]{16}$/);
+  assert.throws(() => worldFromXml("<ScrambledSeasSaveContainer></ScrambledSeasSaveContainer>"), /no seed/);
+  assert.throws(() => worldFromXml(xml.replace("<borderExpander>1</borderExpander>", "")), /missing borderExpander/);
+  assert.throws(() => worldFromXml(xml.replace("<worldLonMin>-20</worldLonMin>", "<worldLonMin>50</worldLonMin>")), /invalid world bounds/);
+
+  assert.equal(isWorldGeneratorLink("https://skeptic043.github.io/scrambled-seas-world-generator/#v=1&lo1=-20&lo2=40&la1=20&la2=50&seed=-77"), true);
+  assert.equal(isWorldGeneratorLink("https://example.com/#v=1&seed=-77"), false);
+  assert.equal(isWorldGeneratorLink("https://skeptic043.github.io/scrambled-seas-world-generator/#v=1"), false);
+});

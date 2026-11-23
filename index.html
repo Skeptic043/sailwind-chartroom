@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#101b21">
   <meta name="description" content="A charting desk for Sailwind.">
   <title>Sailwind Chartroom</title>
@@ -10,6 +10,9 @@
 </head>
 <body>
   <header class="topbar">
+    <!-- On a phone the menus open as one sheet from here, and the chart picker, undo and redo sit in the bar. -->
+    <button id="touch-menu" class="touch-menu icon-button" type="button" aria-label="Menu" aria-expanded="false"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path d="M4 6.5h16M4 12h16M4 17.5h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+    <select id="touch-chart-select" class="touch-chart-select" aria-label="Active chart"></select>
     <nav class="menu-bar" role="menubar" aria-label="Application menus">
       <details class="app-menu" data-menu="file">
         <summary role="menuitem" aria-haspopup="true" aria-expanded="false">File</summary>
@@ -24,6 +27,8 @@
           <button id="export-csv" type="button">Export locations as CSV</button>
           <button id="export-all" type="button">Back up all charts</button>
           <button id="open-folder" type="button" hidden>Open save folder</button>
+          <hr id="devices-separator" hidden>
+          <button id="open-devices" type="button" hidden>Mobile device link</button>
           <hr>
           <button id="open-settings" type="button" hidden>Settings</button>
           <p id="storage-note" class="menu-note">Everything stays in this browser unless you export it.</p>
@@ -131,6 +136,9 @@
       </details>
     </nav>
     <div class="top-actions">
+      <button id="touch-undo" class="touch-only icon-button" type="button" aria-label="Undo" title="Undo"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path d="M9 7 4.5 11.5 9 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 11.5h9a5 5 0 0 1 0 10h-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+      <button id="touch-redo" class="touch-only icon-button" type="button" aria-label="Redo" title="Redo"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path d="M15 7l4.5 4.5L15 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 11.5h-9a5 5 0 0 0 0 10h3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+      <button id="touch-items" class="touch-only panel-toggle" type="button" aria-pressed="false" title="Show or hide the Items panel"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><rect x="3.5" y="5" width="17" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="14.5" y="5" width="6" height="14" rx="1.5" fill="currentColor" fill-opacity=".45"/></svg><span>Items</span></button>
       <div class="panel-toggles" role="group" aria-label="Side panels">
         <button id="show-left-panel" class="panel-toggle" type="button" aria-pressed="true" title="Show or hide the Tools panel"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><rect x="3.5" y="5" width="17" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="3.5" y="5" width="6" height="14" rx="1.5" fill="currentColor" fill-opacity=".45"/></svg><span>Tools</span></button>
         <button id="show-right-panel" class="panel-toggle" type="button" aria-pressed="true" title="Show or hide the Items panel"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><rect x="3.5" y="5" width="17" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="14.5" y="5" width="6" height="14" rx="1.5" fill="currentColor" fill-opacity=".45"/></svg><span>Items</span></button>
@@ -247,10 +255,17 @@
         <div id="note-popout-types" class="popout-types" role="menu" aria-label="Encounters" hidden></div>
         <textarea id="note-popout-text" maxlength="20000" placeholder="Write about this place…" aria-label="Note text"></textarea>
       </div>
+      <div class="touch-chips">
+        <button id="follow-chip" class="touch-chip" type="button" title="Center on the boat" hidden></button>
+      </div>
+      <div class="touch-actions">
+        <button id="tool-done" class="touch-chip primary" type="button" hidden>Done</button>
+      </div>
       <div id="toast" class="toast" role="status" aria-live="polite"></div>
     </section>
 
     <aside class="right-panel panel-scroll" aria-label="Chart details">
+      <div class="sheet-bar"><button id="sheet-size" class="sheet-grabber" type="button" aria-label="Full height" aria-expanded="false"></button><button id="sheet-close" type="button">Close</button></div>
       <div id="right-panel-resizer" class="panel-resizer" role="separator" aria-orientation="vertical" aria-label="Resize chart details" tabindex="0"></div>
       <section id="empty-inspector" class="panel-section empty-state">
         <div class="empty-icon">⌖</div>
@@ -535,6 +550,8 @@
       <label>Name <input id="export-name" maxlength="80" placeholder="Optional, such as Gold Rock City to Fort Aestrin"></label>
       <label>Note <textarea id="export-note" rows="2" maxlength="500" placeholder="Optional"></textarea></label>
       <fieldset class="share-options"><legend>Include</legend><div id="export-share"></div></fieldset>
+      <label id="export-world-row" hidden>World <select id="export-world-choice"></select></label>
+      <label id="export-world-source-row" hidden><span id="export-world-source-label">Scrambled Seas XML or World Generator link</span> <textarea id="export-world-source" rows="2" placeholder="Paste Scrambled Seas XML or a World Generator link"></textarea></label>
       <p id="export-world" class="fineprint"></p>
       <div id="export-check" class="leg-detail" hidden></div>
       <div class="dialog-actions">
@@ -618,6 +635,51 @@
     </form>
   </dialog>
 
+  <dialog id="devices-dialog">
+    <form id="devices-form" method="dialog" class="dialog-card devices-card">
+      <div class="eyebrow">Phones and tablets</div>
+      <h2>Mobile device link</h2>
+      <p>Use Chartroom in the browser of a phone or tablet on the same Wi-Fi. Charts stay in step both ways, and positions you follow show up there, while this window is open.</p>
+      <label class="switch-row"><span>Allow mobile devices on this network</span><input id="devices-enabled" type="checkbox"></label>
+      <p id="devices-error" class="devices-error" hidden></p>
+      <div id="devices-pairing" class="devices-pairing" hidden>
+        <img id="devices-qr" alt="Code to scan with the phone's camera" width="200" height="200">
+        <div>
+          <p>Scan this with the phone's camera. Or open <code id="devices-url"></code> in its browser and enter <strong id="devices-code"></strong>.</p>
+          <p class="devices-hint">The code works once, for 5 minutes.</p>
+          <label id="devices-address-row" hidden>Address <select id="devices-address"></select></label>
+        </div>
+      </div>
+      <button id="devices-connect" type="button" hidden>Connect a device</button>
+      <ul id="devices-list" class="devices-list" aria-label="Paired devices"></ul>
+      <p class="devices-hint">If Windows asks, allow Chartroom on private networks. Devices can't connect on a network set to Public or on guest Wi-Fi. The connection isn't encrypted, so use it only on a network you trust.</p>
+      <div class="dialog-actions">
+        <button class="primary" type="submit">Close</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="device-settings-dialog">
+    <form id="device-settings-form" method="dialog" class="dialog-card">
+      <div class="eyebrow">This device</div>
+      <h2>Settings</h2>
+      <label>Theme <select id="device-theme"></select></label>
+      <label>Appearance <select id="device-appearance"></select></label>
+      <label>Default icon size <select id="device-icon-size"></select></label>
+      <label class="switch-row"><span>Share View settings across charts</span><input id="device-share-view" type="checkbox"></label>
+      <div class="dialog-actions"><button class="primary" type="submit">Close</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="conflict-dialog">
+    <form id="conflict-form" method="dialog" class="dialog-card">
+      <div class="eyebrow">Mobile device link</div>
+      <h2>Changed in both places</h2>
+      <p id="conflict-text"></p>
+      <div id="conflict-actions" class="dialog-actions"></div>
+    </form>
+  </dialog>
+
   <dialog id="missing-dialog">
     <form id="missing-form" method="dialog" class="dialog-card">
       <div class="eyebrow">Follow live</div>
@@ -625,7 +687,7 @@
       <p id="missing-text"></p>
       <div class="dialog-actions">
         <button type="button" data-close>Leave a gap</button>
-        <button class="primary" type="submit">Add to track</button>
+        <button class="primary" type="submit" value="add">Add to track</button>
       </div>
     </form>
   </dialog>

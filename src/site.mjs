@@ -1,18 +1,60 @@
 // Chartroom Voyages, the site for shared voyages, heatmaps and race boards: where it lives, and what Chartroom
 // works out locally before sending a player there. Submitting always happens on GitHub, in the player's own
 // browser; Chartroom only reads the site's public data and opens its forms.
-import { worldKey } from "./site-world-key.mjs";
+import { SETTINGS, worldKey } from "./site-world-key.mjs";
 import { ISLANDS } from "./site-islands.mjs";
 import { validateCourse } from "./site-course.mjs";
 import { checkRun } from "./site-race.mjs";
 
 export const SITE_URL = "https://skeptic043.github.io/sailwind-chartroom-voyages/";
 export const SITE_REPOSITORY = "https://github.com/Skeptic043/sailwind-chartroom-voyages";
+export const WORLD_GENERATOR_URL = "https://skeptic043.github.io/scrambled-seas-world-generator/";
 // A waypoint that isn't on an island becomes an open-water mark this wide.
 export const MARK_RADIUS_NM = 3;
 const MAX_FORM_URL = 8000;
 
 export { worldKey };
+
+// Reads a Scrambled Seas save XML into the world settings object Chartroom Voyages uses.
+export function worldFromXml(xml) {
+  const read = (tag) => {
+    const match = new RegExp(`<${tag}>\\s*(-?\\d+)\\s*</${tag}>`).exec(String(xml));
+    return match ? Number(match[1]) : null;
+  };
+  const world = {
+    kind: "scrambled",
+    seed: read("worldScramblerSeed"),
+    islandSpread: read("islandSpread"),
+    minArchipelagoSeparation: read("minArchipelagoSeparation"),
+    minIslandSeparation: read("minIslandSeparation"),
+    lonMin: read("worldLonMin"),
+    lonMax: read("worldLonMax"),
+    latMin: read("worldLatMin"),
+    latMax: read("worldLatMax"),
+    borderExpander: read("borderExpander"),
+    scrambler: read("version")
+  };
+  if (!Number.isInteger(world.seed)) throw new Error("The Scrambled Seas XML has no seed.");
+  for (const setting of SETTINGS) {
+    if (!Number.isInteger(world[setting])) throw new Error(`The Scrambled Seas XML is missing ${setting}.`);
+  }
+  if (!worldKey(world)) throw new Error("The Scrambled Seas XML has invalid world bounds.");
+  return world;
+}
+
+// Whether text is a Scrambled Seas World Generator share link (checked in full on the site).
+export function isWorldGeneratorLink(text) {
+  let link;
+  try {
+    link = new URL(String(text ?? "").trim());
+  } catch {
+    return false;
+  }
+  if (link.origin + link.pathname !== WORLD_GENERATOR_URL) return false;
+  const params = new URLSearchParams(link.hash.replace(/^#/, ""));
+  const seed = params.get("seed");
+  return params.get("v") === "1" && seed !== null && /^-?\d+$/.test(seed);
+}
 
 // The site's issue form for a submission, with fields filled in where GitHub allows it.
 export function issueFormUrl(template, fields = {}) {

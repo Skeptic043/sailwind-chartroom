@@ -55,11 +55,12 @@ export function chosenPoints(chart, from, to, share = defaultShare()) {
 
 // Builds the file for points[from..to] (inclusive) of exportablePoints(chart). gameHash is the hashed game
 // id (see hashGameId), or "" when the recording had none.
-export function buildVoyageFile(chart, { from, to, share = defaultShare(), name = "", note = "", gameHash = "", version = "" }) {
+export function buildVoyageFile(chart, { from, to, share = defaultShare(), name = "", note = "", gameHash = "", version = "", world = null, worldDeclared = false }) {
   const points = chosenPoints(chart, from, to, share);
   if (points.length < 2) throw new Error("Choose at least two positions to export.");
   const start = points[0].t;
   const end = points.at(-1).t;
+  const effectiveWorld = world ?? chart.recording?.world ?? { kind: "unknown" };
   const file = {
     format: VOYAGE_FORMAT,
     version: VOYAGE_VERSION,
@@ -67,7 +68,8 @@ export function buildVoyageFile(chart, { from, to, share = defaultShare(), name 
     chartroom: String(version),
     name: String(name).trim().slice(0, 80),
     note: String(note).trim().slice(0, 500),
-    world: chart.recording?.world ?? { kind: "unknown" },
+    world: effectiveWorld,
+    ...(worldDeclared === true && effectiveWorld.kind !== "unknown" && { worldDeclared: true }),
     game: gameHash,
     ...(share.plugins && chart.recording?.plugins && { plugins: chart.recording.plugins }),
     points: points.map((point, index) => exportPoint(point, share, index))
@@ -116,7 +118,7 @@ export async function hashGameId(game) {
 export function parseVoyageFile(value) {
   // A run downloaded from a Chartroom Voyages board holds the voyage it was sailed in.
   if (typeof value?.course === "string" && value.voyage?.format === VOYAGE_FORMAT) value = value.voyage;
-  if (value?.format !== VOYAGE_FORMAT) throw new Error("This isn't a route file. Save one with File > Save route to file.");
+  if (value?.format !== VOYAGE_FORMAT) throw new Error("This isn't a route file. Save one with Voyage > Save route to file.");
   if (!Number.isInteger(value.version) || value.version < 1) throw new Error("This voyage file has no readable version.");
   if (value.version > VOYAGE_VERSION) throw new Error("This voyage file was made by a newer version of Chartroom. Update Chartroom to open it.");
   const points = (Array.isArray(value.points) ? value.points : []).slice(0, MAX_POINTS).filter((point) =>
@@ -141,10 +143,12 @@ export function parseVoyageFile(value) {
     .map((visit) => ({ kind: visit.kind === "depart" ? "depart" : "arrive", port: visit.port.slice(0, 100), island: Number.isInteger(visit.island) ? visit.island : -1, t: Number(visit.t) }));
   const notes = (Array.isArray(value.notes) ? value.notes : []).slice(0, MAX_NOTES).filter((entry) => Number.isFinite(entry?.t) && Number.isFinite(entry?.lat) && Number.isFinite(entry?.lon))
     .map((entry) => ({ t: Number(entry.t), lat: Number(entry.lat), lon: Number(entry.lon), text: String(entry.text ?? "").slice(0, 20000) }));
+  const world = value.world && typeof value.world === "object" && typeof value.world.kind === "string" ? value.world : { kind: "unknown" };
   return {
     name: String(value.name ?? "").trim().slice(0, 80),
     note: String(value.note ?? "").trim().slice(0, 500),
-    world: value.world && typeof value.world === "object" && typeof value.world.kind === "string" ? value.world : { kind: "unknown" },
+    world,
+    ...(value.worldDeclared === true && world.kind !== "unknown" && { worldDeclared: true }),
     game: String(value.game ?? "").slice(0, 40),
     points,
     visits,

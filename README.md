@@ -34,6 +34,10 @@ Chartroom checks for new versions when it starts and can update itself. You can 
 
 Charts are saved automatically in `%APPDATA%\Sailwind Chartroom` on Windows and `~/Library/Application Support/Sailwind Chartroom` on macOS, along with a copy from your previous launch. Choose `File` > `Back up all charts` to save another copy.
 
+## Mobile device link
+
+Use Chartroom in the browser of a phone or tablet on the same Wi-Fi without installing an app. Open `File` > `Mobile device link`, turn on `Allow mobile devices on this network`, and scan the code or enter the address and one-time code on your device. Both devices stay in sync while Chartroom is open on your computer. Windows needs Chartroom allowed on private networks, and connections do not work on Public or guest Wi-Fi.
+
 ## Sharing and racing
 
 [Chartroom Voyages](https://skeptic043.github.io/sailwind-chartroom-voyages/) hosts published worlds, routes, heatmaps and race boards. The `Voyage` menu's `Chartroom Voyages` commands work with the site: `Publish world/route`, `Publish route as race`, `Enter a race` and `Browse worlds and routes`. Publishing a route or a race also publishes its world if the site doesn't have it yet. Submissions require a GitHub account and are made in your browser. Chartroom only saves the file and opens the correct form.

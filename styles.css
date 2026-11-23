@@ -456,6 +456,23 @@ dialog::backdrop { background: var(--backdrop); backdrop-filter: blur(3px); }
 .dialog-actions .danger-text { margin-right: auto; }
 .dialog-actions .link-button { align-self: center; margin-block: 0; }
 .slot-list { display: grid; gap: 6px; margin-top: 12px; }
+.devices-card { max-width: 560px; }
+.devices-pairing { display: flex; gap: 16px; align-items: flex-start; margin-top: 12px; }
+.devices-pairing[hidden] { display: none; }
+.devices-pairing img { flex: none; width: 200px; height: 200px; border-radius: 6px; background: #fff; image-rendering: pixelated; }
+.devices-pairing p { margin: 0 0 8px; color: var(--muted); font-size: 13px; line-height: 1.55; }
+.devices-pairing code { user-select: all; }
+.devices-pairing strong { font-size: 18px; letter-spacing: 2px; }
+.devices-pairing label { display: grid; gap: 6px; color: var(--muted); font-size: 12.5px; font-weight: 700; }
+.devices-pairing label[hidden] { display: none; }
+.devices-error { color: var(--danger); }
+.dialog-card > .devices-hint, .devices-hint { color: var(--faint); font-size: 12px; }
+#devices-connect { margin-top: 12px; }
+.devices-list { display: grid; gap: 6px; margin: 12px 0 0; padding: 0; list-style: none; }
+.devices-list li { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; }
+.devices-list input { flex: 1; min-width: 0; }
+.devices-list span { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.devices-list .connected { color: var(--accent-strong); }
 .slot-list label { display: flex; align-items: baseline; gap: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
 .slot-list label:has(input:checked) { border-color: var(--accent); }
 .slot-list strong { font-size: 14px; }
@@ -619,3 +636,118 @@ body.update-bar-shown .route-summary { margin-top: 42px; }
   --map-land: rgba(234, 219, 184, .36); --map-town: rgba(227, 130, 94, .42); --map-rock: rgba(170, 160, 140, .4); --map-island-dot: rgba(234, 219, 184, .75);
   --map-preview: #241c12; --map-preview-line: rgba(234, 219, 184, .65); --map-texture: .8;
 }
+
+/* A phone or tablet asks for the code shown on the PC over the page until it is paired. */
+.device-pairing { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 16px; background: var(--panel-2); }
+.device-pairing .dialog-card { width: min(420px, 100%); border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+.device-pairing label { display: grid; gap: 6px; margin-top: 12px; color: var(--muted); font-size: 12.5px; font-weight: 700; }
+.device-pairing input { font-size: 22px; letter-spacing: 4px; }
+.device-pairing-problem { color: var(--danger); }
+
+/* ===== Touch screens (touch.mjs sets body.touch, and body.phone or body.tablet) ===== */
+/* Controls that only touch layouts use. */
+.touch-menu, .touch-chart-select, .touch-only, .sheet-bar, .touch-chips, .touch-actions { display: none; }
+body.touch .touch-only { display: inline-flex; align-items: center; justify-content: center; }
+body.touch .touch-only.icon-button, body.phone .touch-menu { display: inline-grid; place-items: center; padding: 0; }
+body.touch .touch-chips, body.touch .touch-actions { display: flex; }
+.touch-chips { position: absolute; z-index: 13; top: 10px; left: 10px; gap: 6px; flex-wrap: wrap; pointer-events: none; }
+.touch-actions { position: absolute; z-index: 13; left: 50%; bottom: 14px; transform: translateX(-50%); }
+.touch-chips > *, .touch-actions > * { pointer-events: auto; }
+.touch-chip { min-height: 40px; padding: 8px 14px; border-radius: 20px; font-size: 14px; font-weight: 700; box-shadow: var(--shadow); }
+.touch-chip[hidden] { display: none; }
+body.touch .save-status { display: inline-flex; min-width: 44px; min-height: 44px; justify-content: center; cursor: pointer; }
+/* Keyboard hints, letter keys and Shift-click mean nothing to a finger. */
+body.touch kbd, body.touch .tool b, body.touch #lock-selected, body.touch #unlock-selected { display: none; }
+/* Large enough to tap, and 16 px text so an iPhone doesn't zoom in on a field. */
+body.touch input:not([type=checkbox]):not([type=radio]), body.touch select, body.touch textarea { font-size: 16px; }
+body.touch button, body.touch select, body.touch summary { min-height: 40px; }
+body.touch .icon-button { min-width: 40px; }
+/* The panels always show on touch screens: their own layout decides what's in view. */
+body.touch .left-panel, body.touch .right-panel { visibility: visible; overflow: auto; }
+body.touch .right-panel { display: block; }
+body.touch .panel-resizer, body.touch #show-left-panel, body.touch #show-right-panel, body.touch #toggle-left-panel, body.touch #toggle-right-panel { display: none; }
+/* Tool buttons are square icons in every theme; the Sailwind scroll border leaves no room for an icon. */
+body.touch .tool { min-width: 48px; min-height: 48px; padding: 0; justify-content: center; border-image: none !important; background: var(--panel-2) !important; border: 1px solid var(--line) !important; filter: none !important; }
+body.touch .tool.active { border-color: var(--accent) !important; box-shadow: inset 0 0 0 1px var(--accent); }
+body.touch .tool span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+body.touch .tool .tool-icon { display: block !important; margin: 0; width: 26px; height: 26px; }
+body.touch .left-panel .panel-section > h2, body.touch .left-panel .fineprint, body.touch #empty-inspector, body.touch #track-connect-panel { display: none; }
+
+/* The sheet that holds the inspector, or the Items panel when it's open. */
+/* Off screen it is hidden too, so its fields aren't reached with Tab or by a screen reader. */
+body.phone .right-panel, body.tablet .right-panel { position: fixed; z-index: 45; background: var(--panel); box-shadow: var(--shadow); visibility: hidden !important; transition: transform .2s ease, visibility 0s linear .2s; }
+body.phone .right-panel:has(.inspector:not([hidden])), body.phone.panels-open .right-panel,
+body.tablet .right-panel:has(.inspector:not([hidden])), body.tablet.panels-open .right-panel { visibility: visible !important; transition: transform .2s ease, visibility 0s; }
+body.touch .sheet-bar { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 10px; background: var(--panel); border-bottom: 1px solid var(--line); }
+.sheet-grabber { width: 64px; min-height: 28px !important; padding: 0; border: 0; background: transparent; position: relative; }
+.sheet-grabber::after { content: ""; position: absolute; left: 12px; right: 12px; top: 12px; height: 4px; border-radius: 2px; background: var(--line-strong); }
+/* What the sheet shows: the inspector of a selected item, or the Items panel. */
+body.touch .right-panel > .locations-section, body.touch .right-panel > .compare-section, body.touch .right-panel > .equipment-section { display: none; }
+body.touch.panels-open .right-panel > .locations-section, body.touch.panels-open .right-panel > .compare-section:not([hidden]), body.touch.panels-open .right-panel > .equipment-section { display: block; }
+body.touch.panels-open #inspector-host { display: none; }
+
+/* ===== Phone ===== */
+body.phone { --topbar-height: calc(52px + env(safe-area-inset-top)); --toolbar-height: calc(64px + env(safe-area-inset-bottom)); }
+body.phone .topbar { position: relative; z-index: 70; display: flex; gap: 4px; padding: env(safe-area-inset-top) 6px 0; }
+body.phone .touch-menu { flex: none; }
+body.phone .touch-chart-select { display: block; flex: 1; min-width: 0; }
+body.phone .top-actions { gap: 2px; flex: none; }
+body.phone .panel-toggles, body.phone .app-version { display: none; }
+body.phone #touch-items span { display: none; }
+/* The menus open as one sheet under the top bar, each menu a section. */
+body.phone .menu-bar { display: none; }
+body.phone.menu-open .menu-bar { justify-self: stretch; position: fixed; z-index: 60; top: var(--topbar-height); left: 0; right: 0; bottom: 0; display: block; overflow-y: auto; padding: 8px 12px 24px; background: var(--panel); }
+body.phone.menu-open .app-menu { display: block; margin-bottom: 8px; }
+body.phone.menu-open .app-menu > summary { pointer-events: none; padding: 10px 4px 4px; color: var(--muted); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; background: none; }
+body.phone.menu-open .app-menu > .menu-popover { display: grid; position: static; width: auto; max-height: none; box-shadow: none; }
+body.phone.menu-open .menu-popover button { min-height: 44px; text-align: left; }
+/* The chart fills the screen between the top bar and the tool bar. */
+body.phone .app-shell { display: block; height: auto; }
+body.phone .chart-stage { position: fixed; top: var(--topbar-height); left: 0; right: 0; bottom: var(--toolbar-height); min-height: 0; }
+/* The tools are a bar along the bottom that scrolls sideways, fading at the edges to show there's more. */
+body.phone .left-panel { position: fixed; z-index: 40; left: 0; right: 0; bottom: 0; height: var(--toolbar-height); overflow: visible; border: 0; border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
+body.phone .left-panel > .panel-section:first-of-type { padding: 8px 0; border: 0; }
+body.phone .tool-grid { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; -webkit-mask-image: linear-gradient(90deg, transparent, #000 16px, #000 calc(100% - 16px), transparent); mask-image: linear-gradient(90deg, transparent, #000 16px, #000 calc(100% - 16px), transparent); padding: 0 12px; }
+body.phone .tool-grid::-webkit-scrollbar { display: none; }
+body.phone .tool { flex: none; }
+body.phone #search-points-row { position: fixed; z-index: 41; left: 10px; bottom: calc(var(--toolbar-height) + 8px); padding: 6px 10px; border-radius: 10px; background: var(--panel); box-shadow: var(--shadow); }
+/* Dead reckoning's panel is a half sheet, so the chart above stays tappable to pick a start. */
+body.phone #dr-panel:not([hidden]) { position: fixed; z-index: 42; left: 0; right: 0; bottom: var(--toolbar-height); max-height: 45dvh; overflow-y: auto; background: var(--panel); border-top: 1px solid var(--line-strong); box-shadow: var(--shadow); }
+body.phone .right-panel { left: 0; right: 0; bottom: 0; max-height: 55dvh; overflow-y: auto; border-radius: 14px 14px 0 0; border: 0; transform: translateY(105%); padding-bottom: env(safe-area-inset-bottom); }
+body.phone.sheet-full .right-panel { max-height: calc(100dvh - var(--topbar-height)); height: calc(100dvh - var(--topbar-height)); }
+body.phone .right-panel:has(.inspector:not([hidden])), body.phone.panels-open .right-panel { transform: none; }
+/* Toasts and Done move above an open sheet. */
+body.phone:has(.right-panel .inspector:not([hidden])) .toast, body.phone.panels-open .toast,
+body.phone:has(.right-panel .inspector:not([hidden])) .touch-actions { bottom: calc(55dvh - var(--toolbar-height) + 12px); }
+/* The route card shows as a chip; tapping its heading opens the rest. */
+body.phone .route-summary { left: 10px !important; right: auto !important; top: 58px !important; width: auto; max-width: calc(100% - 20px); }
+body.phone .route-summary:not(.expanded) > :not(#route-summary-heading) { display: none !important; }
+body.phone .track-key, body.phone .key-overlay { left: 10px !important; right: auto !important; top: 110px !important; max-width: calc(100% - 20px); }
+/* A note opens as a sheet along the bottom rather than beside its icon. */
+body.phone .note-popout { position: fixed !important; z-index: 46; left: 0 !important; right: 0 !important; top: auto !important; bottom: var(--toolbar-height) !important; width: auto !important; max-height: 50dvh; border-radius: 14px 14px 0 0; }
+/* Dialogs take the width, with a margin; Export a voyage is a half sheet so the track stays in view. */
+body.phone dialog { width: calc(100vw - 32px); max-width: none; }
+body.phone .dialog-card { padding: 18px; }
+body.phone .floating-dialog { inset: auto 0 0 0; width: 100%; max-height: 50dvh; border-radius: 14px 14px 0 0; }
+
+/* Phone on its side: tools down the left edge, sheets from the right. */
+body.phone.landscape { --toolbar-height: 0px; }
+body.phone.landscape .topbar { padding-left: max(6px, env(safe-area-inset-left)); padding-right: max(6px, env(safe-area-inset-right)); }
+body.phone.landscape #search-points-row { left: calc(74px + env(safe-area-inset-left)); bottom: 10px; }
+body.phone.landscape .left-panel { top: var(--topbar-height); right: auto; width: calc(64px + env(safe-area-inset-left)); height: auto; border-top: 0; border-right: 1px solid var(--line); padding: 0 0 0 env(safe-area-inset-left); }
+body.phone.landscape .tool-grid { flex-direction: column; overflow-x: hidden; overflow-y: auto; height: 100%; -webkit-mask-image: none; mask-image: none; padding: 0 8px; }
+body.phone.landscape .chart-stage { left: calc(64px + env(safe-area-inset-left)); bottom: 0; }
+body.phone.landscape .right-panel { left: auto; top: var(--topbar-height); width: 50vw; max-height: none; border-radius: 14px 0 0 14px; transform: translateX(105%); }
+body.phone.landscape.sheet-full .right-panel { height: auto; }
+body.phone.landscape .right-panel:has(.inspector:not([hidden])), body.phone.landscape.panels-open .right-panel { transform: none; }
+body.phone.landscape #dr-panel:not([hidden]) { left: auto; right: 0; top: var(--topbar-height); bottom: 0; width: 50vw; max-height: none; }
+
+/* ===== Tablet ===== */
+body.tablet .app-shell { display: grid; grid-template-columns: 68px minmax(0, 1fr); }
+body.tablet .left-panel { overflow-y: auto; overflow-x: hidden; }
+body.tablet .left-panel > .panel-section:first-of-type { padding: 10px 8px; }
+body.tablet .tool-grid { display: flex; flex-direction: column; align-items: center; }
+body.tablet .right-panel { top: var(--topbar-height); right: 0; bottom: 0; width: 360px; transform: translateX(105%); border-left: 1px solid var(--line); }
+body.tablet .right-panel:has(.inspector:not([hidden])), body.tablet.panels-open .right-panel { transform: none; }
+body.tablet #dr-panel:not([hidden]) { position: fixed; z-index: 42; left: 76px; top: calc(var(--topbar-height) + 10px); width: 320px; max-height: calc(100dvh - var(--topbar-height) - 20px); overflow-y: auto; background: var(--panel); border-radius: 12px; box-shadow: var(--shadow); }
+body.touch #mode-hint { display: none; }

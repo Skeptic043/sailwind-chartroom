@@ -16,7 +16,7 @@ internal abstract record HostMessage
     public sealed record OpenSettings(AppSettings Settings, IReadOnlyList<ToolShortcut> Defaults) : HostMessage;
     public sealed record SetZoom(double Factor) : HostMessage;
     public sealed record SetAppearance(bool Dark) : HostMessage;
-    public sealed record ExportFile(string Name, string Contents) : HostMessage;
+    public sealed record ExportFile(string Name, string Contents, string? OpenUrl = null, bool Reveal = false, string? Id = null) : HostMessage;
     /// <summary>
     /// Follow a recording into the chart with this id. Without a choice the host offers the recordings it
     /// finds; Log follows one of those it offered, and Pick asks for a file instead.
@@ -26,6 +26,18 @@ internal abstract record HostMessage
     public sealed record CopyText(string Contents) : HostMessage;
     /// <summary>A Chartroom Voyages page or submission form to open in the player's browser.</summary>
     public sealed record OpenLink(string Url) : HostMessage;
+    // Phones and tablets on the player's network: the page's Devices dialog, and sync messages to relay.
+    public sealed record DevicesOpen : HostMessage;
+    public sealed record DevicesEnable(bool Enabled) : HostMessage;
+    /// <summary>Show a pairing code for the page at this address, or the first one found when empty.</summary>
+    public sealed record DevicesPair(string Address) : HostMessage;
+    public sealed record DevicesPairStop : HostMessage;
+    public sealed record DevicesRename(string Id, string Name) : HostMessage;
+    public sealed record DevicesRemove(string Id) : HostMessage;
+    /// <summary>A message for one device, as raw JSON the host passes on unread.</summary>
+    public sealed record SyncSend(string DeviceId, string Message) : HostMessage;
+    /// <summary>Chart changes for every connected device, as a raw JSON array.</summary>
+    public sealed record SyncBroadcast(string Ops) : HostMessage;
 
     public static HostMessage? Parse(string json)
     {
@@ -56,8 +68,20 @@ internal abstract record HostMessage
                     => new OpenSettings(parsed, fallback.Tools),
                 "set-appearance" when root.TryGetProperty("dark", out var dark) && dark.ValueKind is JsonValueKind.True or JsonValueKind.False => new SetAppearance(dark.GetBoolean()),
                 "set-zoom" when root.TryGetProperty("factor", out var factor) && factor.TryGetDouble(out double value) && value is >= 0.5 and <= 3 => new SetZoom(value),
-                "export-file" when Text(root, "name") is { Length: > 0 } name && Text(root, "contents") is { } contents => new ExportFile(name, contents),
+                "export-file" when Text(root, "name") is { Length: > 0 } name
+                    && Text(root, "contents") is { } contents
+                    && OptionalSiteLink(root, "openUrl") is (true, var openUrl)
+                    => new ExportFile(name, contents, openUrl, root.TryGetProperty("reveal", out var reveal) && reveal.ValueKind == JsonValueKind.True, Text(root, "id")),
                 "save" when root.TryGetProperty("workspace", out var workspace) && IsWorkspace(workspace) => new Save(workspace.GetRawText()),
+                "devices-open" => new DevicesOpen(),
+                "devices-enable" when root.TryGetProperty("enabled", out var enabled) && enabled.ValueKind is JsonValueKind.True or JsonValueKind.False => new DevicesEnable(enabled.GetBoolean()),
+                "devices-pair" => new DevicesPair(Text(root, "address") ?? ""),
+                "devices-pair-stop" => new DevicesPairStop(),
+                "devices-rename" when Text(root, "id") is { Length: > 0 } id && Text(root, "name") is { } name => new DevicesRename(id, name),
+                "devices-remove" when Text(root, "id") is { Length: > 0 } id => new DevicesRemove(id),
+                "sync-send" when Text(root, "deviceId") is { Length: > 0 } deviceId && root.TryGetProperty("message", out var message) && message.ValueKind == JsonValueKind.Object
+                    => new SyncSend(deviceId, message.GetRawText()),
+                "sync-broadcast" when root.TryGetProperty("ops", out var ops) && ops.ValueKind == JsonValueKind.Array => new SyncBroadcast(ops.GetRawText()),
                 _ => null
             };
         }
@@ -69,6 +93,13 @@ internal abstract record HostMessage
 
     private static string? Text(JsonElement root, string name) =>
         root.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+
+    private static (bool Ok, string? Url) OptionalSiteLink(JsonElement root, string name)
+    {
+        if (!root.TryGetProperty(name, out var value) || value.ValueKind == JsonValueKind.Null) return (true, null);
+        if (value.ValueKind == JsonValueKind.String && value.GetString() is { } url && IsSiteLink(url)) return (true, url);
+        return (false, null);
+    }
 
     // Only Chartroom Voyages: its pages on GitHub Pages and new issues on its repository, as isSiteLink in src/site.mjs.
     private static bool IsSiteLink(string url) =>

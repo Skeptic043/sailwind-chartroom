@@ -32,7 +32,23 @@ public sealed class HostMessageTests
     public void ExportCarriesTheFileNameAndContents()
     {
         var export = Assert.IsType<HostMessage.ExportFile>(HostMessage.Parse("""{"type":"export-file","name":"chart.json","contents":"{}"}"""));
-        Assert.Equal(("chart.json", "{}"), (export.Name, export.Contents));
+        Assert.Equal(("chart.json", "{}", null, false, null), (export.Name, export.Contents, export.OpenUrl, export.Reveal, export.Id));
+        var withNull = Assert.IsType<HostMessage.ExportFile>(HostMessage.Parse("""{"type":"export-file","name":"chart.json","contents":"{}","openUrl":null,"reveal":"true"}"""));
+        Assert.Equal((null, false), (withNull.OpenUrl, withNull.Reveal));
+    }
+
+    [Fact]
+    public void ExportAcceptsSiteOpenUrlAndRevealAndRefusesOtherLinks()
+    {
+        const string formUrl = "https://github.com/Skeptic043/sailwind-chartroom-voyages/issues/new?template=share-voyage.yml&world=Scrambled+Seas&scrambled_world=https%3A%2F%2Fskeptic043.github.io%2Fscrambled-seas-world-generator%2F%23v%3D1%26seed%3D-77";
+        var export = Assert.IsType<HostMessage.ExportFile>(HostMessage.Parse($$"""{"type":"export-file","id":"voyage-1","name":"trip.voyage.json","contents":"{}","openUrl":"{{formUrl}}","reveal":true}"""));
+        Assert.Equal(("trip.voyage.json", "{}", formUrl, true, "voyage-1"), (export.Name, export.Contents, export.OpenUrl, export.Reveal, export.Id));
+        Assert.Null(HostMessage.Parse("""{"type":"export-file","name":"trip.voyage.json","contents":"{}","openUrl":"https://example.com/evil"}"""));
+        Assert.Null(HostMessage.Parse("""{"type":"export-file","name":"trip.voyage.json","contents":"{}","openUrl":""}"""));
+        Assert.Null(HostMessage.Parse("""{"type":"export-file","name":"trip.voyage.json","contents":"{}","openUrl":"file:///C:/Windows/System32/calc.exe"}"""));
+        Assert.Null(HostMessage.Parse("""{"type":"export-file","name":"trip.voyage.json","contents":"{}","openUrl":123}"""));
+        string tooLong = "https://github.com/Skeptic043/sailwind-chartroom-voyages/issues/new?template=" + new string('a', 8000);
+        Assert.Null(HostMessage.Parse($$"""{"type":"export-file","name":"trip.voyage.json","contents":"{}","openUrl":"{{tooLong}}"}"""));
     }
 
     [Theory]

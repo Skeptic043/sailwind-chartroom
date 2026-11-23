@@ -414,11 +414,13 @@ test("Publish world/route and Enter a race save the file, check the run and open
   await expect(page.locator("#export-voyage-dialog")).toBeHidden();
 });
 
-test("a recording from before Voyage Recorder 0.2.2 can enter a race but not be published as a route", async ({ chartroom, page }) => {
+test("a recording from before Voyage Recorder 0.2.2 can declare a world to publish or enter a race", async ({ chartroom, page }) => {
   const course = (id, world, rules = {}) => ({ id, version: 1, name: id, world, start: { island: "alankh/gold_rock_city" }, checkpoints: [{ island: "alankh/neverdin" }], order: "any", finish: { lastCheckpoint: true }, rules: { sortBy: "game", mods: { mode: "any", plugins: [] }, ...rules } });
   await site(page, {
+    "data/worlds.json": [{ key: "vanilla", name: "Vanilla Sailwind" }, { key: "ss-0000000000000000", name: "Scrambled seed 1" }],
     "data/courses.json": [{ id: "dash", name: "Dash", world: "vanilla", runs: 2 }, { id: "elsewhere", name: "Elsewhere", world: "ss-0000000000000000", runs: 0 }],
-    "data/boards/dash.json": { course: course("dash", "vanilla", { mods: { mode: "only", plugins: [] } }), runs: [] }
+    "data/boards/dash.json": { course: course("dash", "vanilla", { mods: { mode: "only", plugins: [] } }), runs: [] },
+    "data/boards/elsewhere.json": { course: course("elsewhere", "ss-0000000000000000"), runs: [] }
   });
   // No world, real time or mod list in the session line, as Voyage Recorder 0.1.9 wrote it.
   const runs = [lines(
@@ -431,22 +433,148 @@ test("a recording from before Voyage Recorder 0.2.2 can enter a race but not be 
   await page.locator("#missing-form button.primary").click();
   await expect.poll(() => page.evaluate(() => window.__host.workspace?.charts?.[0]?.track?.length ?? 0)).toBe(8);
 
+  // Publish world/route now opens and asks the player to declare the world.
   await page.locator('.app-menu[data-menu="voyage"] > summary').click();
   await page.locator("#share-voyage").click();
-  await expect(page.locator("#export-voyage-dialog")).toBeHidden();
+  await expect(page.locator("#export-voyage-dialog")).toBeVisible();
+  await expect(page.locator("#export-world-row")).toBeVisible();
+  await page.locator("#export-submit").click();
+  await expect(page.locator("#export-check")).toContainText("Choose which world this route was sailed in");
+  await page.locator("#export-world-choice").selectOption("vanilla");
+  await expect(page.locator("#export-world")).toContainText("declared by you");
+  await page.locator("#export-submit").click();
+  await expect.poll(() => page.evaluate(() => window.__host.links?.at(-1))).toBe("https://github.com/Skeptic043/sailwind-chartroom-voyages/issues/new?template=share-voyage.yml");
+  const published = JSON.parse(await page.evaluate(() => window.__host.exports.at(-1).contents));
+  expect(published.world).toEqual({ kind: "vanilla" });
+  expect(published.worldDeclared).toBe(true);
+
+  // Declaring a Scrambled Seas World Generator link prefills the GitHub form fields.
+  const generatorLink = "https://skeptic043.github.io/scrambled-seas-world-generator/#v=1&lo1=-20&lo2=40&la1=20&la2=50&seed=-77";
+  await page.locator('.app-menu[data-menu="voyage"] > summary').click();
+  await page.locator("#share-voyage").click();
+  await page.locator("#export-world-choice").selectOption("scrambled");
+  await expect(page.locator("#export-world-source-row")).toBeVisible();
+  await page.locator("#export-world-source").fill(generatorLink);
+  await page.locator("#export-submit").click();
+  await expect.poll(() => page.evaluate(() => window.__host.links?.length ?? 0)).toBe(2);
+  const scrambledForm = new URL(await page.evaluate(() => window.__host.links.at(-1)));
+  expect(scrambledForm.searchParams.get("template")).toBe("share-voyage.yml");
+  expect(scrambledForm.searchParams.get("world")).toBe("Scrambled Seas (paste link or XML below)");
+  expect(scrambledForm.searchParams.get("scrambled_world")).toBe(generatorLink);
+
+  // Declaring a Scrambled Seas XML embeds the full world settings directly in the exported file.
+  const scrambledXml = `<ScrambledSeasSaveContainer><version>60</version><worldScramblerSeed>-77</worldScramblerSeed><islandSpread>6500</islandSpread><minArchipelagoSeparation>45000</minArchipelagoSeparation><minIslandSeparation>1950</minIslandSeparation><worldLonMin>-20</worldLonMin><worldLonMax>40</worldLonMax><worldLatMin>20</worldLatMin><worldLatMax>50</worldLatMax><borderExpander>1</borderExpander></ScrambledSeasSaveContainer>`;
+  await page.locator('.app-menu[data-menu="voyage"] > summary').click();
+  await page.locator("#share-voyage").click();
+  await page.locator("#export-world-choice").selectOption("scrambled");
+  await page.locator("#export-world-source").fill(scrambledXml);
+  await page.locator("#export-submit").click();
+  await expect.poll(() => page.evaluate(() => window.__host.links?.length ?? 0)).toBe(3);
+  expect(await page.evaluate(() => window.__host.links.at(-1))).toBe("https://github.com/Skeptic043/sailwind-chartroom-voyages/issues/new?template=share-voyage.yml");
+  const xmlPublished = JSON.parse(await page.evaluate(() => window.__host.exports.at(-1).contents));
+  expect(xmlPublished.world).toMatchObject({ kind: "scrambled", seed: -77 });
+  expect(xmlPublished.worldDeclared).toBe(true);
+
+  // In Save route to file, the Scrambled Seas label asks for XML only and rejects generator links.
+  await page.locator('.app-menu[data-menu="voyage"] > summary').click();
+  await page.locator("#export-voyage").click();
+  await page.locator("#export-world-choice").selectOption("scrambled");
+  await expect(page.locator("#export-world-source-label")).toHaveText("Scrambled Seas XML");
+  await page.locator("#export-world-source").fill(generatorLink);
+  await page.locator("#export-submit").click();
+  await expect(page.locator("#export-check")).toContainText("need the Scrambled Seas XML");
+  await page.locator('#export-voyage-dialog button[data-close]').click();
 
   await page.locator('.app-menu[data-menu="voyage"] > summary').click();
   await page.locator("#enter-race").click();
-  // Without a recorded world every race is offered, and the run counts as sailed in the chosen race's world.
-  await expect(page.locator("#export-course option")).toHaveText(["Dash (2 runs)", "Elsewhere (0 runs)"]);
+  // Without a recorded world every race is offered with its world name, and the run counts as sailed in the chosen race's world.
+  await expect(page.locator("#export-course option")).toHaveText(["Dash — Vanilla Sailwind (2 runs)", "Elsewhere — Scrambled seed 1 (0 runs)"]);
   await expect(page.locator("#export-world")).toHaveText("World not recorded, so the run counts as sailed in the race's world.");
+  // Declaring Vanilla while targeting a Scrambled Seas race is caught locally before saving.
+  await page.locator("#export-course").selectOption("elsewhere");
+  await page.locator("#export-world-choice").selectOption("vanilla");
+  await page.locator("#export-submit").click();
+  await expect(page.locator("#export-check")).toContainText("sailed in a different world from the race's");
+  // Declaring Vanilla for a Vanilla race notes it as player-declared.
   await page.locator("#export-course").selectOption("dash");
   await page.locator("#export-submit").click();
-  await expect(page.locator("#export-check")).toContainText("The board will note: mods not recorded.");
+  await expect(page.locator("#export-check")).toContainText("The board will note: world declared by player, mods not recorded.");
+  const declaredEntry = JSON.parse(await page.evaluate(() => window.__host.exports.at(-1).contents));
+  expect(declaredEntry.world).toEqual({ kind: "vanilla" });
+  expect(declaredEntry.worldDeclared).toBe(true);
+
+  // Leaving world unset enters the race with unknown world and world-not-recorded note.
+  await page.locator('.app-menu[data-menu="voyage"] > summary').click();
+  await page.locator("#enter-race").click();
+  await page.locator("#export-course").selectOption("dash");
+  await page.locator("#export-submit").click();
+  await expect(page.locator("#export-check")).toContainText("The board will note: world not recorded, mods not recorded.");
   await expect.poll(() => page.evaluate(() => window.__host.links?.at(-1))).toBe("https://github.com/Skeptic043/sailwind-chartroom-voyages/issues/new?template=enter-race.yml&course=dash");
   const entry = JSON.parse(await page.evaluate(() => window.__host.exports.at(-1).contents));
   expect(entry.world).toEqual({ kind: "unknown" });
   expect(entry.plugins).toBeUndefined();
+});
+
+test("a desktop host with exportWithLink saves first, reveals the file, and waits before showing the toast", async ({ chartroom, page }) => {
+  await site(page, {
+    "data/courses.json": [{ id: "dash", name: "Dash", world: "vanilla", runs: 1 }],
+    "data/boards/dash.json": { course: { id: "dash", version: 1, name: "Dash", world: "vanilla", start: { island: "alankh/gold_rock_city" }, checkpoints: [{ island: "alankh/neverdin" }], order: "any", finish: { lastCheckpoint: true }, rules: { sortBy: "game", mods: { mode: "any", plugins: [] } } }, runs: [] }
+  });
+  const runs = [lines(
+    { type: "session", day: 3, hour: 9, game: "g1", world: { kind: "vanilla" }, plugins: [] },
+    ...Array.from({ length: 8 }, (_, step) => ({ type: "position", day: 3, hour: 9 + step, lat: GRC.lat + (NEVERDIN.lat - GRC.lat) * step / 7, lon: GRC.lon + (NEVERDIN.lon - GRC.lon) * step / 7 }))
+  )];
+  await chartroom.open(null, { recording: { name: "slot1.jsonl", runs }, exportWithLink: true });
+  await page.locator('.app-menu[data-menu="voyage"] > summary').click();
+  await page.locator("#follow-track").click();
+  await page.locator("#missing-form button.primary").click();
+  await expect.poll(() => page.evaluate(() => window.__host.workspace?.charts?.[0]?.track?.length ?? 0)).toBe(8);
+
+  await page.locator('.app-menu[data-menu="voyage"] > summary').click();
+  await page.locator("#enter-race").click();
+  await page.locator("#export-submit").click();
+  await expect.poll(() => page.evaluate(() => window.__host.exports.length)).toBe(1);
+  const [req] = await page.evaluate(() => window.__host.exports);
+  expect(req.id).toBeTruthy();
+  expect(req.openUrl).toBe("https://github.com/Skeptic043/sailwind-chartroom-voyages/issues/new?template=enter-race.yml&course=dash");
+  expect(req.reveal).toBe(true);
+  expect(await page.evaluate(() => window.__host.links ?? [])).toEqual([]);
+  await expect(page.locator("#toast")).not.toContainText("Route saved");
+  // An unrelated export-result (e.g. File > Export this chart) does not consume the pending voyage toast.
+  await page.evaluate(() => window.__host.emit({ type: "export-result", id: null, saved: true, opened: false }));
+  await expect(page.locator("#toast")).not.toContainText("Route saved");
+  // Cancelling the Save dialog keeps the toast quiet.
+  await page.evaluate((id) => window.__host.emit({ type: "export-result", id, saved: false, opened: false }), req.id);
+  await expect(page.locator("#toast")).not.toContainText("Route saved");
+
+  // Saving shows the timed race summary in the toast.
+  await page.locator('.app-menu[data-menu="voyage"] > summary').click();
+  await page.locator("#enter-race").click();
+  await page.locator("#export-submit").click();
+  await expect.poll(() => page.evaluate(() => window.__host.exports.length)).toBe(2);
+  const second = await page.evaluate(() => window.__host.exports.at(-1));
+  await page.evaluate((id) => window.__host.emit({ type: "export-result", id, saved: true, opened: true }), second.id);
+  await expect(page.locator("#toast")).toContainText("Route saved (5h 00m from Gold Rock City)");
+
+  // If the file saved but the browser couldn't be opened, Chartroom tells the player clearly.
+  await page.locator('.app-menu[data-menu="voyage"] > summary').click();
+  await page.locator("#share-voyage").click();
+  await page.locator("#export-submit").click();
+  await expect.poll(() => page.evaluate(() => window.__host.exports.length)).toBe(3);
+  const third = await page.evaluate(() => window.__host.exports.at(-1));
+  await page.evaluate((id) => window.__host.emit({ type: "export-result", id, saved: true, opened: false }), third.id);
+  await expect(page.locator("#toast")).toContainText("your browser couldn't be opened");
+
+  // Local Save route to file sends neither openUrl nor reveal.
+  await page.locator('.app-menu[data-menu="voyage"] > summary').click();
+  await page.locator("#export-voyage").click();
+  await page.locator("#export-submit").click();
+  await expect.poll(() => page.evaluate(() => window.__host.exports.length)).toBe(4);
+  const localReq = await page.evaluate(() => window.__host.exports.at(-1));
+  expect(localReq.openUrl).toBeUndefined();
+  expect(localReq.reveal).toBeUndefined();
+  await page.evaluate((id) => window.__host.emit({ type: "export-result", id, saved: true, opened: false }), localReq.id);
+  await expect(page.locator("#toast")).toHaveText("Route saved to file.");
 });
 
 test("Publish route as race reads the route's islands and opens the race form filled in", async ({ chartroom, page }) => {
