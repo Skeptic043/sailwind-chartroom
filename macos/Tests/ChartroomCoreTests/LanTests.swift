@@ -92,7 +92,8 @@ final class LanProtocolTests: XCTestCase {
     private func masked(_ text: String, fin: Bool = true, opcode: UInt8 = 0x1) -> Data {
         let payload = [UInt8](text.utf8)
         let mask: [UInt8] = [1, 2, 3, 4]
-        var frame = [UInt8]([(fin ? 0x80 : 0) | opcode])
+        let first: UInt8 = (fin ? 0x80 : 0) | opcode
+        var frame: [UInt8] = [first]
         if payload.count < 126 { frame.append(0x80 | UInt8(payload.count)) }
         else { frame += [0x80 | 126, UInt8(payload.count >> 8), UInt8(payload.count & 0xFF)] }
         frame += mask
