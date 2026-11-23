@@ -117,7 +117,8 @@ final class ChartWindow: NSObject, NSWindowDelegate, WKScriptMessageHandler, WKN
             smoke?.pageErrors.append(body)
             return
         }
-        switch HostMessage.parse(body) {
+        let parsed = HostMessage.parse(body)
+        switch parsed {
         case .ready:
             // Sent on every page load, so a reload always receives the latest charts.
             // The workspace goes in as its own JSON text, exactly as it was saved.
@@ -168,7 +169,7 @@ final class ChartWindow: NSObject, NSWindowDelegate, WKScriptMessageHandler, WKN
         case .syncBroadcast(let ops):
             lan?.broadcast(json: #"{"type":"ops","ops":\#(ops)}"#)
         case .devicesOpen, .devicesEnable, .devicesPair, .devicesPairStop, .devicesRename, .devicesRemove:
-            handleDevices(HostMessage.parse(body)!)
+            if let parsed { handleDevices(parsed) }
         case nil:
             break
         }
@@ -418,7 +419,7 @@ final class ChartWindow: NSObject, NSWindowDelegate, WKScriptMessageHandler, WKN
     }
 
     // Server events arrive on its queue; the window handles them on the main thread.
-    func joined(deviceId: String, name: String) {
+    nonisolated func joined(deviceId: String, name: String) {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.post(["type": "device-joined", "deviceId": deviceId])
@@ -429,19 +430,20 @@ final class ChartWindow: NSObject, NSWindowDelegate, WKScriptMessageHandler, WKN
         }
     }
 
-    func left(deviceId: String) {
+    nonisolated func left(deviceId: String) {
         DispatchQueue.main.async { [weak self] in
+            self?.deviceLogs[deviceId] = nil
             self?.post(["type": "device-left", "deviceId": deviceId])
             self?.postDevicesState()
         }
     }
 
-    func message(deviceId: String, json: String) {
+    nonisolated func message(deviceId: String, json: String) {
         DispatchQueue.main.async { [weak self] in self?.handleDeviceMessage(deviceId: deviceId, json: json) }
     }
 
     // A wrong guess may have used up the code showing, which the dialog then stops showing.
-    func denied() {
+    nonisolated func denied() {
         DispatchQueue.main.async { [weak self] in self?.postDevicesState() }
     }
 

@@ -52,16 +52,16 @@ public final class LanServer {
     /// Starts listening, waiting briefly to hear whether it could. Throws when the port is taken.
     public func start() throws {
         let parameters = NWParameters.tcp
+        // Turning devices off and on again reuses the port while closed connections linger on it.
+        parameters.allowLocalEndpointReuse = true
         if let ip = parameters.defaultProtocolStack.internetProtocol as? NWProtocolIP.Options { ip.version = .v4 }
         let listener = requestedPort == 0
             ? try NWListener(using: parameters)
             : try NWListener(using: parameters, on: NWEndpoint.Port(rawValue: requestedPort)!)
         let settled = DispatchSemaphore(value: 0)
-        var failure: Error?
         listener.stateUpdateHandler = { state in
             switch state {
-            case .ready: settled.signal()
-            case .failed(let error): failure = error; settled.signal()
+            case .ready, .failed, .waiting: settled.signal()
             default: break
             }
         }
@@ -69,11 +69,16 @@ public final class LanServer {
         listener.start(queue: queue)
         _ = settled.wait(timeout: .now() + 5)
         listener.stateUpdateHandler = nil
-        if let failure {
+        switch listener.state {
+        case .ready:
+            self.listener = listener
+        case .failed(let error), .waiting(let error):
             listener.cancel()
-            throw failure
+            throw error
+        default:
+            listener.cancel()
+            throw NWError.posix(.ETIMEDOUT)
         }
-        self.listener = listener
     }
 
     public func stop() {
@@ -167,19 +172,23 @@ public final class LanServer {
         connection.send(content: Data("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: \(accept)\r\n\r\n".utf8),
                         completion: .contentProcessed { _ in })
         let session = Session(connection: connection, queue: queue)
-        var admitted = false
-        let timeout = DispatchWorkItem { [weak self] in
-            guard !admitted else { return }
+        session.limit = Self.maxFirstMessageBytes
+        // Counted once, however the wait ends: a first message, the connection closing, or time running out.
+        let settle: (Session) -> Bool = { [weak self] session in
+            guard !session.admitted else { return false }
+            session.admitted = true
             self?.unadmitted -= 1
+            return true
+        }
+        let timeout = DispatchWorkItem { [weak self, weak session] in
+            guard let session, settle(session) else { return }
+            self?.events?.denied()
             session.close()
         }
         queue.asyncAfter(deadline: .now() + Self.requestTimeout, execute: timeout)
-        session.limit = Self.maxFirstMessageBytes
         session.onText = { [weak self, weak session] first in
-            guard let self, let session, !admitted else { return }
-            admitted = true
+            guard let self, let session, settle(session) else { return }
             timeout.cancel()
-            self.unadmitted -= 1
             guard let entry = self.admit(first) else {
                 self.events?.denied()
                 session.send(text: #"{"type":"denied"}"#)
@@ -188,11 +197,10 @@ public final class LanServer {
             }
             self.run(session, device: entry.device, welcome: entry.welcome)
         }
-        session.onEnd = { [weak self] in
-            guard let self, !admitted else { return }
-            admitted = true
+        session.onEnd = { [weak self, weak session] in
+            guard let session, settle(session) else { return }
             timeout.cancel()
-            self.unadmitted -= 1
+            self?.events?.denied()
         }
         session.read()
     }
@@ -244,6 +252,9 @@ final class Session {
     private var message = Data()
     private var lastHeard = Date()
     private var ended = false
+    private var fragmented = false
+    // Whether the first message has been dealt with (LanServer.upgrade).
+    var admitted = false
     var limit = 4096
     var onText: (String) -> Void = { _ in }
     var onEnd: () -> Void = {}
@@ -278,6 +289,9 @@ final class Session {
     private func handle(opcode: UInt8, fin: Bool, payload: Data) {
         switch opcode {
         case WebSocketFrame.text, WebSocketFrame.continuation:
+            // A new message can't start inside another, and a continuation needs one to continue.
+            guard (opcode == WebSocketFrame.text) != fragmented else { return close() }
+            fragmented = !fin
             message.append(payload)
             if message.count > limit { return close() }
             guard fin else { return }
@@ -288,8 +302,11 @@ final class Session {
             write(WebSocketFrame.encode(opcode: WebSocketFrame.pong, payload: payload))
         case WebSocketFrame.close:
             close()
-        default:
+        case WebSocketFrame.pong:
             break
+        default:
+            // Binary frames mean something other than the chart page is talking.
+            close()
         }
     }
 
@@ -299,8 +316,9 @@ final class Session {
 
     private func write(_ frame: Data) {
         guard !ended else { return }
+        // Completions run on the server's queue, where the session lives.
         connection.send(content: frame, completion: .contentProcessed { [weak self] error in
-            if error != nil { self?.queue.async { self?.close() } }
+            if error != nil { self?.close() }
         })
     }
 
