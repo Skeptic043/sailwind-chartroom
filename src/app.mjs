@@ -3,18 +3,22 @@ import { MAX_CLOCK_PERCENT, MIN_CLOCK_PERCENT, archiveActiveRoute, createLine, s
 import { connectHost } from "./host.mjs";
 import { clamp } from "./format.mjs";
 import { canvas, elements, showToast } from "./dom.mjs";
-import { activeChart, changeOutsideHistory, clearSelection, commit, initState, persist, redo, replaceSelectionState, resetHistory, revealLayer, selectItem, selectedItem, selection, setSaveStatus, undo, workspace } from "./state.mjs";
+import { activeChart, changeOutsideHistory, clearSelection, commit, initState, input, persist, redo, replaceSelectionState, resetHistory, revealLayer, selectItem, selectedItem, selection, setSaveStatus, undo, workspace } from "./state.mjs";
 import { eventPoint, screenToWorld } from "./viewport.mjs";
 import { drawChart, fitData, resizeCanvas, setOverlay } from "./render.mjs";
 import { findHit } from "./hits.mjs";
 import { addLocation, deleteSelected, lockSelected, removeTrackJoin, updateSavedRouteFromForm, updateSelectedFromForm } from "./edits.mjs";
-import { beginResolution, drawToolPreview, endPointer, extendSavedRoute, mode, movePointer, pointerState, setMode, setSpacePressed, startPointer, stopEdgePan, zoomAt } from "./interaction.mjs";
+import { beginResolution, drawToolPreview, extendSavedRoute, mode, pointerState, setMode, setSpacePressed, stopEdgePan, zoomAt } from "./interaction.mjs";
 import { LAYER_CONTROLS, renderEverything, renderFeatureList, renderInspector, renderRouteSummary } from "./panels.mjs";
 import { applyLayout, endPanelResize, movePanelResize, resizePanelFromKeyboard, startPanelResize, togglePanel } from "./layout.mjs";
 import { deleteChart, openAbout, openBoatLibrary, openChartDialog, openIslandLibrary, renderBoatLibrary, renderIslandLibrary, saveChartDialog, selectedBoatOwner, selectedIslandOwner } from "./dialogs.mjs";
 import { exportActiveChart, exportLocationsCsv, exportWorkspace, importChartFile, importTrackFile, importTrackText } from "./files.mjs";
 import { initUpdates } from "./updates.mjs";
 import { initLiveTrack } from "./live-track.mjs";
+import { initTouch } from "./touch.mjs";
+import { initHub } from "./hub.mjs";
+import { initDevices } from "./devices.mjs";
+import { initRemote } from "./remote.mjs";
 import { initSettings, initTheme, stepInterfaceSize } from "./settings.mjs";
 import { initDeadReckoning, reckonFrom } from "./dead-reckoning-panel.mjs";
 import { initTrackSelection } from "./track-selection.mjs";
@@ -281,18 +285,19 @@ elements["export-csv"].addEventListener("click", exportLocationsCsv);
 elements["export-all"].addEventListener("click", exportWorkspace);
 
 // Chart canvas
-canvas.addEventListener("pointerdown", startPointer);
-canvas.addEventListener("pointermove", movePointer);
-canvas.addEventListener("pointerup", endPointer);
-canvas.addEventListener("pointercancel", endPointer);
+// Mouse and pen go straight to the tools; fingers go through touch.mjs, which passes them on the same way.
+initTouch();
 canvas.addEventListener("pointerleave", () => { if (!pointerState) stopEdgePan(); });
 canvas.addEventListener("wheel", zoomAt, { passive: false });
 canvas.addEventListener("contextmenu", (event) => {
   event.preventDefault();
+  // Android sends this for a long press, which on a touch screen places without snapping instead.
+  if (event.pointerType === "touch" || input.touch) return;
   if (mode !== "select") setMode("select");
 });
 canvas.addEventListener("dblclick", (event) => {
-  if (mode !== "select") return;
+  // Not on touch screens, where tapping again steps through stacked items instead.
+  if (mode !== "select" || input.touch) return;
   const screen = eventPoint(event);
   if (!findHit(screen.x, screen.y)) addLocation(screenToWorld(screen.x, screen.y));
 });
@@ -367,6 +372,9 @@ resizeCanvas();
 initSettings();
 initUpdates();
 initLiveTrack();
+initHub({ renderAll: renderEverything });
+initDevices();
+initRemote({ renderAll: renderEverything });
 initDeadReckoning();
 initNotes();
 initTrackSelection();

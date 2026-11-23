@@ -21,6 +21,18 @@ public enum HostMessage: Equatable {
     case copyText(String)
     /// A Chartroom Voyages page or submission form to open in the player's browser.
     case openLink(URL)
+    // Phones and tablets on the player's network: the page's Mobile device link dialog, and sync messages to relay.
+    case devicesOpen
+    case devicesEnable(Bool)
+    /// Show a pairing code for the page at this address, or the first one found when empty.
+    case devicesPair(address: String)
+    case devicesPairStop
+    case devicesRename(id: String, name: String)
+    case devicesRemove(id: String)
+    /// A message for one device, as JSON the host passes on unread.
+    case syncSend(deviceId: String, message: String)
+    /// Chart changes for every connected device, as a JSON array.
+    case syncBroadcast(ops: String)
 
     // src/host.mjs sends a save as JSON.stringify({ type: "save", workspace }), so the workspace's own
     // text is everything between this prefix and the closing brace.
@@ -60,6 +72,25 @@ public enum HostMessage: Equatable {
         case "export-file":
             guard let name = root["name"] as? String, !name.isEmpty, let contents = root["contents"] as? String else { return nil }
             return .exportFile(name: name, contents: contents)
+        case "devices-open": return .devicesOpen
+        case "devices-enable":
+            guard let enabled = JSONValue.bool(root["enabled"]) else { return nil }
+            return .devicesEnable(enabled)
+        case "devices-pair": return .devicesPair(address: root["address"] as? String ?? "")
+        case "devices-pair-stop": return .devicesPairStop
+        case "devices-rename":
+            guard let id = root["id"] as? String, !id.isEmpty, let name = root["name"] as? String else { return nil }
+            return .devicesRename(id: id, name: name)
+        case "devices-remove":
+            guard let id = root["id"] as? String, !id.isEmpty else { return nil }
+            return .devicesRemove(id: id)
+        case "sync-send":
+            guard let deviceId = root["deviceId"] as? String, !deviceId.isEmpty, let message = root["message"] as? [String: Any],
+                  let text = JSONValue.text(message) else { return nil }
+            return .syncSend(deviceId: deviceId, message: text)
+        case "sync-broadcast":
+            guard let ops = root["ops"] as? [Any], let text = JSONValue.text(ops) else { return nil }
+            return .syncBroadcast(ops: text)
         case "save":
             guard let workspace = root["workspace"] as? [String: Any], workspace["charts"] is [Any],
                   json.hasPrefix(savePrefix), json.hasSuffix("}") else { return nil }
@@ -88,6 +119,12 @@ enum JSONValue {
     static func bool(_ value: Any?) -> Bool? {
         guard let number = value as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID() else { return nil }
         return number.boolValue
+    }
+
+    /// A parsed object or array as JSON text again.
+    static func text(_ value: Any) -> String? {
+        guard JSONSerialization.isValidJSONObject(value), let data = try? JSONSerialization.data(withJSONObject: value) else { return nil }
+        return String(data: data, encoding: .utf8)
     }
 
     static func number(_ value: Any?) -> Double? {

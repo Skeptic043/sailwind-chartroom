@@ -7,6 +7,8 @@ const UNDO_LIMIT = 60;
 export let host = null;
 // Whether Coordinate Viewer is being followed live, which decides the latest position (dead-reckoning.mjs).
 export const live = { following: false };
+// Whether the last pointer on the chart was a finger, which gets larger targets (hits.mjs) and labels above it.
+export const input = { touch: false };
 
 export let workspace = null;
 export let selection = null;
@@ -16,6 +18,12 @@ let redoStack = [];
 
 // State changes redraw through these, registered by app.mjs, so this module needs no rendering imports.
 const views = { everything() {}, selection() {} };
+// Told after every save, so the phone companion can send the change on (hub.mjs).
+let persisted = () => {};
+
+export function onPersist(callback) {
+  persisted = callback;
+}
 
 export function initState(connectedHost, renderers) {
   host = connectedHost;
@@ -50,6 +58,8 @@ function showSaveStatus(state, label) {
 
 export function persist() {
   showSaveStatus("saving", "Saving…");
+  // The phone companion records the change first, so a full device store loses the copy, not the change.
+  persisted();
   host.save(workspace);
 }
 
@@ -128,9 +138,14 @@ export function appendOutsideHistory(chart, key, items) {
   }
 }
 
+// The chart and each of its undo snapshots, for a change that undo must neither revert nor bring back.
+export function historyCopies(chart) {
+  return [chart, ...[...undoStack, ...redoStack].filter((snapshot) => snapshot.id === chart.id)];
+}
+
 // Makes a change to the chart and to each of its undo snapshots, so undo neither reverts nor brings it back.
 export function changeOutsideHistory(chart, change) {
-  for (const target of [chart, ...[...undoStack, ...redoStack].filter((snapshot) => snapshot.id === chart.id)]) change(target);
+  for (const target of historyCopies(chart)) change(target);
 }
 
 // Puts items in before another, in the chart and its undo history, as appendOutsideHistory adds them.
@@ -153,6 +168,13 @@ function restoreFrom(stack, destination) {
   clearSelection();
   persist();
   views.everything();
+}
+
+// After charts change from elsewhere (the phone companion): history starts afresh if the open chart went,
+// and a selection whose item went is dropped.
+export function settleAfterOutsideChange(openedChartId) {
+  if (workspace.activeChartId !== openedChartId) resetHistory();
+  else if (selection && !selectedItem()) clearSelection();
 }
 
 export function updateUndoButtons() {

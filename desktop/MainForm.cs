@@ -7,22 +7,10 @@ using SailwindChartroom.Updates;
 
 namespace SailwindChartroom;
 
-internal sealed class MainForm : Form
+internal sealed partial class MainForm : Form
 {
     // The chart page is served from the exe under this private origin and may never leave it.
     private const string AppOrigin = "https://chartroom.app";
-    private const string ContentSecurityPolicy =
-        "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; " +
-        "connect-src 'self' https://skeptic043.github.io; object-src 'none'; base-uri 'none'; frame-ancestors 'none'";
-    private static readonly Dictionary<string, string> ContentTypes = new(StringComparer.OrdinalIgnoreCase)
-    {
-        [".html"] = "text/html; charset=utf-8",
-        [".css"] = "text/css; charset=utf-8",
-        [".mjs"] = "text/javascript; charset=utf-8",
-        [".txt"] = "text/plain; charset=utf-8",
-        [".png"] = "image/png",
-        [".jpg"] = "image/jpeg"
-    };
 
     private readonly WebView2 web = new() { Dock = DockStyle.Fill };
     private readonly WorkspaceStore store = new(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Sailwind Chartroom"));
@@ -57,9 +45,14 @@ internal sealed class MainForm : Form
         Controls.Add(web);
         saveTimer.Tick += (_, _) => FlushSave();
         RestoreWindow();
-        Load += async (_, _) => await InitializeWebAsync();
+        Load += async (_, _) =>
+        {
+            StartDevices();
+            await InitializeWebAsync();
+        };
         FormClosing += (_, _) =>
         {
+            StopLan();
             follower?.Dispose();
             FlushSave();
             SaveWindow();
@@ -150,32 +143,33 @@ internal sealed class MainForm : Form
 
     private void ServeEmbeddedFile(object? sender, CoreWebView2WebResourceRequestedEventArgs e)
     {
-        string path = new Uri(e.Request.Uri).AbsolutePath.TrimStart('/');
-        var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream($"web/{path}");
+        string path = new Uri(e.Request.Uri).AbsolutePath;
+        var stream = WebResources.Open(path);
         var environment = web.CoreWebView2.Environment;
         if (stream is null)
         {
             e.Response = environment.CreateWebResourceResponse(null, 404, "Not Found", "");
             return;
         }
-        string type = ContentTypes.GetValueOrDefault(Path.GetExtension(path), "application/octet-stream");
         e.Response = environment.CreateWebResourceResponse(stream, 200, "OK",
-            $"Content-Type: {type}\r\nCache-Control: no-store\r\nContent-Security-Policy: {ContentSecurityPolicy}\r\nX-Content-Type-Options: nosniff");
+            $"Content-Type: {WebResources.ContentType(path)}\r\nCache-Control: no-store\r\nContent-Security-Policy: {WebResources.ContentSecurityPolicy}\r\nX-Content-Type-Options: nosniff");
     }
 
     private void OnWebMessage(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
     {
         if (!IsAppUri(e.Source)) return;
-        switch (HostMessage.Parse(e.WebMessageAsJson))
+        var message = HostMessage.Parse(e.WebMessageAsJson);
+        switch (message)
         {
             case HostMessage.Ready:
                 // Sent on every page load, so a reload always receives the latest charts.
                 using (var workspace = currentWorkspace is null ? null : JsonDocument.Parse(currentWorkspace))
                 {
-                    Post(new { type = "init", workspace = workspace?.RootElement, dataFolder = store.Folder, version = AppVersion, textScale = WindowsTextScale(), liveTrack = true });
+                    Post(new { type = "init", workspace = workspace?.RootElement, dataFolder = store.Folder, version = AppVersion, textScale = WindowsTextScale(), liveTrack = true, devices = true });
                 }
                 // A reloaded page learns that a file is still being followed.
                 if (follower is not null) Post(new { type = "track-following", name = follower.FileName, chartId = followedChartId, resumed = true });
+                ReplayDevices();
                 break;
             case HostMessage.Save save:
                 currentWorkspace = save.Workspace;
@@ -225,6 +219,10 @@ internal sealed class MainForm : Form
                 break;
             case HostMessage.CopyText copy:
                 Clipboard.SetText(copy.Contents);
+                break;
+            case HostMessage.DevicesOpen or HostMessage.DevicesEnable or HostMessage.DevicesPair or HostMessage.DevicesPairStop
+                or HostMessage.DevicesRename or HostMessage.DevicesRemove or HostMessage.SyncSend or HostMessage.SyncBroadcast:
+                HandleDevicesMessage(message!);
                 break;
             case HostMessage.SetAppearance appearance:
                 SettingsForm.UseDarkTitleBar(Handle, appearance.Dark);
@@ -396,6 +394,7 @@ internal sealed class MainForm : Form
             follower = created;
             followedChartId = chartId;
             Post(new { type = "track-following", name = follower.FileName, chartId, resumed = false });
+            TellDevicesFollowing();
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException)
         {
@@ -426,6 +425,7 @@ internal sealed class MainForm : Form
         follower.Dispose();
         follower = null;
         Post(new { type = "track-stopped" });
+        TellDevicesFollowing();
     }
 
     // The page supplies the file; the player chooses where it goes.

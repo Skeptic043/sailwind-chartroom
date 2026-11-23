@@ -3,8 +3,11 @@ import { destinationPoint, milesPerDegree, insideSearch, legPieces, searchExtent
 import { islandById, islandContains } from "./islands.mjs";
 import { assignedBoats } from "./boats.mjs";
 import { clamp } from "./format.mjs";
-import { activeChart, selectedItem, selection, viewLayers } from "./state.mjs";
+import { activeChart, input, selectedItem, selection, viewLayers } from "./state.mjs";
 import { boatRowAt, chartIsland, chartSearchIsland, featureBoats, insideBounds, islandPixelSpan, screenToWorld, windArrowEnds, worldToScreen } from "./viewport.mjs";
+
+// A finger is less exact than a mouse pointer, so its targets and snapping reach about twice as far.
+const reach = (pixels) => input.touch ? pixels * 2 : pixels;
 
 const POINT_MAGNET_PX = 11;
 
@@ -44,7 +47,7 @@ function findHits(x, y) {
     for (const [a, b] of summarizeRoute(route.points, chart.circumnavigation).legs.flatMap(legPieces)) {
       const near = closestOnSegment({ a: worldToScreen(a), b: worldToScreen(b) }, { x, y });
       const distance = Math.hypot(near.x - x, near.y - y);
-      if (distance <= SAVED_ROUTE_LINE_PX) consider("saved-route", route.id, a, distance + 3);
+      if (distance <= reach(SAVED_ROUTE_LINE_PX)) consider("saved-route", route.id, a, distance + 3);
     }
   }
   const searches = shownItems(chart, "search", layers);
@@ -58,7 +61,7 @@ function findHits(x, y) {
     }
     const searchOrigin = worldToScreen(search);
     const originDistance = Math.hypot(searchOrigin.x - x, searchOrigin.y - y);
-    if (insideBoat || (layers.searchLines && originDistance <= 13)) consider("search", search.id, search, insideBoat ? 0 : originDistance);
+    if (insideBoat || (layers.searchLines && originDistance <= reach(13))) consider("search", search.id, search, insideBoat ? 0 : originDistance);
     else if (insideSearch(search, world)) consider("search", search.id, search, 12, true);
   }
   // A wind arrow is clickable along its whole drawn length.
@@ -73,7 +76,7 @@ function findHits(x, y) {
     const centre = worldToScreen(item);
     const distance = Math.hypot(centre.x - x, centre.y - y);
     const inside = islandPixelSpan(island) >= 14 && islandContains(island, item, world);
-    if (inside || distance <= 8) consider("map-island", item.id, item, inside ? 12 : distance + 4, true);
+    if (inside || distance <= reach(8)) consider("map-island", item.id, item, inside ? 12 : distance + 4, true);
   }
   // Recorded positions; anything else at the same spot wins, except over the last position, which is drawn
   // above everything else and so is picked first.
@@ -81,22 +84,22 @@ function findHits(x, y) {
   for (const point of track) {
     const screen = worldToScreen(point);
     const distance = Math.hypot(screen.x - x, screen.y - y);
-    if (distance <= 8) consider("track", point.id, point, point === track.at(-1) ? -1 : distance + 2);
+    if (distance <= reach(8)) consider("track", point.id, point, point === track.at(-1) ? -1 : distance + 2);
   }
   // DR positions stay where they were reckoned, so pressing one selects it and pans the chart.
   for (const position of shownItems(chart, "dr", layers)) {
     const screen = worldToScreen(position);
     const distance = Math.hypot(screen.x - x, screen.y - y);
-    if (distance <= 9) consider("dr", position.id, position, distance + 1, true);
+    if (distance <= reach(9)) consider("dr", position.id, position, distance + 1, true);
   }
   // The measure line and kept lines are clickable along their length; marks at their ends win when they are as close.
   for (const kind of ["measure", "line"]) for (const line of shownItems(chart, kind, layers)) {
     const near = closestOnSegment({ a: worldToScreen(line), b: worldToScreen(line.end) }, { x, y });
     const distance = Math.hypot(near.x - x, near.y - y);
-    if (distance <= MEASURE_LINE_PX) consider(kind, line.id, line, distance + 3);
+    if (distance <= reach(MEASURE_LINE_PX)) consider(kind, line.id, line, distance + 3);
   }
   candidates.sort((a, b) => a.distance - b.distance);
-  return candidates.filter((candidate) => candidate.distance <= 13);
+  return candidates.filter((candidate) => candidate.distance <= reach(13));
 }
 
 export function findHit(x, y, { cycle = false } = {}) {
@@ -126,7 +129,7 @@ export function selectedLineEnd(screen) {
     return Math.hypot(projected.x - screen.x, projected.y - screen.y);
   };
   const [start, end] = [distanceTo(item), distanceTo(item.end)];
-  if (Math.min(start, end) > MEASURE_END_PX) return null;
+  if (Math.min(start, end) > reach(MEASURE_END_PX)) return null;
   return start <= end ? "start" : "end";
 }
 
@@ -136,7 +139,7 @@ export function onSelectedAreaEdge(screen) {
   if (!item?.rangeNm || item.locked || !itemShown(chart, "feature", item, viewLayers(chart))) return false;
   const center = worldToScreen(item);
   const radius = item.rangeNm / milesPerDegree * activeChart().view.zoom;
-  return Math.abs(Math.hypot(screen.x - center.x, screen.y - center.y) - radius) <= 6;
+  return Math.abs(Math.hypot(screen.x - center.x, screen.y - center.y) - radius) <= reach(6);
 }
 
 // Drawing clicks snap to charted positions, then to where two lines cross, then onto a single line,
@@ -145,7 +148,7 @@ export function snapPoint(screen, free = false) {
   const raw = screenToWorld(screen.x, screen.y);
   if (free) return raw;
   let best = null;
-  let bestDistance = POINT_MAGNET_PX;
+  let bestDistance = reach(POINT_MAGNET_PX);
   for (const point of magnetPoints()) {
     const projected = worldToScreen(point);
     const distance = Math.hypot(projected.x - screen.x, projected.y - screen.y);
@@ -155,10 +158,10 @@ export function snapPoint(screen, free = false) {
   const near = magnetLines()
     .map((line) => ({ line, point: closestOnSegment(line, screen) }))
     .map((candidate) => ({ ...candidate, distance: Math.hypot(candidate.point.x - screen.x, candidate.point.y - screen.y) }))
-    .filter((candidate) => candidate.distance <= LINE_MAGNET_PX)
+    .filter((candidate) => candidate.distance <= reach(LINE_MAGNET_PX))
     .sort((a, b) => a.distance - b.distance);
   const crossing = near.length >= 2 ? segmentCrossing(near[0].line, near[1].line) : null;
-  const target = crossing && Math.hypot(crossing.x - screen.x, crossing.y - screen.y) <= POINT_MAGNET_PX ? crossing : near[0]?.point;
+  const target = crossing && Math.hypot(crossing.x - screen.x, crossing.y - screen.y) <= reach(POINT_MAGNET_PX) ? crossing : near[0]?.point;
   return target ? { ...screenToWorld(target.x, target.y), snapped: true } : raw;
 }
 
@@ -205,14 +208,14 @@ export function snapAlongRay(origin, bearing, screen) {
   const direction = { x: Math.sin(radians), y: -Math.cos(radians) };
   const along = (point) => (point.x - start.x) * direction.x + (point.y - start.y) * direction.y;
   const across = (point) => Math.abs((point.x - start.x) * direction.y - (point.y - start.y) * direction.x);
-  const candidates = magnetPoints().map(worldToScreen).filter((point) => across(point) <= POINT_MAGNET_PX).map(along);
+  const candidates = magnetPoints().map(worldToScreen).filter((point) => across(point) <= reach(POINT_MAGNET_PX)).map(along);
   for (const line of magnetLines()) {
     const hit = rayCrossing(start, direction, line);
     if (hit !== null) candidates.push(hit);
   }
   const cursor = along(screen);
   const best = candidates.filter((t) => t > 1).sort((a, b) => Math.abs(a - cursor) - Math.abs(b - cursor))[0];
-  return best !== undefined && Math.abs(best - cursor) <= POINT_MAGNET_PX ? best / activeChart().view.zoom * milesPerDegree : null;
+  return best !== undefined && Math.abs(best - cursor) <= reach(POINT_MAGNET_PX) ? best / activeChart().view.zoom * milesPerDegree : null;
 }
 
 function cross(u, v) {

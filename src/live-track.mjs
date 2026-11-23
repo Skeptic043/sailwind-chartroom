@@ -20,8 +20,13 @@ const carry = { newSession: false };
 export function initLiveTrack() {
   if (!host.liveTrack) return;
   // Voyage Recorder's save slots are offered to choose from; Coordinate Viewer's file is picked directly.
-  // While following, the entry that started it stops it and the other is hidden.
-  for (const [id, choice] of [["follow-track", {}], ["follow-track-cv", { pick: true }]]) {
+  // While following, the entry that started it stops it and the other is hidden. A phone or tablet can only
+  // offer the slots, since picking a file needs the PC.
+  if (host.device) {
+    offered.delete("follow-track-cv");
+    elements["slot-pick-file"].hidden = true;
+  }
+  for (const [id, choice] of [["follow-track", {}], ["follow-track-cv", { pick: true }]].filter(([id]) => offered.has(id))) {
     elements[id].hidden = false;
     elements[id].addEventListener("click", () => {
       if (followedChartId) host.stopTrack();
@@ -43,14 +48,20 @@ export function initLiveTrack() {
     if (resumed !== true) showToast(`Following ${fileName}. New positions join this chart as you sail.`);
   });
   // The host found Voyage Recorder logs: the player picks a save slot, or asks for another file.
-  host.on("track-choices", ({ chartId, logs }) => showSlotChoices(String(chartId ?? ""), Array.isArray(logs) ? logs : []));
+  host.on("track-choices", ({ chartId, logs }) => {
+    if (Array.isArray(logs) && logs.length) showSlotChoices(String(chartId ?? ""), logs);
+    else showToast("No Voyage Recorder recordings were found on your PC.", true);
+  });
   elements["slot-form"].addEventListener("submit", () => {
     const chosen = elements["slot-list"].querySelector("input:checked");
     if (chosen) host.followTrack(slotChartId, { log: Number(chosen.value) });
   });
-  elements["missing-form"].addEventListener("submit", () => {
-    pendingMissing?.();
+  elements["missing-form"].addEventListener("submit", answerMissing);
+  // Either answer settles it everywhere it is asked (hub.mjs asks connected devices too).
+  elements["missing-dialog"].addEventListener("close", () => {
+    if (!pendingMissing) return;
     pendingMissing = null;
+    missingAsked(null);
   });
   elements["slot-pick-file"].addEventListener("click", () => {
     elements["slot-dialog"].close();
@@ -169,9 +180,33 @@ function offerMissing(chart, missing, newest, newestBreaks, matched) {
     showToast(`Added ${missing.length} position${missing.length === 1 ? "" : "s"} to the track.`);
   };
   elements["missing-dialog"].showModal();
+  missingAsked(elements["missing-text"].textContent);
+}
+
+// Adds the positions the player was asked about, from this window or from a device.
+export function answerMissing() {
+  const add = pendingMissing;
+  pendingMissing = null;
+  add?.();
+  // Answered from a device: this window's question closes too.
+  if (add && elements["missing-dialog"].open) elements["missing-dialog"].close();
+  missingAsked(null);
+}
+
+// Leaves the gap, as closing the question here does.
+export function declineMissing() {
+  if (elements["missing-dialog"].open) elements["missing-dialog"].close();
+}
+
+// Told the question, or null once it is settled, so devices can ask it too.
+let missingAsked = () => {};
+export function onMissingAsked(callback) {
+  missingAsked = callback;
 }
 
 let pendingMissing = null;
+// The follow entries this page offers.
+const offered = new Set(["follow-track", "follow-track-cv"]);
 let slotChartId = "";
 // The entry that stops following: Voyage Recorder's for its logs, Coordinate Viewer's for any other file,
 // also after a reload while the host carries on following.
@@ -207,7 +242,7 @@ function recordedAgo(modified) {
 
 function renderButton() {
   const labels = { "follow-track": "Follow live (Voyage Recorder)", "follow-track-cv": "Follow live (Coordinate Viewer)" };
-  for (const [id, label] of Object.entries(labels)) {
+  for (const [id, label] of Object.entries(labels).filter(([id]) => offered.has(id))) {
     const stopper = Boolean(followedChartId) && id === startedFrom;
     elements[id].textContent = stopper ? `Stop following ${fileName}` : label;
     elements[id].classList.toggle("active", stopper);

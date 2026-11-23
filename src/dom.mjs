@@ -18,6 +18,7 @@ export const elements = Object.fromEntries([
   "feature-count", "feature-search", "feature-list", "item-filter", "track-file", "json-file",
   "chart-dialog", "chart-form", "chart-dialog-title", "dialog-chart-name", "dialog-chart-seed", "dialog-chart-clock", "delete-chart", "help-dialog",
   "paste-dialog", "paste-form", "paste-text", "missing-dialog", "missing-form", "missing-text", "slot-dialog", "slot-form", "slot-list", "slot-pick-file", "pin-window", "open-folder", "storage-note",
+  "open-devices", "devices-separator", "devices-dialog", "devices-form", "devices-enabled", "devices-error", "devices-pairing", "devices-qr", "devices-url", "devices-code", "devices-address-row", "devices-address", "devices-connect", "devices-list", "conflict-dialog", "conflict-form", "conflict-text", "conflict-actions", "device-settings-dialog", "device-settings-form", "device-theme", "device-appearance", "device-icon-size", "device-share-view", "touch-menu", "touch-chart-select", "touch-undo", "touch-redo", "touch-items", "follow-chip", "tool-done", "sheet-size", "sheet-close",
   "island-dialog", "island-dialog-hint", "island-search", "island-region", "island-secrets", "island-list", "remove-island",
   "boat-dialog", "boat-dialog-hint", "boat-search", "boat-provider", "boat-list", "remove-boat",
   "layer-track-winds", "layer-track-key", "track-key", "track-key-heading", "show-track-key", "track-key-rows", "layer-dead-reckoning",

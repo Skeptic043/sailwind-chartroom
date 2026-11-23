@@ -1548,11 +1548,13 @@ function sanitizeVisit(value) {
   };
 }
 
+// Visits have no id; one port arrival or departure at one game time is the same visit wherever it came from.
+export const visitKey = (visit) => `${visit.kind}|${visit.port}|${visit.t.toFixed(4)}`;
+
 // Recorded visits not already on the chart.
 export function newVisits(chart, visits) {
-  const key = (visit) => `${visit.kind}|${visit.port}|${visit.t.toFixed(4)}`;
-  const known = new Set(chart.visits.map(key));
-  return visits.map(sanitizeVisit).filter((visit) => visit && !known.has(key(visit)) && known.add(key(visit)));
+  const known = new Set(chart.visits.map(visitKey));
+  return visits.map(sanitizeVisit).filter((visit) => visit && !known.has(visitKey(visit)) && known.add(visitKey(visit)));
 }
 
 // The keybinding overlay: whether it shows, and where, as fractions of the chart's width and height. It lists

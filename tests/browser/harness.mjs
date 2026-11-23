@@ -14,13 +14,15 @@ const csp = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 's
 // Stands in for the WebView2 host: answers "ready" with the latest saved workspace and records saves.
 // The workspace survives reloads in sessionStorage, as the real host keeps it in memory. Update checks
 // answer with the given releases; an install reports progress and then the given failure.
-function fakeHost({ seed, updates, platform, recording }) {
+function fakeHost({ seed, updates, platform, recording, devices }) {
   const key = "fake-host-workspace";
   if (sessionStorage.getItem(key) === null) sessionStorage.setItem(key, JSON.stringify(seed ?? null));
   const listeners = new Set();
   const dispatch = (data) => setTimeout(() => listeners.forEach((listener) => listener({ data })));
   // settingsReply, when a test sets it, is what the native Settings window sends back on OK.
-  const host = { messages: [], saves: 0, zooms: [], exports: [], settingsOpened: null, settingsReply: null };
+  const host = { messages: [], saves: 0, zooms: [], exports: [], settingsOpened: null, settingsReply: null, sync: [] };
+  // Lets a test speak for the host, as when a device joins or sends its changes.
+  host.emit = dispatch;
   Object.defineProperty(host, "workspace", { get: () => JSON.parse(sessionStorage.getItem(key)) });
   window.__host = host;
   window.chrome = {
@@ -28,13 +30,14 @@ function fakeHost({ seed, updates, platform, recording }) {
       postMessage(message) {
         const data = JSON.parse(JSON.stringify(message));
         host.messages.push(data.type);
-        if (data.type === "ready") dispatch({ type: "init", workspace: host.workspace, dataFolder: "D:/Charts", version: "9.9.9", platform, liveTrack: true });
+        if (data.type === "ready") dispatch({ type: "init", workspace: host.workspace, dataFolder: "D:/Charts", version: "9.9.9", platform, liveTrack: true, devices });
         if (data.type === "save") {
           sessionStorage.setItem(key, JSON.stringify(data.workspace));
           host.saves += 1;
           dispatch({ type: "saved", ok: true });
         }
         if (data.type === "export-file") host.exports.push(data);
+        if (data.type === "sync-send" || data.type === "sync-broadcast") host.sync.push(data);
         if (data.type === "pin") dispatch({ type: "pinned", value: true });
         // Following answers with the newest position, then more as if the game had written them. The
         // default recording is Coordinate Viewer's; a test can give a file name and runs of lines instead.
@@ -69,6 +72,28 @@ function fakeHost({ seed, updates, platform, recording }) {
   };
 }
 
+// Stands in for Chartroom on the PC as a phone sees it: the page's WebSocket to the PC. A test reads what the
+// page sent from window.__pc.sent and answers with __pc.deliver; __pc.drop loses the connection.
+function fakePc() {
+  const pc = { sockets: [], sent: [] };
+  window.__pc = pc;
+  window.WebSocket = class {
+    constructor(url) {
+      this.url = url;
+      this.listeners = {};
+      pc.sockets.push(this);
+      pc.socket = this;
+      setTimeout(() => this.fire("open", {}));
+    }
+    addEventListener(type, listener) { (this.listeners[type] ??= []).push(listener); }
+    fire(type, event) { for (const listener of this.listeners[type] ?? []) listener(event); }
+    send(text) { pc.sent.push(JSON.parse(text)); }
+    close() { setTimeout(() => this.fire("close", {})); }
+  };
+  pc.deliver = (message) => pc.socket.fire("message", { data: JSON.stringify(message) });
+  pc.drop = () => pc.socket.fire("close", {});
+}
+
 export const test = base.extend({
   chartroom: async ({ page }, use) => {
     const errors = [];
@@ -99,9 +124,28 @@ export class Chartroom {
     this.canvas = page.locator("#chart-canvas");
   }
 
+  // The page as Chartroom on the PC serves it to a phone or tablet on the same network.
+  async openDevice(hash = "") {
+    await this.page.route("http://chartroom-pc:47821/**", async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      const file = path === "/" ? "index.html" : served[path] ?? path.slice(1);
+      try {
+        let body = await readFile(new URL(file, root));
+        if (file === "index.html") body = body.toString("utf8").replace("<head>", '<head><meta name="chartroom-device" content="1">');
+        const extension = file.slice(file.lastIndexOf("."));
+        await route.fulfill({ body, headers: { "content-type": types[extension] ?? "application/octet-stream", "content-security-policy": csp.replace("connect-src 'self'", "connect-src 'self' ws:") } });
+      } catch {
+        await route.fulfill({ status: 404, body: "" });
+      }
+    });
+    await this.page.addInitScript(fakePc);
+    await this.page.goto(`http://chartroom-pc:47821/${hash}`);
+  }
+
   // platform "mac" makes the stand-in answer as the macOS host does.
-  async open(workspace = null, { updates, platform, recording } = {}) {
-    await this.page.addInitScript(fakeHost, { seed: workspace, updates, platform, recording });
+  // devices makes the stand-in a host that phones and tablets can connect to.
+  async open(workspace = null, { updates, platform, recording, devices } = {}) {
+    await this.page.addInitScript(fakeHost, { seed: workspace, updates, platform, recording, devices });
     await this.page.goto("https://chartroom.app/index.html");
     await expect(this.page.locator("#app-version")).toHaveText("9.9.9");
   }

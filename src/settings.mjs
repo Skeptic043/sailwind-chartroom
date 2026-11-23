@@ -27,6 +27,7 @@ function applyAppearance() {
 
 export function initSettings() {
   applyInterfaceSize();
+  if (host.device) initDeviceSettings();
   if (!host.desktop) return;
   for (const id of ["open-settings", "text-menu"]) elements[id].hidden = false;
   elements["open-settings"].addEventListener("click", openSettings);
@@ -92,4 +93,30 @@ function effectiveSize() {
 
 function applyInterfaceSize() {
   host.setZoom(effectiveSize() / 100);
+}
+
+// A phone or tablet can't show the desktop's Settings window, so it gets a dialog of its own with the
+// settings that take effect on it. They stay on the device.
+function initDeviceSettings() {
+  const fill = (select, choices, value) => select.replaceChildren(...choices.map(({ id, label }) => new Option(label, id, false, id === value)));
+  elements["open-settings"].hidden = false;
+  elements["open-settings"].addEventListener("click", () => {
+    const { theme, appearance, iconSize, shareViewSettings } = workspace.settings;
+    fill(elements["device-theme"], THEMES, theme);
+    fill(elements["device-appearance"], APPEARANCES.map((choice) => choice.id === "system" ? { ...choice, label: "Match this device" } : choice), appearance);
+    fill(elements["device-icon-size"], ICON_SIZE_CHOICES, iconSize);
+    elements["device-share-view"].checked = shareViewSettings;
+    elements["device-settings-dialog"].showModal();
+  });
+  elements["device-settings-form"].addEventListener("change", () => {
+    const settings = workspace.settings;
+    applySettings({
+      shortcuts: settings.shortcuts, checkForUpdates: settings.checkForUpdates, clearReachedAreas: settings.clearReachedAreas,
+      interfaceSize: settings.interfaceSize,
+      theme: elements["device-theme"].value,
+      appearance: elements["device-appearance"].value,
+      iconSize: elements["device-icon-size"].value,
+      shareViewSettings: elements["device-share-view"].checked
+    });
+  });
 }

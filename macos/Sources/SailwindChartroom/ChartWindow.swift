@@ -5,7 +5,7 @@ import WebKit
 
 /// The app's one window: the chart page in a web view, and everything the page asks its host to do.
 /// The macOS counterpart of desktop/MainForm.cs.
-final class ChartWindow: NSObject, NSWindowDelegate, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate {
+final class ChartWindow: NSObject, NSWindowDelegate, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate, LanEvents {
     private static let releasesPage = URL(string: "https://github.com/Skeptic043/sailwind-chartroom/releases")!
     // Sent before any page script runs: page errors reach the log, and the browser's own menus stay off.
     private static let pageScript = """
@@ -33,6 +33,14 @@ final class ChartWindow: NSObject, NSWindowDelegate, WKScriptMessageHandler, WKN
     private var followedChartId = ""
     // Counts follows, so lines from one that has since been stopped or replaced are dropped.
     private var followSession = 0
+    // Phones and tablets on the player's network (see Mobile device link below).
+    private let pageFiles: WebResources
+    private let devices: DeviceStore
+    private var lan: LanServer?
+    private var lanError: String?
+    private var pairingShown: (code: String, url: String, address: String, expires: Date, qr: String)?
+    // The logs offered to each device, apart from the page's own, so one can't change what another picks from.
+    private var deviceLogs: [String: [URL]] = [:]
 
     private var version: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "" }
 
@@ -43,7 +51,9 @@ final class ChartWindow: NSObject, NSWindowDelegate, WKScriptMessageHandler, WKN
         log = BoundedLog(file: logs)
 
         let configuration = WKWebViewConfiguration()
-        let pages = SchemeHandler(resources: WebResources(root: Bundle.main.resourceURL!.appendingPathComponent("web")))
+        pageFiles = WebResources(root: Bundle.main.resourceURL!.appendingPathComponent("web"))
+        devices = DeviceStore(folder: options.dataFolder)
+        let pages = SchemeHandler(resources: pageFiles)
         configuration.setURLSchemeHandler(pages, forURLScheme: WebResources.scheme)
         // The web view copies its configuration, so the message handlers must be in place before it exists.
         configuration.userContentController.add(relay, name: "chartroom")
@@ -83,6 +93,7 @@ final class ChartWindow: NSObject, NSWindowDelegate, WKScriptMessageHandler, WKN
         let loaded = store.load()
         currentWorkspace = loaded.workspace
         loaded.warnings.forEach { warn($0) }
+        if !options.isSmokeTest { startDevices() }
         window.makeKeyAndOrderFront(nil)
         web.load(URLRequest(url: WebResources.startURL))
     }
@@ -112,9 +123,11 @@ final class ChartWindow: NSObject, NSWindowDelegate, WKScriptMessageHandler, WKN
             // The workspace goes in as its own JSON text, exactly as it was saved.
             let workspace = currentWorkspace ?? "null"
             let folder = Self.jsonString(store.folder.path)
-            postJSON(#"{"type":"init","platform":"mac","workspace":\#(workspace),"dataFolder":\#(folder),"version":\#(Self.jsonString(version)),"textScale":100,"liveTrack":true}"#)
+            postJSON(#"{"type":"init","platform":"mac","workspace":\#(workspace),"dataFolder":\#(folder),"version":\#(Self.jsonString(version)),"textScale":100,"liveTrack":true,"devices":\#(options.isSmokeTest ? "false" : "true")}"#)
             // A reloaded page learns that a file is still being followed.
             if let follower { post(["type": "track-following", "name": follower.url.lastPathComponent, "chartId": followedChartId, "resumed": true]) }
+            // After a reload the page learns of every connected device again, and so sends each the charts.
+            for deviceId in lan?.connected ?? [] { post(["type": "device-joined", "deviceId": deviceId]) }
             smoke?.pageIsReady()
         case .save(let workspace):
             currentWorkspace = workspace
@@ -150,6 +163,12 @@ final class ChartWindow: NSObject, NSWindowDelegate, WKScriptMessageHandler, WKN
             NSPasteboard.general.setString(text, forType: .string)
         case .openLink(let url):
             NSWorkspace.shared.open(url)
+        case .syncSend(let deviceId, let message):
+            lan?.send(deviceId: deviceId, json: message)
+        case .syncBroadcast(let ops):
+            lan?.broadcast(json: #"{"type":"ops","ops":\#(ops)}"#)
+        case .devicesOpen, .devicesEnable, .devicesPair, .devicesPairStop, .devicesRename, .devicesRemove:
+            handleDevices(HostMessage.parse(body)!)
         case nil:
             break
         }
@@ -190,6 +209,7 @@ final class ChartWindow: NSObject, NSWindowDelegate, WKScriptMessageHandler, WKN
     }
 
     func windowWillClose(_ notification: Notification) {
+        lan?.stop()
         follower?.stop()
         follower = nil
         followSession += 1
@@ -242,6 +262,7 @@ final class ChartWindow: NSObject, NSWindowDelegate, WKScriptMessageHandler, WKN
             }
             followedChartId = chartId
             post(["type": "track-following", "name": url.lastPathComponent, "chartId": chartId, "resumed": false])
+            tellDevicesFollowing()
         } catch {
             log.write("Could not follow \(url.lastPathComponent): \(error.localizedDescription)")
             warn("Chartroom could not follow that file:\n\(error.localizedDescription)")
@@ -254,7 +275,176 @@ final class ChartWindow: NSObject, NSWindowDelegate, WKScriptMessageHandler, WKN
         self.follower = nil
         followSession += 1
         post(["type": "track-stopped"])
+        tellDevicesFollowing()
     }
+
+    // MARK: Mobile device link
+
+    // The server runs while the player allows devices; the page's Mobile device link dialog shows its state,
+    // and the page applies and sends out chart changes (src/hub.mjs). The host relays sync messages without
+    // reading them, and runs following for a device as it does for the page. As desktop/MainForm.Lan.cs.
+    private func startDevices() {
+        devices.load()
+        if devices.isEnabled { startLan() }
+    }
+
+    private func startLan() {
+        lanError = nil
+        let server = LanServer(store: devices, resources: pageFiles, events: self)
+        do {
+            try server.start()
+            lan = server
+        } catch {
+            log.write("Mobile device link could not start: \(error.localizedDescription)")
+            lanError = "Another program is using port \(LanServer.defaultPort), so devices can't connect. Close that program, then turn Allow mobile devices on this network off and on again."
+        }
+    }
+
+    private func stopLan() {
+        lan?.stop()
+        lan = nil
+        pairingShown = nil
+    }
+
+    private func handleDevices(_ message: HostMessage) {
+        switch message {
+        case .devicesEnable(let enabled):
+            try? devices.setEnabled(enabled)
+            if enabled && lan == nil { startLan() }
+            if !enabled { stopLan() }
+        case .devicesPair(let wanted):
+            guard let lan else { break }
+            let addresses = Self.localAddresses()
+            guard let address = addresses.contains(wanted) ? wanted : addresses.first else { break }
+            let code = devices.startPairing()
+            let url = "http://\(address):\(lan.port)/#pair=\(code)"
+            pairingShown = (code, url, address, Date().addingTimeInterval(DeviceStore.codeLifetime), QRImage.dataURL(for: url) ?? "")
+        case .devicesPairStop:
+            devices.stopPairing()
+            pairingShown = nil
+        case .devicesRename(let id, let name):
+            devices.rename(id: id, to: name)
+        case .devicesRemove(let id):
+            devices.remove(id: id)
+            lan?.disconnect(deviceId: id)
+        default:
+            break
+        }
+        postDevicesState()
+    }
+
+    private func postDevicesState() {
+        // A pairing code shows until it is used, expires or is replaced.
+        if let shown = pairingShown, Date() > shown.expires || lan == nil || !devices.isPairing { pairingShown = nil }
+        let connected = Set(lan?.connected ?? [])
+        let stamp = ISO8601DateFormatter()
+        var state: [String: Any] = [
+            "type": "devices-state",
+            "enabled": devices.isEnabled,
+            "running": lan != nil,
+            "port": Int(LanServer.defaultPort),
+            "addresses": Self.localAddresses(),
+            "devices": devices.allDevices.map { device -> [String: Any] in
+                ["id": device.id, "name": device.name, "lastSeen": stamp.string(from: device.lastSeen), "connected": connected.contains(device.id)]
+            }
+        ]
+        if let lanError { state["error"] = lanError }
+        if let pairing = pairingShown {
+            state["pairing"] = ["code": pairing.code, "url": pairing.url, "address": pairing.address, "expires": stamp.string(from: pairing.expires), "qr": pairing.qr]
+        }
+        post(state)
+    }
+
+    // The IPv4 addresses a device on the same network could reach, Wi-Fi and Ethernet (en) first.
+    private static func localAddresses() -> [String] {
+        var found: [(name: String, address: String)] = []
+        var list: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&list) == 0, let first = list else { return [] }
+        defer { freeifaddrs(list) }
+        for entry in sequence(first: first, next: { $0.pointee.ifa_next }) {
+            let interface = entry.pointee
+            guard let address = interface.ifa_addr, address.pointee.sa_family == UInt8(AF_INET),
+                  interface.ifa_flags & UInt32(IFF_UP) != 0, interface.ifa_flags & UInt32(IFF_LOOPBACK) == 0 else { continue }
+            var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+            guard getnameinfo(address, socklen_t(address.pointee.sa_len), &host, socklen_t(host.count), nil, 0, NI_NUMERICHOST) == 0 else { continue }
+            let text = String(cString: host)
+            guard LanAddress.isLocalNetwork(text), !text.hasPrefix("127."), !text.hasPrefix("169.254.") else { continue }
+            found.append((String(cString: interface.ifa_name), text))
+        }
+        var seen = Set<String>()
+        return found.sorted { ($0.name.hasPrefix("en") ? 0 : 1) < ($1.name.hasPrefix("en") ? 0 : 1) }
+            .map(\.address).filter { seen.insert($0).inserted }
+    }
+
+    // Following is shared: every connected device hears when it starts and stops.
+    private func tellDevicesFollowing() {
+        guard let lan else { return }
+        if let follower {
+            lan.broadcast(json: Self.json(["type": "track-following", "name": follower.url.lastPathComponent, "chartId": followedChartId]))
+        } else {
+            lan.broadcast(json: #"{"type":"track-stopped"}"#)
+        }
+    }
+
+    private static func json(_ object: [String: Any]) -> String {
+        (try? JSONSerialization.data(withJSONObject: object)).flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+    }
+
+    private func handleDeviceMessage(deviceId: String, json: String) {
+        guard let data = json.data(using: .utf8), let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let type = root["type"] as? String else { return }
+        switch type {
+        case "ops", "missing-answer":
+            postJSON(#"{"type":"device-message","deviceId":\#(Self.jsonString(deviceId)),"message":\#(json)}"#)
+        // A device may follow one of Voyage Recorder's logs; picking another file needs the Mac.
+        case "follow-track":
+            guard let chartId = root["chartId"] as? String else { return }
+            if let index = root["log"] as? Int {
+                if let offered = deviceLogs[deviceId], index >= 0, index < offered.count { startFollowing(offered[index], chartId: chartId) }
+                return
+            }
+            let found = VoyageLogs.all(in: VoyageLogs.candidateFolders(home: FileManager.default.homeDirectoryForCurrentUser))
+            deviceLogs[deviceId] = found.map(\.url)
+            let stamp = ISO8601DateFormatter()
+            let logs: [[String: Any]] = found.enumerated().map { (id, entry) -> [String: Any] in
+                ["id": id, "name": entry.url.lastPathComponent, "place": entry.place, "modified": stamp.string(from: entry.modified)]
+            }
+            lan?.send(deviceId: deviceId, json: Self.json(["type": "track-choices", "chartId": chartId, "logs": logs]))
+        case "stop-track":
+            stopFollowing()
+        default:
+            break
+        }
+    }
+
+    // Server events arrive on its queue; the window handles them on the main thread.
+    func joined(deviceId: String, name: String) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.post(["type": "device-joined", "deviceId": deviceId])
+            if let follower = self.follower {
+                self.lan?.send(deviceId: deviceId, json: Self.json(["type": "track-following", "name": follower.url.lastPathComponent, "chartId": self.followedChartId, "resumed": true]))
+            }
+            self.postDevicesState()
+        }
+    }
+
+    func left(deviceId: String) {
+        DispatchQueue.main.async { [weak self] in
+            self?.post(["type": "device-left", "deviceId": deviceId])
+            self?.postDevicesState()
+        }
+    }
+
+    func message(deviceId: String, json: String) {
+        DispatchQueue.main.async { [weak self] in self?.handleDeviceMessage(deviceId: deviceId, json: json) }
+    }
+
+    // A wrong guess may have used up the code showing, which the dialog then stops showing.
+    func denied() {
+        DispatchQueue.main.async { [weak self] in self?.postDevicesState() }
+    }
+
 
     // MARK: Exports and settings
 

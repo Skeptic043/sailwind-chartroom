@@ -41,6 +41,13 @@ public struct WebResources {
         return (file, Self.contentTypes[file.pathExtension.lowercased()] ?? "application/octet-stream")
     }
 
+    /// The bundled file at a path below the page's root, as a device on the player's network asks for it.
+    public func file(atPath path: String) -> (file: URL, contentType: String)? {
+        guard let encoded = path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
+              let url = URL(string: "\(Self.scheme)://\(Self.host)\(encoded)") else { return nil }
+        return file(for: url)
+    }
+
     public static func headers(contentType: String, length: Int) -> [String: String] {
         [
             "Content-Type": contentType,
