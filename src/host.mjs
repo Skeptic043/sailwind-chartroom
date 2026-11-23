@@ -212,9 +212,10 @@ function deviceName() {
 }
 
 // The device's own preferences laid over charts from the PC: settings, panels, the open chart, and each
-// chart's view and layers. Without any yet, as on first connecting, the PC's are kept.
+// chart's view and layers. Without any yet, as on first connecting, the PC's are kept, except that the
+// track key starts hidden: on a small screen it covers the chart.
 export function withDevicePrefs(workspace, prefs) {
-  if (!prefs) return workspace;
+  if (!prefs) return { ...workspace, settings: { ...workspace.settings, trackKey: false } };
   const charts = prefs.charts ?? {};
   return {
     ...workspace,

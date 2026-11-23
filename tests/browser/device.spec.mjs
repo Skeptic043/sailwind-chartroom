@@ -97,3 +97,15 @@ test("the PC's question about missing positions is asked here too, and either an
   await expect(page.locator("#missing-dialog")).toBeHidden();
   expect((await sent(page)).filter((message) => message.type === "missing-answer")).toHaveLength(1);
 });
+
+test("a device starts with the PC's settings but the track key hidden", async ({ chartroom, page }) => {
+  const workspace = createWorkspace();
+  workspace.settings.trackKey = true;
+  workspace.settings.iconSize = "large";
+  await pairAndOpen(chartroom, page, workspace);
+  await expect(page.locator("#track-key")).toBeHidden();
+  await page.locator("#show-track-key").evaluate((button) => button.click());
+  await expect(page.locator("#track-key")).toBeVisible();
+  const prefs = await page.evaluate(() => JSON.parse(localStorage.getItem("sailwind-chartroom:device-prefs")).settings);
+  expect([prefs.trackKey, prefs.iconSize]).toEqual([true, "large"]);
+});
