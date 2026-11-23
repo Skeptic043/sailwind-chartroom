@@ -194,6 +194,16 @@ test("changes from elsewhere reach every undo copy, each with its own copy", () 
   assert.equal(snapshot.features[0].name, "New");
 });
 
+test("a phone's own edit coming back from the desktop leaves its undo copy alone", () => {
+  const sides = pair((chart) => chart.features.push(createFeature({ lat: 30, lon: 1, name: "Rock" })));
+  const phone = sides.device.workspace.charts[0];
+  const snapshot = structuredClone(phone);
+  phone.features[0].name = "Rock, phone";
+  exchange(sides);
+  receiveOps(sides.device.shadow, sides.device.workspace, diffWorkspace(sides.desktop.shadow, sides.desktop.workspace), { targets: (chart) => [chart, snapshot] });
+  assert.equal(snapshot.features[0].name, "Rock", "undo can still take the edit back");
+});
+
 test("charts added, deleted, reordered and filed sync, while each side keeps its open chart and view", () => {
   const sides = pair((chart, workspace) => {
     workspace.charts.push(createChart({ name: "Second" }));

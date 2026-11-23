@@ -647,7 +647,8 @@ body.update-bar-shown .route-summary { margin-top: 42px; }
 /* ===== Touch screens (touch.mjs sets body.touch, and body.phone or body.tablet) ===== */
 /* Controls that only touch layouts use. */
 .touch-menu, .touch-chart-select, .touch-only, .sheet-bar, .touch-chips, .touch-actions { display: none; }
-body.touch .touch-only { display: inline-flex; }
+body.touch .touch-only { display: inline-flex; align-items: center; justify-content: center; }
+body.touch .touch-only.icon-button, body.phone .touch-menu { display: inline-grid; place-items: center; padding: 0; }
 body.touch .touch-chips, body.touch .touch-actions { display: flex; }
 .touch-chips { position: absolute; z-index: 13; top: 10px; left: 10px; gap: 6px; flex-wrap: wrap; pointer-events: none; }
 .touch-actions { position: absolute; z-index: 13; left: 50%; bottom: 14px; transform: translateX(-50%); }
@@ -688,7 +689,7 @@ body.touch.panels-open #inspector-host { display: none; }
 /* ===== Phone ===== */
 body.phone { --topbar-height: calc(52px + env(safe-area-inset-top)); --toolbar-height: calc(64px + env(safe-area-inset-bottom)); }
 body.phone .topbar { position: relative; z-index: 70; display: flex; gap: 4px; padding: env(safe-area-inset-top) 6px 0; }
-body.phone .touch-menu { display: grid; font-size: 20px; flex: none; }
+body.phone .touch-menu { flex: none; }
 body.phone .touch-chart-select { display: block; flex: 1; min-width: 0; }
 body.phone .top-actions { gap: 2px; flex: none; }
 body.phone .panel-toggles, body.phone .app-version { display: none; }

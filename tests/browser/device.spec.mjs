@@ -109,3 +109,17 @@ test("a device starts with the PC's settings but the track key hidden", async ({
   const prefs = await page.evaluate(() => JSON.parse(localStorage.getItem("sailwind-chartroom:device-prefs")).settings);
   expect([prefs.trackKey, prefs.iconSize]).toEqual([true, "large"]);
 });
+
+test("undo takes back an edit made here after the PC has confirmed it", async ({ chartroom, page }) => {
+  await pairAndOpen(chartroom, page, createWorkspace());
+  await chartroom.press("l");
+  await chartroom.clickChart(400, 300);
+  await expect.poll(async () => (await batches(page)).length).toBe(1);
+  const [batch] = await batches(page);
+  // The PC sends the change back to every device, this one included, then confirms it.
+  await deliver(page, { type: "ops", ops: batch.ops });
+  await deliver(page, { type: "ack", batch: batch.batch, conflicts: [] });
+  await chartroom.press("Control+z");
+  await expect.poll(async () => (await batches(page)).at(-1).ops.some((op) => op.op === "remove" && op.list === "features")).toBe(true);
+  await expect(chartroom.items()).toHaveCount(0);
+});

@@ -152,10 +152,13 @@ export function applyOps(workspace, ops, { check = false, targets = (chart) => [
   return { conflicts };
 }
 
+// A change the chart already has, such as a device's own edit coming back from the desktop, is left alone,
+// so it never reaches the undo copies and undo still takes it back.
 function applyChartOp(chart, op, check, targets, conflicts) {
   if (op.op === "add" && Object.hasOwn(SET_LISTS, op.list)) {
     const key = SET_LISTS[op.list];
-    const values = sanitizedPart(chart, op.list, op.values);
+    const present = new Set(chart[op.list].map(key));
+    const values = sanitizedPart(chart, op.list, op.values).filter((value) => !present.has(key(value)));
     for (const target of targets(chart)) {
       const known = new Set(target[op.list].map(key));
       for (const value of values) if (!known.has(key(value)) && known.add(key(value))) target[op.list].push(structuredClone(value));
@@ -163,6 +166,7 @@ function applyChartOp(chart, op, check, targets, conflicts) {
   } else if (op.op === "field" && CHART_FIELDS.includes(op.key)) {
     if (check && !same(chart[op.key], op.base) && !same(chart[op.key], op.value)) return conflicts.push({ op, current: chart[op.key] ?? null });
     const value = sanitizedPart(chart, op.key, op.value);
+    if (same(chart[op.key], value)) return;
     for (const target of targets(chart)) {
       if (value === undefined) delete target[op.key];
       else target[op.key] = structuredClone(value);
@@ -173,6 +177,7 @@ function applyChartOp(chart, op, check, targets, conflicts) {
     const wanted = op.op === "put" ? op.item : null;
     if (check && !same(current, op.base) && !same(current, wanted)) return conflicts.push({ op, current });
     if (op.op === "remove") {
+      if (!current) return;
       for (const target of targets(chart)) {
         const index = target[op.list].findIndex((item) => item.id === id);
         if (index >= 0) target[op.list].splice(index, 1);
@@ -180,7 +185,7 @@ function applyChartOp(chart, op, check, targets, conflicts) {
       return;
     }
     const item = sanitizedPart(chart, op.list, [op.item])[0];
-    if (!item) return;
+    if (!item || same(current, item)) return;
     for (const target of targets(chart)) {
       const list = target[op.list];
       const copy = structuredClone(item);

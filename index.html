@@ -11,7 +11,7 @@
 <body>
   <header class="topbar">
     <!-- On a phone the menus open as one sheet from here, and the chart picker, undo and redo sit in the bar. -->
-    <button id="touch-menu" class="touch-menu icon-button" type="button" aria-label="Menu" aria-expanded="false">☰</button>
+    <button id="touch-menu" class="touch-menu icon-button" type="button" aria-label="Menu" aria-expanded="false"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path d="M4 6.5h16M4 12h16M4 17.5h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
     <select id="touch-chart-select" class="touch-chart-select" aria-label="Active chart"></select>
     <nav class="menu-bar" role="menubar" aria-label="Application menus">
       <details class="app-menu" data-menu="file">
@@ -136,8 +136,8 @@
       </details>
     </nav>
     <div class="top-actions">
-      <button id="touch-undo" class="touch-only icon-button" type="button" aria-label="Undo" title="Undo">↶</button>
-      <button id="touch-redo" class="touch-only icon-button" type="button" aria-label="Redo" title="Redo">↷</button>
+      <button id="touch-undo" class="touch-only icon-button" type="button" aria-label="Undo" title="Undo"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path d="M9 7 4.5 11.5 9 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 11.5h9a5 5 0 0 1 0 10h-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+      <button id="touch-redo" class="touch-only icon-button" type="button" aria-label="Redo" title="Redo"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path d="M15 7l4.5 4.5L15 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 11.5h-9a5 5 0 0 0 0 10h3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
       <button id="touch-items" class="touch-only panel-toggle" type="button" aria-pressed="false" title="Show or hide the Items panel"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><rect x="3.5" y="5" width="17" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="14.5" y="5" width="6" height="14" rx="1.5" fill="currentColor" fill-opacity=".45"/></svg><span>Items</span></button>
       <div class="panel-toggles" role="group" aria-label="Side panels">
         <button id="show-left-panel" class="panel-toggle" type="button" aria-pressed="true" title="Show or hide the Tools panel"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><rect x="3.5" y="5" width="17" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="3.5" y="5" width="6" height="14" rx="1.5" fill="currentColor" fill-opacity=".45"/></svg><span>Tools</span></button>
