@@ -85,7 +85,7 @@ final class LanProtocolTests: XCTestCase {
         XCTAssertNil(LanRequest.parse(Data("GET /../devices.json HTTP/1.1\r\n\r\n".utf8)))
         XCTAssertNil(LanRequest.parse(Data("GET /%2e%2e/devices.json HTTP/1.1\r\n\r\n".utf8)))
         // The example from RFC 6455.
-        XCTAssertEqual(LanRequest.webSocketAccept(key: "dGhlIHNhbXBsZSBub25jZQ=="), "s3pPLMBiTxaQ9kYGzzhZRrxMppo=")
+        XCTAssertEqual(LanRequest.webSocketAccept(key: "dGhlIHNhbXBsZSBub25jZQ=="), "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=")
     }
 
     // A frame as a browser sends it: masked.
