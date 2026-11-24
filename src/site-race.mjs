@@ -11,18 +11,41 @@ export const ALWAYS_ALLOWED = Object.freeze(["com.skeptic043.sailwind.voyagereco
 
 const key = (text) => String(text ?? "").toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
 
-// A checkpoint as a place: { name, lat, lon, reachDeg, number }.
+// A checkpoint as a place: { name, lat, lon, reachDeg, number, island, radiusNm }.
 export function place(target) {
   if (target?.island) {
     const island = islandById(target.island);
     if (!island) throw new Error(`Unknown island ${target.island}.`);
-    return { name: island.name, lat: island.lat, lon: island.lon, reachDeg: island.reachDeg, number: island.number, island: true };
+    return { name: island.name, lat: island.lat, lon: island.lon, reachDeg: island.reachDeg, number: island.number, island: true, radiusNm: null };
   }
-  return { name: String(target.name ?? "Mark"), lat: target.lat, lon: target.lon, reachDeg: target.radiusNm / NM_PER_DEGREE, number: null, island: false };
+  return { name: String(target.name ?? "Mark"), lat: target.lat, lon: target.lon, reachDeg: target.radiusNm / NM_PER_DEGREE, number: null, island: false, radiusNm: target.radiusNm };
 }
 
 function inside(point, where) {
   return Math.hypot(point.lat - where.lat, point.lon - where.lon) <= where.reachDeg;
+}
+
+function everEntered(voyage, where) {
+  return voyage.visits.some((visit) => (visit.kind === "arrive" || visit.kind === "depart") && visitMatches(visit, where))
+    || voyage.points.some((point) => inside(point, where));
+}
+
+function unreachedStartReason(voyage, places) {
+  if (places.start) {
+    const where = places.start;
+    if (everEntered(voyage, where)) {
+      return where.island
+        ? `The run reaches ${where.name}, but never leaves it.`
+        : `The run enters the ${where.name} mark (${where.radiusNm} nm), but never leaves it.`;
+    }
+    return where.island
+      ? `The run never reaches ${where.name}.`
+      : `The run never comes within ${where.radiusNm} nm of the ${where.name} mark.`;
+  }
+  if (places.checkpoints.some((where) => everEntered(voyage, where))) {
+    return "The run reaches a checkpoint, but never leaves any of the race's ports or marks.";
+  }
+  return "The run never reaches any of the race's checkpoints.";
 }
 
 // Port lines only count for islands; an open-water mark is reached only by being there, whatever it's called.
@@ -79,7 +102,7 @@ export function checkRun(course, voyage) {
   const starts = places.start
     ? departures(voyage, places.start).map((time) => ({ time, from: -1 }))
     : places.checkpoints.flatMap((where, index) => departures(voyage, where).map((time) => ({ time, from: index })));
-  if (!starts.length) return { ok: false, reason: places.start ? `The run never leaves ${places.start.name}.` : "The run never leaves any of the race's ports." };
+  if (!starts.length) return { ok: false, reason: unreachedStartReason(voyage, places) };
   const reached = places.checkpoints.map((where) => reaches(voyage, where));
   const finishes = places.finish ? reaches(voyage, places.finish) : null;
   const irl = course.rules?.sortBy === "irl";
@@ -131,16 +154,32 @@ function runFrom(course, places, start, reached, finishes) {
     for (const [index, times] of reached.entries()) {
       if (done.has(index)) continue;
       const hit = times.find((time) => time.t > after);
-      if (!hit) return { ok: false, reason: `The run doesn't reach ${places.checkpoints[index].name} in order.` };
-      splits.push({ name: places.checkpoints[index].name, t: hit.t, utc: hit.utc });
+      const where = places.checkpoints[index];
+      if (!hit) {
+        return {
+          ok: false,
+          reason: where.island
+            ? `The run doesn't reach ${where.name} in order.`
+            : `The run doesn't come within ${where.radiusNm} nm of the ${where.name} mark in order.`
+        };
+      }
+      splits.push({ name: where.name, t: hit.t, utc: hit.utc });
       after = hit.t;
     }
   } else {
     for (const [index, times] of reached.entries()) {
       if (done.has(index)) continue;
       const hit = times.find((time) => time.t > start.time.t);
-      if (!hit) return { ok: false, reason: `The run doesn't reach ${places.checkpoints[index].name}.` };
-      splits.push({ name: places.checkpoints[index].name, t: hit.t, utc: hit.utc });
+      const where = places.checkpoints[index];
+      if (!hit) {
+        return {
+          ok: false,
+          reason: where.island
+            ? `The run doesn't reach ${where.name}.`
+            : `The run doesn't come within ${where.radiusNm} nm of the ${where.name} mark.`
+        };
+      }
+      splits.push({ name: where.name, t: hit.t, utc: hit.utc });
     }
     splits.sort((a, b) => a.t - b.t);
     after = splits.at(-1)?.t ?? start.time.t;
@@ -148,7 +187,14 @@ function runFrom(course, places, start, reached, finishes) {
   let finish;
   if (finishes) {
     finish = finishes.find((time) => time.t > after);
-    if (!finish) return { ok: false, reason: `The run doesn't finish at ${places.finish.name} after the last checkpoint.` };
+    if (!finish) {
+      return {
+        ok: false,
+        reason: places.finish.island
+          ? `The run doesn't finish at ${places.finish.name} after the last checkpoint.`
+          : `The run doesn't come within ${places.finish.radiusNm} nm of the ${places.finish.name} mark after the last checkpoint.`
+      };
+    }
   } else {
     const last = splits.at(-1);
     if (!last) return { ok: false, reason: "The course has nothing to reach." };

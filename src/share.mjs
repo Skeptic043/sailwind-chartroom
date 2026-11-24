@@ -3,9 +3,10 @@
 // Chartroom exports the file, checks a race entry the way the site will, and opens the right form.
 import { formatDuration, savedRouteForPoint } from "./model.mjs";
 import { SHARE_OPTIONS, VOYAGE_EXTENSION, buildVoyageFile, chosenPoints, defaultShare, exportablePoints, hashGameId } from "./voyages.mjs";
-import { checkRaceLocally, courseFromRoute, heatmapSquares, isWorldGeneratorLink, issueFormUrl, siteData, siteUrl, worldFromXml, worldKey } from "./site.mjs";
+import { checkRaceLocally, courseFromRoute, findRaceRunRange, heatmapSquares, isWorldGeneratorLink, issueFormUrl, requiredShareOptions, siteData, siteUrl, worldFromXml, worldKey } from "./site.mjs";
 import { addComparison } from "./compare.mjs";
 import { islandById } from "./site-islands.mjs";
+import { NM_PER_DEGREE } from "./site-race.mjs";
 import { sailedStats, trackSegments, unwrapStretch } from "./track.mjs";
 import { formatGameTime } from "./gametime.mjs";
 import { formatNm } from "./format.mjs";
@@ -20,6 +21,10 @@ let mode = "export";
 let exportRange = null;
 // Courses on the site for the chart's world, while entering a race.
 let courses = [];
+// The full course object currently selected in Enter a race, plus a per-session cache.
+let activeCourse = null;
+const courseCache = new Map();
+let courseLoadToken = 0;
 // The heatmap Browse shared worlds/voyages shows on the chart: { key, squares } until it's turned off.
 let heatmap = null;
 // Worlds the site lists, while browsing.
@@ -65,7 +70,10 @@ export function initShare({ draw, renderAll: render }) {
     if (from > to) elements[id === "export-from" ? "export-to" : "export-from"].value = String(id === "export-from" ? from : to);
     updateExportRange();
   });
-  elements["export-course"].addEventListener("change", updateExportRange);
+  elements["export-course"].addEventListener("change", () => {
+    loadSelectedCourse();
+  });
+  elements["export-auto-find"].addEventListener("click", autoFindRaceRun);
   elements["export-world-choice"].addEventListener("change", updateWorldChoice);
   elements["export-world-source"].addEventListener("input", () => {
     elements["export-check"].hidden = true;
@@ -92,6 +100,7 @@ export function initShare({ draw, renderAll: render }) {
   });
   elements["export-voyage-dialog"].addEventListener("close", () => {
     exportRange = null;
+    activeCourse = null;
     redraw();
   });
   elements["course-mods"].addEventListener("change", () => {
@@ -114,7 +123,7 @@ export function initShare({ draw, renderAll: render }) {
 const MODES = {
   export: { title: "Save route to file", intro: "Choose the part of your Voyage Recorder track to save. It's highlighted on the chart. Your save slot and file paths are never included.", button: "Save" },
   share: { title: "Publish world/route", intro: "Choose the part of your track to publish on Chartroom Voyages. Its world is published with it if the site doesn't have it yet. Chartroom saves the file and opens the form in your browser. Drag the file into the form, then submit it. Published routes are public and show your GitHub username.", button: "Save and open the form" },
-  race: { title: "Enter a race", intro: "Choose the race and the part of your track you sailed it on. Chartroom checks the run the same way the board will, saves the file and opens the entry form in your browser. Drag the file into the form, then submit it.", button: "Check, save and open the form" }
+  race: { title: "Enter a race", intro: "Choose the race and the part of your track you sailed it on. Chartroom checks the run live against the course on your chart, saves the file and opens the entry form in your browser. Drag the file into the form, then submit it.", button: "Save and open" }
 };
 
 async function openExport(nextMode) {
@@ -157,10 +166,9 @@ async function openExport(nextMode) {
   elements["export-intro"].textContent = text.intro;
   elements["export-submit"].textContent = text.button;
   elements["export-course-row"].hidden = mode !== "race";
-  // A race is checked against the mods the file lists, so the mod list always goes with an entry.
-  const mods = elements["export-share"].querySelector('input[value="plugins"]');
-  mods.disabled = mode === "race";
-  if (mode === "race") mods.checked = true;
+  elements["export-auto-find"].hidden = mode !== "race";
+  activeCourse = null;
+  syncRequiredShare();
   for (const id of ["export-from", "export-to"]) elements[id].max = String(points.length - 1);
   // The latest stretch of the track is chosen to start with, as most often that's the trip just sailed.
   const latest = trackSegments(points).at(-1);
@@ -173,6 +181,60 @@ async function openExport(nextMode) {
   elements["export-race-markers"].hidden = !raceMarkers(points);
   updateExportRange();
   elements["export-voyage-dialog"].show();
+  follow("export-from");
+  if (mode === "race") loadSelectedCourse();
+}
+
+function syncRequiredShare() {
+  const required = mode === "race" ? requiredShareOptions(activeCourse) : new Set();
+  for (const box of elements["export-share"].querySelectorAll("input")) {
+    const locked = required.has(box.value);
+    box.disabled = locked;
+    if (locked) box.checked = true;
+  }
+}
+
+async function fetchCourse(id) {
+  if (!id) return null;
+  if (!courseCache.has(id)) {
+    const { course } = await siteData(`data/boards/${encodeURIComponent(id)}.json`);
+    courseCache.set(id, course);
+  }
+  return courseCache.get(id);
+}
+
+async function loadSelectedCourse() {
+  if (mode !== "race") return;
+  const id = elements["export-course"].value;
+  const token = ++courseLoadToken;
+  activeCourse = null;
+  syncRequiredShare();
+  elements["export-check"].hidden = true;
+  redraw();
+  try {
+    const course = await fetchCourse(id);
+    if (token !== courseLoadToken || mode !== "race") return;
+    activeCourse = course;
+    syncRequiredShare();
+    updateExportRange();
+  } catch (error) {
+    if (token !== courseLoadToken || mode !== "race") return;
+    showExportProblem(error.message);
+  }
+}
+
+function autoFindRaceRun() {
+  if (mode !== "race" || !activeCourse) return;
+  const chart = activeChart();
+  const points = exportablePoints(chart);
+  const found = findRaceRunRange(activeCourse, points, chart.visits ?? [], chart.recording?.plugins ?? null);
+  if (!found) {
+    showExportProblem("No completed run for this race was found in your recorded track.");
+    return;
+  }
+  elements["export-from"].value = String(found.from);
+  elements["export-to"].value = String(found.to);
+  updateExportRange();
   follow("export-from");
 }
 
@@ -301,9 +363,47 @@ function updateExportRange() {
     `${formatNm(stats.distanceNm)} nm`,
     `${formatDuration((chosen.at(-1)?.t ?? 0) - (chosen[0]?.t ?? 0))} at sea`
   ].map((text) => Object.assign(document.createElement("span"), { className: "stat-chip", textContent: text })));
-  // A changed range or course makes an earlier check out of date.
-  elements["export-check"].hidden = true;
+  // In race mode, live-check the current selection against the loaded course.
+  if (mode === "race" && activeCourse) updateLiveRaceCheck();
+  else elements["export-check"].hidden = true;
   redraw();
+}
+
+function updateLiveRaceCheck() {
+  if (mode !== "race" || !activeCourse) return;
+  const chart = activeChart();
+  const points = exportRange?.points ?? [];
+  if (points.length < 2) {
+    showExportProblem("Choose at least two positions.");
+    return;
+  }
+  const share = chosenShare();
+  const start = points[0].t;
+  const end = points.at(-1).t;
+  const previewFile = {
+    points,
+    visits: share.visits ? (chart.visits ?? []).filter((visit) => visit.t >= start && visit.t <= end) : [],
+    plugins: share.plugins && chart.recording?.plugins ? chart.recording.plugins : null
+  };
+  let fileWorldKey = worldKey(chart.recording?.world);
+  if (!fileWorldKey) {
+    const choice = elements["export-world-choice"].value;
+    if (choice === "vanilla") fileWorldKey = "vanilla";
+  }
+  if (fileWorldKey && fileWorldKey !== activeCourse.world) {
+    showExportProblem("This run was sailed in a different world from the race's.");
+    return;
+  }
+  const result = checkRaceLocally(activeCourse, previewFile);
+  const check = elements["export-check"];
+  check.hidden = false;
+  check.classList.toggle("problem", !result.ok);
+  if (!result.ok) {
+    check.textContent = result.reason;
+    return;
+  }
+  const notes = (result.notes ?? []).map((note) => RUN_NOTES[note]).filter(Boolean);
+  check.textContent = `Valid run: ${formatDuration(result.gameHours)} game time, starting from ${result.startedFrom}.${notes.length ? ` Board note: ${notes.join(", ")}.` : ""}`;
 }
 
 async function buildFile(declared = { world: null, worldDeclared: false }) {
@@ -347,7 +447,7 @@ async function finishExport() {
     let toastText = "Route saved to file.";
     if (mode === "race") {
       const id = elements["export-course"].value;
-      const { course } = await siteData(`data/boards/${encodeURIComponent(id)}.json`);
+      const course = activeCourse?.id === id ? activeCourse : await fetchCourse(id);
       const fileWorldKey = worldKey(file.world);
       if (fileWorldKey && fileWorldKey !== course.world) {
         showExportProblem("This run wouldn't be accepted: This run was sailed in a different world from the race's.");
@@ -442,11 +542,13 @@ function openCourse() {
     showToast(error.message, true);
     return;
   }
-  const name = (target) => target.island ? islandById(target.island)?.name ?? target.island : target.name;
+  const describeStop = (target) => target.island
+    ? `${islandById(target.island)?.name ?? target.island} (island)`
+    : `${target.name} (mark, ${target.radiusNm} nm)`;
   elements["course-summary"].textContent = [
-    `Start: ${name(preview.start)}`,
-    `Checkpoints: ${preview.checkpoints.map(name).join(", ")}`,
-    `Finish: ${preview.finish.lastCheckpoint ? "the last checkpoint reached" : name(preview.finish)}`
+    `Start: ${describeStop(preview.start)}`,
+    `Checkpoints: ${preview.checkpoints.map(describeStop).join(", ")}`,
+    `Finish: ${preview.finish.lastCheckpoint ? "the last checkpoint reached" : describeStop(preview.finish)}`
   ].join("\n");
   elements["course-form"].reset();
   elements["course-name"].value = route.name;
@@ -591,7 +693,9 @@ function eventName(event) {
 }
 
 // The stretch the export panel will save, with a ring on each end and a larger one on the end being moved.
+// In Enter a race mode, also draws the selected race's flags, mark circles and fixed-order path.
 export function drawExportRange(palette) {
+  if (mode === "race" && activeCourse) drawCourseOverlay(palette, activeCourse);
   if (!exportRange?.points.length) return;
   drawRangeLine(palette);
   const ends = [exportRange.points[0], exportRange.points.at(-1)];
@@ -606,6 +710,94 @@ export function drawExportRange(palette) {
     context.fillStyle = palette.paperA;
     context.fill();
     context.stroke();
+  }
+  context.restore();
+}
+
+function courseOverlayStops(course) {
+  const resolve = (target) => {
+    if (target?.island) {
+      const island = islandById(target.island);
+      return island ? { lat: island.lat, lon: island.lon, label: island.name, radiusNm: null } : null;
+    }
+    if (Number.isFinite(target?.lat) && Number.isFinite(target?.lon)) {
+      return { lat: target.lat, lon: target.lon, label: `${target.name} (${target.radiusNm} nm)`, radiusNm: target.radiusNm };
+    }
+    return null;
+  };
+  const stops = [];
+  const add = (target, kind) => {
+    const resolved = resolve(target);
+    if (resolved) stops.push({ ...resolved, kind });
+  };
+  if (!course.start?.any) add(course.start, "start");
+  (course.checkpoints ?? []).forEach((target, index) => {
+    const last = course.finish?.lastCheckpoint && course.order === "fixed" && index === course.checkpoints.length - 1;
+    add(target, last ? "finish" : "checkpoint");
+  });
+  if (!course.finish?.lastCheckpoint) add(course.finish, "finish");
+  return stops;
+}
+
+function drawCourseOverlay(palette, course) {
+  const stops = courseOverlayStops(course);
+  if (!stops.length) return;
+  const colours = { start: "#2f8f4e", checkpoint: "#c88719", finish: "#c23b2b" };
+  context.save();
+  if (course.order === "fixed" && stops.length >= 2) {
+    context.strokeStyle = palette.ink;
+    context.globalAlpha = 0.45;
+    context.lineWidth = 1.6;
+    context.setLineDash([6, 5]);
+    context.beginPath();
+    stops.forEach((stop, index) => {
+      const screen = worldToScreen(stop);
+      if (index) context.lineTo(screen.x, screen.y); else context.moveTo(screen.x, screen.y);
+    });
+    context.stroke();
+    context.setLineDash([]);
+  }
+  for (const stop of stops) {
+    const screen = worldToScreen(stop);
+    const fill = colours[stop.kind] ?? palette.accent;
+    if (Number.isFinite(stop.radiusNm)) {
+      const edge = worldToScreen({ lat: stop.lat + stop.radiusNm / NM_PER_DEGREE, lon: stop.lon });
+      const radiusPx = Math.max(4, Math.hypot(edge.x - screen.x, edge.y - screen.y));
+      context.beginPath();
+      context.arc(screen.x, screen.y, radiusPx, 0, Math.PI * 2);
+      context.fillStyle = fill;
+      context.globalAlpha = 0.14;
+      context.fill();
+      context.strokeStyle = fill;
+      context.globalAlpha = 0.75;
+      context.lineWidth = 1.4;
+      context.setLineDash([4, 3]);
+      context.stroke();
+      context.setLineDash([]);
+    }
+    context.globalAlpha = 1;
+    context.strokeStyle = palette.ink;
+    context.lineWidth = 1.5;
+    context.beginPath();
+    context.moveTo(screen.x, screen.y);
+    context.lineTo(screen.x, screen.y - 16);
+    context.stroke();
+    context.fillStyle = fill;
+    context.beginPath();
+    if (stop.kind === "checkpoint") {
+      context.moveTo(screen.x, screen.y - 16);
+      context.lineTo(screen.x + 11, screen.y - 12);
+      context.lineTo(screen.x, screen.y - 8);
+      context.closePath();
+    } else {
+      context.rect(screen.x, screen.y - 16, 11, 8);
+    }
+    context.fill();
+    context.stroke();
+    context.fillStyle = palette.ink;
+    context.beginPath();
+    context.arc(screen.x, screen.y, 2, 0, Math.PI * 2);
+    context.fill();
   }
   context.restore();
 }

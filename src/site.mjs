@@ -99,6 +99,33 @@ export function checkRaceLocally(course, file) {
   return checkRun(validateCourse(course), { ...file, plugins: file.plugins ?? null, visits: file.visits ?? [] });
 }
 
+// Which Include checkboxes a race requires to be checked so the entry can pass validation.
+export function requiredShareOptions(course) {
+  const required = new Set(["plugins"]);
+  if (!course) return required;
+  const targets = [course.start, ...(course.checkpoints ?? []), course.finish].filter(Boolean);
+  if (targets.some((target) => target.island)) required.add("visits");
+  if ((Array.isArray(course.rules?.boats) && course.rules.boats.length) || course.rules?.oneBoat) required.add("boat");
+  if (Number.isFinite(course.rules?.maxHull)) required.add("hull");
+  return required;
+}
+
+// Scans all exportable points for the fastest valid run of course and returns { from, to, result } indices
+// suitable for the Start/End sliders, or null if no valid run exists in the track.
+export function findRaceRunRange(course, points, visits = [], plugins = null) {
+  if (!course || !Array.isArray(points) || points.length < 2) return null;
+  const checked = validateCourse(course);
+  const full = checkRun(checked, { points, visits, plugins });
+  if (!full.ok) return null;
+  let from = points.findIndex((point) => point.t >= full.start);
+  if (from < 0) from = 0;
+  else if (from > 0) from -= 1;
+  let to = points.findIndex((point, index) => index >= from && point.t >= full.finish);
+  if (to < 0) to = points.length - 1;
+  if (to <= from) to = Math.min(points.length - 1, from + 1);
+  return { from, to, result: full };
+}
+
 // A course from a planned route. Each waypoint on a vanilla island becomes that island; any other waypoint,
 // and every waypoint in a Scrambled Seas world (whose islands move), becomes an open-water mark. The first
 // waypoint is the start. A route that comes back to its start finishes there; otherwise the run ends at the

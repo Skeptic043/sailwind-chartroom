@@ -433,7 +433,7 @@ test("voyages compare by world and line up by elapsed time", () => {
 });
 
 test("Chartroom Voyages forms, courses from routes, and race checks match the site", async () => {
-  const { checkRaceLocally, courseFromRoute, heatmapSquares, issueFormUrl, siteUrl, worldKey } = await import("../src/site.mjs");
+  const { checkRaceLocally, courseFromRoute, findRaceRunRange, heatmapSquares, issueFormUrl, requiredShareOptions, siteUrl, worldKey } = await import("../src/site.mjs");
   const { islandById } = await import("../src/site-islands.mjs");
   assert.equal(issueFormUrl("enter-race", { course: "shipyard-tour" }), "https://github.com/Skeptic043/sailwind-chartroom-voyages/issues/new?template=enter-race.yml&course=shipyard-tour");
   assert.equal(siteUrl("voyages/vanilla/7.json"), "https://skeptic043.github.io/sailwind-chartroom-voyages/voyages/vanilla/7.json");
@@ -473,6 +473,23 @@ test("Chartroom Voyages forms, courses from routes, and race checks match the si
   assert.equal(result.gameHours, 2);
   assert.match(checkRaceLocally({ ...dash, rules: { mods: { mode: "block", plugins: ["com.example.blocked"] } } }, file).reason, /doesn't allow com\.example\.blocked/);
   assert.match(checkRaceLocally(dash, buildVoyageFile(chart, { from: 0, to: 1 })).reason, /doesn't reach Neverdin/);
+  // Auto-find locates the valid run inside a longer track and produces a passing slice.
+  const longTrack = [
+    { t: 50, lat: 20, lon: 20, utc: 500 },
+    ...chart.track,
+    { t: 90, lat: 20, lon: 20, utc: 2000 }
+  ];
+  const found = findRaceRunRange(dash, longTrack, [], chart.recording.plugins);
+  assert.ok(found);
+  assert.equal(found.from, 1);
+  assert.equal(found.to, 3);
+  assert.equal(checkRaceLocally(dash, { points: longTrack.slice(found.from, found.to + 1), visits: [], plugins: chart.recording.plugins }).ok, true);
+  // Required share options lock visits/boat/hull only when the course needs them.
+  assert.deepEqual([...requiredShareOptions({ ...dash, rules: { oneBoat: true, maxHull: 20 } })].sort(), ["boat", "hull", "plugins", "visits"]);
+  assert.deepEqual([...requiredShareOptions({ ...scrambled, rules: {} })].sort(), ["plugins"]);
+  // Mark-start failure names the mark and its radius.
+  const tightMark = { ...dash, start: { name: "Kicia Bay", lat: 28.1, lon: 2.88, radiusNm: 0.5 } };
+  assert.match(checkRaceLocally(tightMark, file).reason, /never comes within 0\.5 nm of the Kicia Bay mark/);
 
   assert.deepEqual(heatmapSquares({ cellDegrees: 0.2, max: 4, cells: { "150,-10": 2 } }), [{ lat: 30, lon: -2, size: 0.2, share: 0.5 }]);
   // A run downloaded from a board opens for comparing like any voyage file.

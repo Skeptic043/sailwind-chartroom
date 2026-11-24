@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.11.1
+
+### Sailwind Chartroom
+
+#### Added
+- `Enter a race` now draws the selected race's flags, mark circles, and fixed-order path on the chart and live-checks your track selection as you move the sliders
+- `Enter a race` now has an `Auto-find run` button that scans your track for the fastest valid run and snaps the `Start` and `End` sliders to it
+
+#### Changed
+- `Enter a race` automatically locks required `Include` checkboxes (`Port visits`, `Boat`, `Hull damage`) for the selected race and shortens its action button to `Save and open`
+- `Publish route as race` now labels each stop in the summary as `(island)` or `(mark, 3 nm)` so accidental open-water marks are easy to spot
+- Race check errors now distinguish islands from open-water marks (including radius) and whether the run never reached a stop or never left it
+
+### Chartroom Voyages
+
+#### Added
+- `Create a race` now has a `Quick-add island` search that recognizes names, punctuation-free spelling, and initials such as `FFT` for Fire Fish Town
+- `Create a race` now lets you drop a `.voyage.json` file into `Test a run` to verify a course before publishing, and adds a `Return to start` shortcut for loop races
+- Original course authors can now update their race in place with `Edit race` without creating a duplicate course, keeping previous versions in `Edit history`
+
+#### Changed
+- Clicking near an island on the `Create a race` map now snaps to that island (hold `Shift` to place an open-water mark), with hover tooltips, `Island` / `Mark` badges, mark radius rings, and fixed-order path lines
+- Renaming a vanilla open-water mark to an island name now offers a one-click `Use island` switch, and marks smaller than `1.5 nm` show a small-radius warning
+- Race check errors now distinguish islands from open-water marks (including radius) and whether the run never reached a stop or never left it
+
 ## 0.11.0
 
 ### Sailwind Chartroom

@@ -406,7 +406,7 @@ test("Publish world/route and Enter a race save the file, check the run and open
   await expect(page.locator("#export-check")).toContainText("wouldn't be accepted: This race doesn't allow a.b.");
   expect(await page.evaluate(() => window.__host.exports.length)).toBe(1);
   await page.locator("#export-course").selectOption("dash");
-  await expect(page.locator("#export-check")).toBeHidden();
+  await expect(page.locator("#export-check")).toContainText("Valid run:");
   await page.locator("#export-submit").click();
   await expect.poll(() => page.evaluate(() => window.__host.links.at(-1))).toBe("https://github.com/Skeptic043/sailwind-chartroom-voyages/issues/new?template=enter-race.yml&course=dash");
   const entry = JSON.parse(await page.evaluate(() => window.__host.exports.at(-1).contents));
@@ -583,7 +583,7 @@ test("Publish route as race reads the route's islands and opens the race form fi
   await chartroom.open({ charts: [{ id: "c1", name: "Race", view: { lat: 31, lon: -5.1, zoom: 6 }, route, recording: { game: "g", world: { kind: "vanilla" } } }], activeChartId: "c1" });
   await page.locator('.app-menu[data-menu="voyage"] > summary').click();
   await page.locator("#publish-course").click();
-  await expect(page.locator("#course-summary")).toHaveText("Start: Gold Rock City\nCheckpoints: Buoy, Neverdin\nFinish: Gold Rock City");
+  await expect(page.locator("#course-summary")).toHaveText("Start: Gold Rock City (island)\nCheckpoints: Buoy (mark, 3 nm), Neverdin (island)\nFinish: Gold Rock City (island)");
   await page.locator("#course-name").fill("Taken");
   await page.locator("#course-form button.primary").click();
   await expect(page.locator("#toast")).toContainText('A race called "taken" already exists');
