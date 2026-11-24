@@ -581,7 +581,6 @@ test("Publish route as race reads the route's islands and opens the race form fi
   await site(page, { "data/courses.json": [{ id: "taken", name: "Taken", world: "vanilla", runs: 0 }] });
   const route = [{ id: "a", ...GRC }, { id: "b", lat: 31.4, lon: -5.2, name: "Buoy" }, { id: "c", ...NEVERDIN }, { id: "d", ...GRC }];
   await chartroom.open({ charts: [{ id: "c1", name: "Race", view: { lat: 31, lon: -5.1, zoom: 6 }, route, recording: { game: "g", world: { kind: "vanilla" } } }], activeChartId: "c1" });
-  await page.locator("#show-route-panel").click().catch(() => {});
   await page.locator("#publish-route-course").click();
   await expect(page.locator("#course-summary")).toHaveText("Start: Gold Rock City (island)\nCheckpoints: Buoy (mark, 3 nm), Neverdin (island)\nFinish: Gold Rock City (island)");
   await page.locator("#course-name").fill("Taken");
@@ -604,6 +603,7 @@ test("Browse worlds and routes adds a world's routes as comparisons and shows it
   const voyage = { format: "sailwind-voyage", version: 1, id: "7", submitter: "sailor", name: "Long way round", world: { kind: "vanilla" }, points: [{ t: 80, ...GRC }, { t: 84, ...NEVERDIN }] };
   await site(page, {
     "data/worlds.json": [{ key: "vanilla", name: "Vanilla Sailwind", voyages: 1, courses: [] }],
+    "data/courses.json": [],
     "data/worlds/vanilla.json": { key: "vanilla", name: "Vanilla Sailwind", heatmap: { cellDegrees: 0.2, max: 1, voyages: 1, cells: { "153,-23": 1 } },
       voyageList: [{ id: "7", name: "Long way round", submitter: "sailor", distanceNm: 110, hours: 4, boats: ["Brig"], file: "voyages/vanilla/7.json" }] },
     "voyages/vanilla/7.json": voyage
