@@ -10,7 +10,7 @@ import { NM_PER_DEGREE } from "./site-race.mjs";
 import { sailedStats, trackSegments, unwrapStretch } from "./track.mjs";
 import { formatGameTime } from "./gametime.mjs";
 import { formatNm } from "./format.mjs";
-import { context, elements, keysBelongTo, showToast } from "./dom.mjs";
+import { canvas, context, elements, keysBelongTo, showToast } from "./dom.mjs";
 import { activeChart, host, persist, selection } from "./state.mjs";
 import { worldToScreen } from "./viewport.mjs";
 
@@ -19,16 +19,21 @@ import { worldToScreen } from "./viewport.mjs";
 let mode = "export";
 // The range the export dialog highlights while it's open.
 let exportRange = null;
+// Which end ("from" or "to") the user is currently picking by clicking on the chart, or null.
+let pickingEnd = null;
 // Courses on the site for the chart's world, while entering a race.
 let courses = [];
 // The full course object currently selected in Enter a race, plus a per-session cache.
 let activeCourse = null;
+// A race course pinned onto the chart from Browse voyages & races so players can see checkpoints before sailing.
+let pinnedCourse = null;
 const courseCache = new Map();
 let courseLoadToken = 0;
-// The heatmap Browse shared worlds/voyages shows on the chart: { key, squares } until it's turned off.
+// The heatmap Browse voyages & races shows on the chart: { key, squares } until it's turned off.
 let heatmap = null;
-// Worlds the site lists, while browsing.
+// Worlds and courses the site lists, while browsing.
 let browseWorlds = [];
+let browseCourses = [];
 // Pending voyage exports awaiting "export-result" from a desktop host with exportWithLink.
 const pendingExports = new Map();
 let nextExportId = 1;
@@ -54,9 +59,10 @@ export function initShare({ draw, renderAll: render }) {
   elements["export-voyage"].addEventListener("click", () => openExport("export"));
   elements["share-voyage"].addEventListener("click", () => openExport("share"));
   elements["enter-race"].addEventListener("click", () => openExport("race"));
-  elements["publish-course"].addEventListener("click", openCourse);
   elements["publish-route-course"].addEventListener("click", openCourse);
   elements["browse-voyages"].addEventListener("click", openBrowse);
+  elements["export-pick-from"].addEventListener("click", () => setPickingEnd(pickingEnd === "from" ? null : "from"));
+  elements["export-pick-to"].addEventListener("click", () => setPickingEnd(pickingEnd === "to" ? null : "to"));
   elements["export-share"].replaceChildren(...SHARE_OPTIONS.map((option) => {
     const label = document.createElement("label");
     const box = Object.assign(document.createElement("input"), { type: "checkbox", value: option.id, checked: option.default });
@@ -88,10 +94,15 @@ export function initShare({ draw, renderAll: render }) {
     });
   }
   elements["export-race-markers"].addEventListener("click", useRaceMarkers);
-  // The panel isn't modal, so Escape closes it here.
+  // The panel isn't modal, so Escape cancels picking first, then closes it.
   document.addEventListener("keydown", (event) => {
     const panel = elements["export-voyage-dialog"];
-    if (event.key === "Escape" && panel.open && keysBelongTo(panel)) panel.close();
+    if (event.key !== "Escape" || !panel.open) return;
+    if (pickingEnd) {
+      setPickingEnd(null);
+      return;
+    }
+    if (keysBelongTo(panel)) panel.close();
   });
   elements["export-share"].addEventListener("change", updateExportRange);
   elements["export-voyage-form"].addEventListener("submit", (event) => {
@@ -99,6 +110,7 @@ export function initShare({ draw, renderAll: render }) {
     finishExport();
   });
   elements["export-voyage-dialog"].addEventListener("close", () => {
+    setPickingEnd(null);
     exportRange = null;
     activeCourse = null;
     redraw();
@@ -121,10 +133,47 @@ export function initShare({ draw, renderAll: render }) {
 // --- Export, share and race ------------------------------------------------------------------------
 
 const MODES = {
-  export: { title: "Save route to file", intro: "Choose the part of your Voyage Recorder track to save. It's highlighted on the chart. Your save slot and file paths are never included.", button: "Save" },
-  share: { title: "Publish world/route", intro: "Choose the part of your track to publish on Chartroom Voyages. Its world is published with it if the site doesn't have it yet. Chartroom saves the file and opens the form in your browser. Drag the file into the form, then submit it. Published routes are public and show your GitHub username.", button: "Save and open the form" },
-  race: { title: "Enter a race", intro: "Choose the race and the part of your track you sailed it on. Chartroom checks the run live against the course on your chart, saves the file and opens the entry form in your browser. Drag the file into the form, then submit it.", button: "Save and open" }
+  export: { title: "Save voyage to file", intro: "Save part of your recorded track as a file. Use Pick start and Pick end (or the sliders) to choose the trip. Your save slot and file paths are never included.", button: "Save" },
+  share: { title: "Share voyage", intro: "Share a sailed voyage on Chartroom Voyages. Its world is published with it automatically if the site doesn't have it yet. Chartroom saves the file and opens the form in your browser — drag the file into the form and submit. Shared voyages are public and show your GitHub username.", button: "Save and open" },
+  race: { title: "Enter a race", intro: "Sail the race in-game first, then pick the race and select that part of your track using Pick start / Pick end or the sliders. Chartroom checks your selection against the course, saves the file and opens the entry form in your browser.", button: "Save and open" }
 };
+
+function setPickingEnd(which) {
+  pickingEnd = which;
+  elements["export-pick-from"].setAttribute("aria-pressed", String(which === "from"));
+  elements["export-pick-to"].setAttribute("aria-pressed", String(which === "to"));
+  canvas.style.cursor = which ? "crosshair" : "";
+}
+
+// Handles a chart click while Pick start or Pick end is active in the export/race dialog.
+export function pickExportPoint(screen) {
+  if (!pickingEnd || !elements["export-voyage-dialog"].open) return false;
+  const points = exportablePoints(activeChart());
+  if (!points.length) return false;
+  let bestIndex = -1;
+  let bestDistance = 48;
+  for (let index = 0; index < points.length; index++) {
+    const pos = worldToScreen(points[index]);
+    const distance = Math.hypot(pos.x - screen.x, pos.y - screen.y);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestIndex = index;
+    }
+  }
+  if (bestIndex < 0) {
+    showToast("Click closer to a recorded track position.", true);
+    return true;
+  }
+  const targetId = pickingEnd === "from" ? "export-from" : "export-to";
+  const otherId = pickingEnd === "from" ? "export-to" : "export-from";
+  elements[targetId].value = String(bestIndex);
+  const from = Number(elements["export-from"].value);
+  const to = Number(elements["export-to"].value);
+  if (from > to) elements[otherId].value = String(bestIndex);
+  setPickingEnd(null);
+  updateExportRange();
+  return true;
+}
 
 async function openExport(nextMode) {
   const chart = activeChart();
@@ -309,7 +358,7 @@ function resolveDeclaredWorld(chart) {
         formFields: { world: "Scrambled Seas (paste link or XML below)", scrambled_world: source }
       };
     }
-    throw new Error("Save route to file and Enter a race need the Scrambled Seas XML. For a World Generator share link, use Voyage > Publish world/route.");
+    throw new Error("Save voyage to file and Enter a race need the Scrambled Seas XML. For a World Generator share link, use Voyage > Share voyage.");
   }
   throw new Error(mode === "share"
     ? "Paste a Scrambled Seas XML file or a World Generator share link."
@@ -581,11 +630,16 @@ async function openBrowse() {
   elements["browse-status"].textContent = "Loading…";
   elements["browse-world-row"].hidden = true;
   elements["browse-heatmap-row"].hidden = true;
+  elements["browse-races-section"].hidden = true;
   elements["browse-world-summary"].textContent = "";
+  elements["browse-races"].replaceChildren();
   elements["browse-list"].replaceChildren();
   elements["browse-dialog"].showModal();
   try {
-    browseWorlds = await siteData("data/worlds.json");
+    [browseWorlds, browseCourses] = await Promise.all([
+      siteData("data/worlds.json"),
+      siteData("data/courses.json").catch(() => [])
+    ]);
   } catch (error) {
     elements["browse-status"].textContent = error.message;
     return;
@@ -594,8 +648,8 @@ async function openBrowse() {
     elements["browse-status"].textContent = "Nothing has been shared yet.";
     return;
   }
-  elements["browse-status"].textContent = "Open a published route as a comparison on this chart.";
-  elements["browse-world"].replaceChildren(...browseWorlds.map((world) => new Option(`${world.name} (${world.voyages} route${world.voyages === 1 ? "" : "s"})`, world.key)));
+  elements["browse-status"].textContent = "Show a race's checkpoints on your chart, or compare a shared voyage.";
+  elements["browse-world"].replaceChildren(...browseWorlds.map((world) => new Option(`${world.name} (${world.voyages} voyage${world.voyages === 1 ? "" : "s"})`, world.key)));
   const own = worldKey(activeChart().recording?.world);
   elements["browse-world"].value = browseWorlds.some((world) => world.key === own) ? own : browseWorlds[0].key;
   elements["browse-world-row"].hidden = false;
@@ -604,6 +658,8 @@ async function openBrowse() {
 
 async function showWorld(key) {
   elements["browse-list"].replaceChildren();
+  elements["browse-races"].replaceChildren();
+  elements["browse-races-section"].hidden = true;
   elements["browse-heatmap-row"].hidden = true;
   let world;
   try {
@@ -615,11 +671,47 @@ async function showWorld(key) {
   if (elements["browse-world"].value !== key) return;
   const own = worldKey(activeChart().recording?.world);
   elements["browse-world-summary"].textContent = own && own !== key
-    ? "This chart's recording is from another world, so these routes won't line up with its islands."
+    ? "This chart's recording is from another world, so these voyages and races won't line up with its islands."
     : world.description || "";
   elements["browse-heatmap"].checked = heatmap?.key === key;
   elements["browse-heatmap-row"].hidden = !world.heatmap?.voyages;
+  const worldRaces = browseCourses.filter((course) => course.world === key);
+  if (worldRaces.length) {
+    elements["browse-races-section"].hidden = false;
+    elements["browse-races"].replaceChildren(...worldRaces.map((course) => browseRaceRow(course)));
+  }
   elements["browse-list"].replaceChildren(...(world.voyageList.length ? world.voyageList.map((voyage) => browseRow(voyage, world)) : [Object.assign(document.createElement("p"), { className: "fineprint", textContent: "No voyages shared here yet." })]));
+}
+
+function browseRaceRow(course) {
+  const row = Object.assign(document.createElement("div"), { className: "browse-row" });
+  const text = document.createElement("span");
+  text.append(
+    document.createTextNode(course.name),
+    Object.assign(document.createElement("small"), { textContent: `${course.runs} run${course.runs === 1 ? "" : "s"}` })
+  );
+  const shown = pinnedCourse?.id === course.id;
+  const toggle = Object.assign(document.createElement("button"), { type: "button", textContent: shown ? "Hide" : "Show on chart" });
+  toggle.addEventListener("click", async () => {
+    if (pinnedCourse?.id === course.id) {
+      pinnedCourse = null;
+      redraw();
+      showWorld(elements["browse-world"].value);
+      return;
+    }
+    toggle.disabled = true;
+    try {
+      pinnedCourse = await fetchCourse(course.id);
+      redraw();
+      showToast(`Showing ${course.name} checkpoints on your chart.`);
+      showWorld(elements["browse-world"].value);
+    } catch (error) {
+      toggle.disabled = false;
+      showToast(error.message, true);
+    }
+  });
+  row.append(text, toggle);
+  return row;
 }
 
 function browseRow(voyage, world) {
@@ -695,7 +787,8 @@ function eventName(event) {
 // The stretch the export panel will save, with a ring on each end and a larger one on the end being moved.
 // In Enter a race mode, also draws the selected race's flags, mark circles and fixed-order path.
 export function drawExportRange(palette) {
-  if (mode === "race" && activeCourse) drawCourseOverlay(palette, activeCourse);
+  const shownCourse = mode === "race" && activeCourse ? activeCourse : pinnedCourse;
+  if (shownCourse) drawCourseOverlay(palette, shownCourse);
   if (!exportRange?.points.length) return;
   drawRangeLine(palette);
   const ends = [exportRange.points[0], exportRange.points.at(-1)];

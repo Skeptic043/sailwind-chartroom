@@ -6,6 +6,7 @@ public sealed class HostMessageTests
     [InlineData("""{"type":"ready"}""", typeof(HostMessage.Ready))]
     [InlineData("""{"type":"pin"}""", typeof(HostMessage.Pin))]
     [InlineData("""{"type":"open-folder"}""", typeof(HostMessage.OpenFolder))]
+    [InlineData("""{"type":"pick-import-file"}""", typeof(HostMessage.PickImportFile))]
     [InlineData("""{"type":"follow-track","chartId":"chart-1"}""", typeof(HostMessage.FollowTrack))]
     [InlineData("""{"type":"stop-track"}""", typeof(HostMessage.StopTrack))]
     [InlineData("""{"type":"copy-text","text":"route"}""", typeof(HostMessage.CopyText))]

@@ -38,11 +38,10 @@ export async function importTrackFile(file) {
 }
 
 // Chartroom files, web map exports and Scrambled Seas worlds, which are XML.
-export async function importChartFile(file) {
-  const text = await readFile(file);
+export function importChartText(text, name = "") {
   const imported = text.trimStart().startsWith("<")
     ? [importScrambledSeas(parseScrambledSeasXml(text))]
-    : importChartData(JSON.parse(text), file?.name?.replace(/\.json$/i, ""));
+    : importChartData(JSON.parse(text), name?.replace(/\.json$/i, ""));
   workspace.charts.push(...imported);
   workspace.activeChartId = imported[0].id;
   resetHistory();
@@ -50,6 +49,10 @@ export async function importChartFile(file) {
   renderEverything();
   fitData();
   showToast(`Imported ${imported.length} chart${imported.length === 1 ? "" : "s"}.`);
+}
+
+export async function importChartFile(file) {
+  importChartText(await readFile(file), file?.name);
 }
 
 export function exportActiveChart() {

@@ -380,7 +380,7 @@ test("Publish world/route and Enter a race save the file, check the run and open
 
   await page.locator('.app-menu[data-menu="voyage"] > summary').click();
   await page.locator("#share-voyage").click();
-  await expect(page.locator("#export-title")).toHaveText("Publish world/route");
+  await expect(page.locator("#export-title")).toHaveText("Share voyage");
   await expect(page.locator("#export-course-row")).toBeHidden();
   // Escape closes the panel after a click inside it, even without focus there, as on a Mac.
   await page.locator("#export-intro").click();
@@ -581,8 +581,8 @@ test("Publish route as race reads the route's islands and opens the race form fi
   await site(page, { "data/courses.json": [{ id: "taken", name: "Taken", world: "vanilla", runs: 0 }] });
   const route = [{ id: "a", ...GRC }, { id: "b", lat: 31.4, lon: -5.2, name: "Buoy" }, { id: "c", ...NEVERDIN }, { id: "d", ...GRC }];
   await chartroom.open({ charts: [{ id: "c1", name: "Race", view: { lat: 31, lon: -5.1, zoom: 6 }, route, recording: { game: "g", world: { kind: "vanilla" } } }], activeChartId: "c1" });
-  await page.locator('.app-menu[data-menu="voyage"] > summary').click();
-  await page.locator("#publish-course").click();
+  await page.locator("#show-route-panel").click().catch(() => {});
+  await page.locator("#publish-route-course").click();
   await expect(page.locator("#course-summary")).toHaveText("Start: Gold Rock City (island)\nCheckpoints: Buoy (mark, 3 nm), Neverdin (island)\nFinish: Gold Rock City (island)");
   await page.locator("#course-name").fill("Taken");
   await page.locator("#course-form button.primary").click();
@@ -611,7 +611,7 @@ test("Browse worlds and routes adds a world's routes as comparisons and shows it
   await chartroom.open({ charts: [{ id: "c1", name: "Sea", view: { lat: 31, lon: -5.1, zoom: 6 } }], activeChartId: "c1" });
   await page.locator('.app-menu[data-menu="voyage"] > summary').click();
   await page.locator("#browse-voyages").click();
-  await expect(page.locator("#browse-world option")).toHaveText(["Vanilla Sailwind (1 route)"]);
+  await expect(page.locator("#browse-world option")).toHaveText(["Vanilla Sailwind (1 voyage)"]);
   await expect(page.locator("#browse-list .browse-row")).toContainText("Long way round");
   await page.locator("#browse-list button", { hasText: "Compare" }).click();
   await expect(page.locator("#browse-list button")).toHaveText("Added");

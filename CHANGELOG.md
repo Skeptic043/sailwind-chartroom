@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.11.2
+
+### Sailwind Chartroom
+
+#### Added
+- `Pick start` and `Pick end` buttons in `Enter a race`, `Share voyage`, and `Save voyage to file` let you click directly on your recorded track on the chart to choose a run
+- `Browse voyages & races` now lists each world's races with a `Show on chart` toggle so you can view race checkpoints before or while sailing
+- `Import chart, map or Scrambled Seas world` on Windows now opens by default in your Scrambled Seas plugin folder across Sailwind Mod Synchronizer, Thunderstore, r2modman, and Steam installs when found
+
+#### Changed
+- Clarified sailed-track vs. planned-route wording in the `Voyage` menu (`Save voyage to file`, `Compare a voyage`, `Browse voyages & races`, `Share voyage`), kept `Publish as race` in the `Route` panel, and updated `Enter a race` wording and button spacing
+- Race checkpoint checks now count a sailing leg that passes straight through an island or mark between two logged positions, ignoring long recording gaps
+
+### Chartroom Voyages
+
+#### Added
+- `Create a race` now offers `2 nm`, `3 nm`, and `5 nm` radius presets for custom marks and suggests `Use island` when a vanilla mark sits near an island
+
+#### Changed
+- Race checkpoint checks now count a sailing leg that passes straight through an island or mark between two logged positions, ignoring long recording gaps
+- Updated `Submit` page wording to `Share a voyage` to match Chartroom
+
 ## 0.11.1
 
 ### Sailwind Chartroom

@@ -21,13 +21,50 @@ export function place(target) {
   return { name: String(target.name ?? "Mark"), lat: target.lat, lon: target.lon, reachDeg: target.radiusNm / NM_PER_DEGREE, number: null, island: false, radiusNm: target.radiusNm };
 }
 
+const MAX_SEGMENT_DEG = 0.5;
+
 function inside(point, where) {
   return Math.hypot(point.lat - where.lat, point.lon - where.lon) <= where.reachDeg;
 }
 
+// When two consecutive logged positions are both outside a checkpoint, checks whether the straight
+// sailing leg between them crossed through it (ignoring long recording gaps). Returns { enter, leave }
+// fractions in (0, 1), or null.
+function segmentCrossing(a, b, where) {
+  const dx = b.lat - a.lat;
+  const dy = b.lon - a.lon;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq === 0 || lenSq > MAX_SEGMENT_DEG * MAX_SEGMENT_DEG) return null;
+  const fx = a.lat - where.lat;
+  const fy = a.lon - where.lon;
+  const halfB = fx * dx + fy * dy;
+  const c = fx * fx + fy * fy - where.reachDeg * where.reachDeg;
+  const disc = halfB * halfB - lenSq * c;
+  if (disc < 0) return null;
+  const root = Math.sqrt(disc);
+  const enter = (-halfB - root) / lenSq;
+  const leave = (-halfB + root) / lenSq;
+  if (leave <= 0 || enter >= 1) return null;
+  return { enter: Math.max(0, enter), leave: Math.min(1, leave) };
+}
+
+function interpolateTime(a, b, u) {
+  const t = a.t + (b.t - a.t) * u;
+  const utc = Number.isFinite(a.utc) && Number.isFinite(b.utc)
+    ? Math.round(a.utc + (b.utc - a.utc) * u)
+    : (b.utc ?? a.utc ?? null);
+  return { t, utc };
+}
+
 function everEntered(voyage, where) {
-  return voyage.visits.some((visit) => (visit.kind === "arrive" || visit.kind === "depart") && visitMatches(visit, where))
-    || voyage.points.some((point) => inside(point, where));
+  if (voyage.visits.some((visit) => (visit.kind === "arrive" || visit.kind === "depart") && visitMatches(visit, where))) return true;
+  let previous = null;
+  for (const point of voyage.points) {
+    if (inside(point, where)) return true;
+    if (previous && segmentCrossing(previous, point, where)) return true;
+    previous = point;
+  }
+  return false;
 }
 
 function unreachedStartReason(voyage, places) {
@@ -54,27 +91,42 @@ function visitMatches(visit, where) {
   return (where.number !== null && visit.island === where.number) || key(visit.port) === key(where.name);
 }
 
-// Times the voyage reached a place: each port arrival there, and each reading that comes within reach after
-// being outside it. Each time keeps its real time when known.
+// Times the voyage reached a place: each port arrival there, each reading that comes within reach after
+// being outside it, and any short sailing leg between two outside readings that crosses through it.
 export function reaches(voyage, where) {
   const times = voyage.visits.filter((visit) => visit.kind === "arrive" && visitMatches(visit, where)).map((visit) => ({ t: visit.t, utc: visit.utc ?? null }));
   let wasInside = false;
+  let previous = null;
   for (const point of voyage.points) {
     const now = inside(point, where);
-    if (now && !wasInside) times.push({ t: point.t, utc: point.utc ?? null });
+    if (now && !wasInside) {
+      times.push({ t: point.t, utc: point.utc ?? null });
+    } else if (!now && !wasInside && previous) {
+      const hit = segmentCrossing(previous, point, where);
+      if (hit) times.push(interpolateTime(previous, point, hit.enter));
+    }
     wasInside = now;
+    previous = point;
   }
   return times.sort((a, b) => a.t - b.t);
 }
 
-// Times the voyage left a place: each departure line, and each reading outside reach after being inside it.
+// Times the voyage left a place: each departure line, each reading outside reach after being inside it,
+// and the exit point of any short sailing leg that crosses straight through it.
 export function departures(voyage, where) {
   const times = voyage.visits.filter((visit) => visit.kind === "depart" && visitMatches(visit, where)).map((visit) => ({ t: visit.t, utc: visit.utc ?? null }));
   let wasInside = false;
+  let previous = null;
   for (const point of voyage.points) {
     const now = inside(point, where);
-    if (!now && wasInside) times.push({ t: point.t, utc: point.utc ?? null });
+    if (!now && wasInside) {
+      times.push({ t: point.t, utc: point.utc ?? null });
+    } else if (!now && !wasInside && previous) {
+      const hit = segmentCrossing(previous, point, where);
+      if (hit) times.push(interpolateTime(previous, point, hit.leave));
+    }
     wasInside = now;
+    previous = point;
   }
   // A departure line and the first reading outside describe the same leaving; keep the earliest of a pair.
   return times.sort((a, b) => a.t - b.t).filter((time, index, all) => index === 0 || time.t - all[index - 1].t > 0.25);

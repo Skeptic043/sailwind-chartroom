@@ -106,14 +106,13 @@
           <button id="paste-track" type="button">Paste positions</button>
           <button id="clear-track" type="button">Clear track</button>
           <hr>
-          <p class="menu-heading">Route files</p>
-          <button id="export-voyage" type="button">Save route to file</button>
-          <button id="compare-voyage" type="button">Compare a route</button>
+          <p class="menu-heading">Voyage files</p>
+          <button id="export-voyage" type="button">Save voyage to file</button>
+          <button id="compare-voyage" type="button">Compare a voyage</button>
           <hr>
           <p class="menu-heading">Chartroom Voyages</p>
-          <button id="browse-voyages" type="button">Browse worlds and routes</button>
-          <button id="share-voyage" type="button">Publish world/route</button>
-          <button id="publish-course" type="button">Publish route as race</button>
+          <button id="browse-voyages" type="button">Browse voyages &amp; races</button>
+          <button id="share-voyage" type="button">Share voyage</button>
           <button id="enter-race" type="button">Enter a race</button>
         </div>
       </details>
@@ -536,11 +535,15 @@
   <dialog id="export-voyage-dialog" class="floating-dialog" aria-labelledby="export-title">
     <form id="export-voyage-form" method="dialog" class="dialog-card">
       <div class="eyebrow">Voyage</div>
-      <h2 id="export-title">Save route to file</h2>
+      <h2 id="export-title">Save voyage to file</h2>
       <p id="export-intro">Choose the part of your Voyage Recorder track to share. It's highlighted on the chart. Your save slot and file paths are never included.</p>
       <label id="export-course-row" hidden>Course <select id="export-course"></select></label>
-      <button id="export-auto-find" type="button" hidden>Auto-find run</button>
-      <button id="export-race-markers" type="button" hidden>Use my race start and finish</button>
+      <div class="export-tools">
+        <button id="export-pick-from" type="button" aria-pressed="false" title="Click a position on the chart to set the start">Pick start</button>
+        <button id="export-pick-to" type="button" aria-pressed="false" title="Click a position on the chart to set the end">Pick end</button>
+        <button id="export-auto-find" type="button" hidden>Auto-find run</button>
+        <button id="export-race-markers" type="button" hidden>Use race markers</button>
+      </div>
       <div class="range-picker">
         <div class="range-end"><span>Start</span><button type="button" data-step="export-from" data-by="-1" aria-label="Start one position earlier">◀</button><input id="export-from" type="range" min="0" step="1" aria-label="Start"><button type="button" data-step="export-from" data-by="1" aria-label="Start one position later">▶</button></div>
         <p id="export-from-text" class="range-time"></p>
@@ -589,11 +592,16 @@
   <dialog id="browse-dialog" class="wide-dialog">
     <div class="dialog-card">
       <div class="eyebrow">Chartroom Voyages</div>
-      <h2>Browse worlds and routes</h2>
+      <h2>Browse voyages &amp; races</h2>
       <p id="browse-status">Loading…</p>
       <label id="browse-world-row" hidden>World <select id="browse-world"></select></label>
       <p id="browse-world-summary" class="fineprint"></p>
       <label id="browse-heatmap-row" class="switch-row" hidden><span>Show this world's heatmap on the chart</span><input id="browse-heatmap" type="checkbox"></label>
+      <div id="browse-races-section" hidden>
+        <p class="browse-heading">Races</p>
+        <div id="browse-races" class="compare-list"></div>
+      </div>
+      <p class="browse-heading">Shared voyages</p>
       <div id="browse-list" class="compare-list"></div>
       <div class="dialog-actions">
         <button id="browse-open-site" type="button">Open the website</button>

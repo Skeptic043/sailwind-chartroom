@@ -14,6 +14,7 @@ import { showComparisonPointAt } from "./compare.mjs";
 import { LOCATION_ICONS } from "./icons.mjs";
 import { renderEverything, renderInspector, renderRouteSummary } from "./panels.mjs";
 import { DR_HINT, pickStart, reckoningStart, showDeadReckoning } from "./dead-reckoning-panel.mjs";
+import { pickExportPoint } from "./share.mjs";
 
 // Holding Ctrl places freely. On macOS that is Option, because Ctrl-click is a right-click there.
 // Holding Ctrl (Option on a Mac), or a long press on a touch screen (touch.mjs), places without snapping.
@@ -331,6 +332,7 @@ export function startPointer(event) {
   const screen = eventPoint(event);
   const forcePan = event.button === 1 || spacePressed;
   if (forcePan) return startPan(event, screen);
+  if (pickExportPoint(screen)) return;
 
   const target = snapPoint(screen, placesFreely(event));
   if (mode === "dr") {

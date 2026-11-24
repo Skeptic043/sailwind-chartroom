@@ -17,6 +17,7 @@ internal abstract record HostMessage
     public sealed record SetZoom(double Factor) : HostMessage;
     public sealed record SetAppearance(bool Dark) : HostMessage;
     public sealed record ExportFile(string Name, string Contents, string? OpenUrl = null, bool Reveal = false, string? Id = null) : HostMessage;
+    public sealed record PickImportFile : HostMessage;
     /// <summary>
     /// Follow a recording into the chart with this id. Without a choice the host offers the recordings it
     /// finds; Log follows one of those it offered, and Pick asks for a file instead.
@@ -53,6 +54,7 @@ internal abstract record HostMessage
                 "ready" => new Ready(),
                 "pin" => new Pin(),
                 "open-folder" => new OpenFolder(),
+                "pick-import-file" => new PickImportFile(),
                 "check-updates" => new CheckUpdates(),
                 "install-update" => new InstallUpdate(),
                 "cancel-update" => new CancelUpdate(),

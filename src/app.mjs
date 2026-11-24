@@ -12,7 +12,7 @@ import { beginResolution, drawToolPreview, extendSavedRoute, mode, pointerState,
 import { LAYER_CONTROLS, renderEverything, renderFeatureList, renderInspector, renderRouteSummary } from "./panels.mjs";
 import { applyLayout, endPanelResize, movePanelResize, resizePanelFromKeyboard, startPanelResize, togglePanel } from "./layout.mjs";
 import { deleteChart, openAbout, openBoatLibrary, openChartDialog, openIslandLibrary, renderBoatLibrary, renderIslandLibrary, saveChartDialog, selectedBoatOwner, selectedIslandOwner } from "./dialogs.mjs";
-import { exportActiveChart, exportLocationsCsv, exportWorkspace, importChartFile, importTrackFile, importTrackText } from "./files.mjs";
+import { exportActiveChart, exportLocationsCsv, exportWorkspace, importChartFile, importChartText, importTrackFile, importTrackText } from "./files.mjs";
 import { initUpdates } from "./updates.mjs";
 import { initLiveTrack } from "./live-track.mjs";
 import { initTouch } from "./touch.mjs";
@@ -278,7 +278,14 @@ elements["clear-track"].addEventListener("click", () => {
   commit((chart) => { chart.track = []; });
   showToast("Track cleared. Undo brings it back.");
 });
-elements["import-json"].addEventListener("click", () => elements["json-file"].click());
+elements["import-json"].addEventListener("click", () => {
+  if (host.importFilePicker) host.pickImportFile();
+  else elements["json-file"].click();
+});
+host.on("import-file", ({ name, contents }) => {
+  if (typeof contents !== "string") return;
+  reportErrors(() => importChartText(contents, name));
+});
 elements["json-file"].addEventListener("change", (event) => reportErrors(() => importChartFile(event.target.files[0]), event.target));
 elements["export-json"].addEventListener("click", exportActiveChart);
 elements["export-csv"].addEventListener("click", exportLocationsCsv);

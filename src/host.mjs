@@ -92,6 +92,8 @@ async function connectDesktop({ post, listen }) {
     liveTrack: init.liveTrack === true,
     // Hosts that open a submission link and reveal the file after SaveFileDialog succeeds, then reply "export-result".
     exportWithLink: init.exportWithLink === true,
+    // Hosts that open a native file picker defaulted to the Scrambled Seas folder for chart/map imports.
+    importFilePicker: init.importFilePicker === true,
     on: events.on,
     // The host shows the Settings window and answers OK or Apply with "settings-changed".
     openSettings: (settings, defaults) => post({ type: "open-settings", settings, defaults }),
@@ -109,6 +111,7 @@ async function connectDesktop({ post, listen }) {
       ...(options?.openUrl && { openUrl: options.openUrl }),
       ...(options?.reveal && { reveal: true })
     }),
+    pickImportFile: () => post({ type: "pick-import-file" }),
     // Without a choice the host offers the Voyage Recorder logs it finds with "track-choices", or asks for a
     // file when it finds none. The page answers with { log } for an offered log or { pick: true } for a file.
     // Following then sends "track-following", "track-lines" with each new run of lines, and "track-stopped".

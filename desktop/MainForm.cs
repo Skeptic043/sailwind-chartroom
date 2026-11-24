@@ -165,7 +165,7 @@ internal sealed partial class MainForm : Form
                 // Sent on every page load, so a reload always receives the latest charts.
                 using (var workspace = currentWorkspace is null ? null : JsonDocument.Parse(currentWorkspace))
                 {
-                    Post(new { type = "init", workspace = workspace?.RootElement, dataFolder = store.Folder, version = AppVersion, textScale = WindowsTextScale(), liveTrack = true, devices = true, exportWithLink = true });
+                    Post(new { type = "init", workspace = workspace?.RootElement, dataFolder = store.Folder, version = AppVersion, textScale = WindowsTextScale(), liveTrack = true, devices = true, exportWithLink = true, importFilePicker = true });
                 }
                 // A reloaded page learns that a file is still being followed.
                 if (follower is not null) Post(new { type = "track-following", name = follower.FileName, chartId = followedChartId, resumed = true });
@@ -209,6 +209,9 @@ internal sealed partial class MainForm : Form
             case HostMessage.ExportFile export:
                 // Shown after this handler returns, so the dialog never runs inside a WebView2 event.
                 BeginInvoke(() => SaveExport(export));
+                break;
+            case HostMessage.PickImportFile:
+                BeginInvoke(PickImportFile);
                 break;
             case HostMessage.FollowTrack follow:
                 // Shown after this handler returns, so the dialog never runs inside a WebView2 event.
@@ -381,6 +384,34 @@ internal sealed partial class MainForm : Form
             Filter = "Recordings|slot*.jsonl;coords_*.txt|Voyage Recorder logs|*.jsonl|Coordinate Viewer files|coords_*.txt|All files|*.*"
         };
         if (dialog.ShowDialog(this) == DialogResult.OK) StartFollowing(dialog.FileName, follow.ChartId);
+    }
+
+    private void PickImportFile()
+    {
+        using var dialog = new OpenFileDialog
+        {
+            Title = "Import chart, map or Scrambled Seas world",
+            Filter = "Charts and Scrambled Seas worlds|*.xml;*.json|Scrambled Seas worlds|*.xml|Chartroom files|*.json|All files|*.*"
+        };
+        if (ScrambledSeasFolder.Find() is { } folder && Directory.Exists(folder))
+        {
+            dialog.InitialDirectory = folder;
+        }
+        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        try
+        {
+            var info = new FileInfo(dialog.FileName);
+            if (info.Length > 50 * 1024 * 1024)
+            {
+                MessageBox.Show(this, "That file is too large to import.", "Sailwind Chartroom", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            Post(new { type = "import-file", name = info.Name, contents = File.ReadAllText(dialog.FileName) });
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            MessageBox.Show(this, $"Chartroom could not read that file:\n{error.Message}", "Sailwind Chartroom", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
     }
 
     private void StartFollowing(string path, string chartId)
