@@ -55,7 +55,7 @@ export function discoveredMarks(chart, { ports = [], landfalls = [], missions = 
   }
   for (const visit of landfalls) {
     const terra = visit.source === "terra-incognita";
-    const island = islandById(terra ? `terra-incognita/${visit.prefab ?? ""}` : islandIdForNumber(visit.islandId));
+    const island = islandById(terra ? `terra-incognita/${visit.prefab ?? ""}` : visit.source === "piece" ? visit.islandId : islandIdForNumber(visit.islandId));
     const islandId = island?.id ?? "";
     const name = terra ? visit.name || island?.name || visit.islandId : island?.name || visit.name || `Island ${visit.islandId}`;
     const outline = terra && island ? { lat: visit.islandLat, lon: visit.islandLon } : discoveryOutline(island, visit);

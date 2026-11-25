@@ -1,5 +1,5 @@
 // Tool modes and pointer handling on the chart canvas, including the previews tools draw while active.
-import { COMPASS_STEP_DEG, ITEM_KINDS, MAX_RANGE_NM, MAX_ZOOM, MIN_ZOOM, WORLD_BOUNDS, bearingDegrees, chartItemFocusPoint, createFeature, createMeasure, createRoutePoint, createSearch, createWind, distanceNm, formatCoordinate, isEncounter, isLocked, itemForRef, searchExtent, searchesAnsweredBy, shownItems, translateChartItems } from "./model.mjs";
+import { COMPASS_STEP_DEG, ITEM_KINDS, MAX_RANGE_NM, MAX_ZOOM, MIN_ZOOM, WORLD_BOUNDS, bearingDegrees, chartItemFocusPoint, createFeature, createMeasure, createRoutePoint, createSearch, createWind, distanceNm, formatCoordinate, isEncounter, isLocked, itemForRef, searchExtent, searchesAnsweredBy, shownItems, trackWindText, translateChartItems } from "./model.mjs";
 import { assignedIsland, islandById, searchIsland } from "./islands.mjs";
 import { assignedBoats, drawBoatSilhouette } from "./boats.mjs";
 import { clamp, formatDirection, formatNm } from "./format.mjs";
@@ -455,7 +455,7 @@ export function movePointer(event) {
   const trackPoint = pointerState ? null : nearestTrackPoint(screen);
   elements["hover-info"].hidden = !trackPoint;
   if (trackPoint) {
-    elements["hover-info"].textContent = [trackPoint.day && `Day ${trackPoint.day}`, trackPoint.time, trackPoint.wind && `wind ${trackPoint.wind}`].filter(Boolean).join(" · ") || "Track position";
+    elements["hover-info"].textContent = [trackPoint.day && `Day ${trackPoint.day}`, trackPoint.time, Number.isFinite(trackPoint.windDeg) ? `wind from ${trackWindText(trackPoint)}` : trackPoint.wind && `wind ${trackPoint.wind}`].filter(Boolean).join(" · ") || "Track position";
   }
   if (!pointerState || pointerState.pointerId !== event.pointerId) {
     canvas.classList.toggle("resize", mode === "select" && onSelectedAreaEdge(screen));

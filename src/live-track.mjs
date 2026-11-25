@@ -40,8 +40,10 @@ export function initLiveTrack() {
     awaitingFirst = resumed !== true;
     wholeFile = resumed !== true;
     carry.newSession = false;
-    carry.game = null;
-    carry.vanilla = resumed === true && workspace.charts.find((chart) => chart.id === followedChartId)?.recording?.world?.kind === "vanilla";
+    // A reloaded page carries on with the chart's own game, so a new game in the slot is still noticed.
+    const recording = resumed === true ? workspace.charts.find((chart) => chart.id === followedChartId)?.recording : null;
+    carry.game = typeof recording?.game === "string" && recording.game ? recording.game : null;
+    carry.vanilla = recording?.world?.kind === "vanilla";
     fileName = String(name ?? "");
     startedFrom = /\.jsonl$/i.test(fileName) ? "follow-track" : "follow-track-cv";
     renderButton();
@@ -71,14 +73,20 @@ export function initLiveTrack() {
     followedChartId = null;
     live.following = false;
     renderButton();
-    showToast("Stopped following the recording.");
+    showToast(stopReason ?? "Stopped following the recording.");
+    stopReason = null;
   });
   host.on("track-lines", ({ text }) => addPositions(text));
 }
 
+// Why following stopped, when the page stopped it.
+let stopReason = null;
+
 // Live positions stay out of undo, so sailing never buries an edit, and save through the host's
 // usual delayed write. The chart redraws once for each batch the host sends.
 function addPositions(text) {
+  // Lines still on their way after following stopped here have nowhere to go.
+  if (!followedChartId) return;
   const chart = workspace.charts.find((candidate) => candidate.id === followedChartId);
   // Its chart was deleted, so there is nowhere left to put the positions.
   if (!chart) return host.stopTrack();
@@ -87,14 +95,20 @@ function addPositions(text) {
   // Only the latest game in the whole file joins the chart.
   const firstRun = wholeFile;
   wholeFile = false;
+  // Following stops at a new game: it can be in a different world from the one on this chart.
+  const stopAtNewGame = !firstRun;
   try {
-    if (isVoyageRecorderText(text)) ({ points, ...found } = readVoyageRecorder(text, carry, { latestGame: firstRun }));
+    if (isVoyageRecorderText(text)) ({ points, ...found } = readVoyageRecorder(text, carry, { latestGame: firstRun, stopAtNewGame }));
     else points = parseTrackText(text, carry);
   } catch {
     return;
   }
-  // A new game started in the slot while following carries on in this chart, after a break in the track.
-  if (!firstRun && found.newGames) showToast("A new game started in this save slot. Its positions join this chart too.");
+  if (found.stoppedAtNewGame) {
+    stopReason = "A new game started in this save slot. Following stopped; choose Follow live (Voyage Recorder) again to chart it.";
+    // Lines the host already sent after this one belong to the new game, so they find no chart.
+    followedChartId = null;
+    host.stopTrack();
+  }
   const marks = discoveredMarks(chart, found, { clearReached: workspace.settings.clearReachedAreas });
   if (found.keys) workspace.settings.recorderKeys = found.keys;
   const notes = addRecordingExtras(chart, found, {

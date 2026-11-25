@@ -1,5 +1,5 @@
 // Renders the side panels: chart header, layers, route summary, inspectors and the chart item list.
-import { anchorTarget, isEncounter, bearingDegrees, chartItemFocusPoint, distanceNm, formatCoordinate, formatDuration, isLocked, savedRouteForPoint, searchExtent, summarizeRoute } from "./model.mjs";
+import { anchorTarget, isEncounter, bearingDegrees, chartItemFocusPoint, distanceNm, formatCoordinate, formatDuration, isLocked, savedRouteForPoint, searchExtent, summarizeRoute, trackWindText } from "./model.mjs";
 import { assignedIsland, islandById, searchIsland, visibleIsland } from "./islands.mjs";
 import { assignedBoats } from "./boats.mjs";
 import { formatBearing, formatDirection, formatLeg, formatNm, plainDegrees } from "./format.mjs";
@@ -168,7 +168,8 @@ export function renderInspector() {
     elements["map-island-notes"].value = item.notes;
   }
   if (isTrack) {
-    for (const field of ["name", "day", "time", "wind"]) elements[`track-${field}`].value = item[field];
+    for (const field of ["name", "day", "time"]) elements[`track-${field}`].value = item[field];
+    elements["track-wind"].value = trackWindText(item);
     elements["track-lat"].value = item.lat.toFixed(4);
     elements["track-lon"].value = item.lon.toFixed(4);
     const recorded = recordedDetail(item, readingKnowledge(activeChart(), item));

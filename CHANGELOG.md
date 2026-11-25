@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.11.6
+
+### Sailwind Chartroom
+
+#### Fixed
+- Recorded positions now show the wind as `Wind from` instead of where it blows to. Thank you to Cap'n Beaver on Discord for the report
+- Reaching any part of Fire Fish Town, Kicia Bay or Sen'na, by landing, passing close or visiting its port, now charts the island along with the lagoon islets normally around it. Thank you to @silvan78 for the report
+- Fire Fish Lagoon islets in an imported Scrambled Seas world now move with the island they belong to instead of the nearest one
+- `Follow live` stops when a new game starts in the same save slot, so a new world doesn't mix into the chart
+- `Follow live` keeps updating when a sync app such as Google Drive stops Windows from reporting changes to the recording. Thank you to StormCleric on Discord for the report
+
+### Chartroom Voyages
+
+#### Changed
+- `Create a race` now suggests a Voyage Recorder `Interval` of 60 seconds or lower for marks under 2 nm
+
+#### Fixed
+- Fire Fish Lagoon islets in Scrambled Seas worlds now move with the island they belong to instead of the nearest one
+
 ## 0.11.2
 
 ### Sailwind Chartroom

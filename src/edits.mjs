@@ -1,6 +1,6 @@
 // Chart edits started from panels, dialogs and tools.
 import { LOCATION_ICONS } from "./icons.mjs";
-import { createFeature, createNote, createSearch, createWind, destinationPoint, locationRangeForType, parseBearing, parseCoordinate, removeChartItems, searchExtent, setLocked, translateChartItems } from "./model.mjs";
+import { createFeature, createNote, createSearch, createWind, destinationPoint, locationRangeForType, parseBearing, parseCoordinate, removeChartItems, searchExtent, setLocked, trackWindText, translateChartItems } from "./model.mjs";
 import { clamp, positiveNumber } from "./format.mjs";
 import { parseDayTime } from "./gametime.mjs";
 import { elements, showToast } from "./dom.mjs";
@@ -105,8 +105,9 @@ export function updateSelectedFromForm(kind) {
       Object.assign(updates, { name: elements["track-name"].value.trim(), day, time, wind });
       // The exact game time and wind bearing follow the text only when it is changed.
       if (day !== item.day || time !== item.time) updates.t = parseDayTime(day, time);
-      if (wind !== item.wind) {
-        try { updates.windDeg = parseBearing(wind); } catch { updates.windDeg = null; }
+      // The field names where the wind comes from; windDeg is where it blows toward.
+      if (wind !== trackWindText(item)) {
+        try { updates.windDeg = (parseBearing(wind) + 180) % 360; } catch { updates.windDeg = null; }
       }
     }
     if (kind === "note") {

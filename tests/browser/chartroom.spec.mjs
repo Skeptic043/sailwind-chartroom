@@ -931,30 +931,37 @@ test("following a save slot leaves out its earlier games", async ({ chartroom, p
     '{"type":"session","day":2,"hour":6,"game":"aaaa"}\n{"type":"position","day":2,"hour":6,"lat":20,"lon":5}\n'
       + '{"type":"port","day":2,"hour":7,"port":"Gold Rock City","island":1,"lat":30.5,"lon":-2.5,"portLat":30.6,"portLon":-2.45}\n'
       + '{"type":"session","day":1,"hour":8,"game":"bbbb"}\n{"type":"position","day":1,"hour":8,"lat":30,"lon":1}\n',
-    // Another new game while following carries on in the same chart.
-    '{"type":"session","day":1,"hour":8,"game":"cccc"}\n{"type":"position","day":1,"hour":8,"lat":31,"lon":2}\n'
+    // Another new game while following can be in another world: following stops there, to be started again.
+    '{"type":"position","day":1,"hour":9,"lat":30.5,"lon":1}\n{"type":"session","day":1,"hour":8,"game":"cccc"}\n{"type":"position","day":1,"hour":8,"lat":31,"lon":2}\n'
   ];
   await chartroom.open(null, { recording: { name: "slot1.jsonl", runs } });
   await page.locator('.app-menu[data-menu="voyage"] > summary').click();
   await page.locator("#follow-track").click();
-  await expect(page.locator("#toast")).toContainText("A new game started in this save slot.");
-  await expect.poll(() => page.evaluate(() => window.__host.workspace?.charts?.[0]?.track?.length ?? 0)).toBe(2);
+  await expect(page.locator("#toast")).toContainText("Following stopped; choose Follow live (Voyage Recorder) again to chart it.");
+  await page.locator('.app-menu[data-menu="voyage"] > summary').click();
+  await expect(page.locator("#follow-track")).toHaveText("Follow live (Voyage Recorder)");
   const chart = await chartroom.chart();
-  expect(chart.track.map((point) => [point.lat, point.newSession ?? false])).toEqual([[30, true], [31, true]]);
+  expect(chart.track.map((point) => [point.lat, point.newSession ?? false]), "the old game's last position still arrives")
+    .toEqual([[30, true], [30.5, false]]);
   expect(chart.features, "the earlier game's port isn't charted").toHaveLength(0);
 });
 
-test("a new game is noticed after a first run without positions", async ({ chartroom, page }) => {
+test("a new game is noticed after a first run without positions, and its later lines stay out", async ({ chartroom, page }) => {
   const runs = [
     '{"type":"session","day":2,"hour":6,"game":"aaaa"}\n{"type":"port","day":2,"hour":7,"port":"Gold Rock City","island":1,"lat":30.5,"lon":-2.5,"portLat":30.6,"portLon":-2.45}\n',
-    '{"type":"session","day":1,"hour":8,"game":"bbbb"}\n{"type":"position","day":1,"hour":8,"lat":30,"lon":1}\n'
+    '{"type":"session","day":1,"hour":8,"game":"bbbb"}\n',
+    // The new game's positions can come in a later run than its session line.
+    '{"type":"position","day":1,"hour":8,"lat":30,"lon":1}\n'
   ];
   await chartroom.open(null, { recording: { name: "slot1.jsonl", runs } });
   await page.locator('.app-menu[data-menu="voyage"] > summary').click();
   await page.locator("#follow-track").click();
-  await expect(page.locator("#toast")).toContainText("A new game started in this save slot.");
-  await expect.poll(() => page.evaluate(() => window.__host.workspace?.charts?.[0]?.track?.length ?? 0)).toBe(1);
-  expect((await chartroom.chart()).features.map((feature) => feature.name), "the port came while following, so it stays").toEqual(["Gold Rock City"]);
+  await expect(page.locator("#toast")).toContainText("A new game started in this save slot. Following stopped");
+  await page.locator('.app-menu[data-menu="voyage"] > summary').click();
+  await expect(page.locator("#follow-track")).toHaveText("Follow live (Voyage Recorder)");
+  const chart = await chartroom.chart();
+  expect(chart.track, "the new game's position isn't charted").toHaveLength(0);
+  expect(chart.features.map((feature) => feature.name), "the port came while following, so it stays").toEqual(["Gold Rock City"]);
 });
 
 test("the macOS app offers live following too", async ({ chartroom, page }) => {
@@ -1183,6 +1190,23 @@ test("View hides only the lines between recorded positions", async ({ chartroom,
   const canvas = await chartroom.canvas.boundingBox();
   await chartroom.clickChart(canvas.width / 2, canvas.height / 2);
   await expect(page.locator("#track-inspector")).toBeVisible();
+});
+
+test("a recorded position names the wind by where it comes from, as its arrow and weather charts do", async ({ chartroom, page }) => {
+  // Saved as Chartroom records it: windDeg and its old label are where a southerly blows, north.
+  const track = [{ id: "t1", lat: 0, lon: 0, t: 10, windDeg: 0, wind: "N", source: "voyage" }];
+  await chartroom.open(seaWith({ view: { lat: 0, lon: 0, zoom: 2000 }, track }));
+  const canvas = await chartroom.canvas.boundingBox();
+  await page.mouse.move(canvas.x + canvas.width / 2, canvas.y + canvas.height / 2);
+  await expect(page.locator("#hover-info")).toContainText("wind from S");
+  await chartroom.clickChart(canvas.width / 2, canvas.height / 2);
+  await expect(page.locator("label:has(#track-wind)")).toContainText("Wind from");
+  await expect(page.locator("#track-wind")).toHaveValue("S");
+  // Typing a direction means where the wind comes from, so the arrow turns to blow away from it.
+  await page.locator("#track-wind").fill("E");
+  await page.locator("#track-wind").press("Tab");
+  await expect.poll(async () => (await chartroom.chart()).track[0].windDeg).toBe(270);
+  await expect(page.locator("#track-wind")).toHaveValue("E");
 });
 
 test("View hides Voyage Recorder automatic and manual locations separately", async ({ chartroom, page }) => {

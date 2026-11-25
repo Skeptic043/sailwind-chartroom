@@ -64,6 +64,33 @@ public sealed class TrackFollowerTests
     }
 }
 
+public sealed class TrackFollowerCheckTests
+{
+    [Fact]
+    public void KeepsFollowingWhenWindowsReportsNoChanges()
+    {
+        string folder = Directory.CreateTempSubdirectory("chartroom-track-").FullName;
+        string path = Path.Combine(folder, "slot1.jsonl");
+        try
+        {
+            System.IO.File.WriteAllText(path, "{\"type\":\"position\",\"lat\":40.1,\"lon\":0.5}\n");
+            var received = new List<string>();
+            using var arrived = new SemaphoreSlim(0);
+            // As behind a sync client that stops change reports: only the timed check sees the new line.
+            using var follower = new TrackFollower(path, text => { lock (received) received.Add(text); arrived.Release(); },
+                TimeSpan.FromMilliseconds(200), watchChanges: false);
+            Assert.True(arrived.Wait(TimeSpan.FromSeconds(5)));
+            System.IO.File.AppendAllText(path, "{\"type\":\"position\",\"lat\":40.2,\"lon\":0.6}\n");
+            Assert.True(arrived.Wait(TimeSpan.FromSeconds(5)), "the appended line arrives without a change report");
+            lock (received) Assert.Equal("{\"type\":\"position\",\"lat\":40.2,\"lon\":0.6}\n", received[1]);
+        }
+        finally
+        {
+            Directory.Delete(folder, true);
+        }
+    }
+}
+
 public sealed class VoyageLogsTests
 {
     [Fact]

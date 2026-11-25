@@ -792,6 +792,14 @@ function scrambleXml(count) {
     "  <archOffsets />", "  <islandOffsets>", vectors, "  </islandOffsets>", "</ScrambledSeasSaveContainer>"].join("\r\n");
 }
 
+test("a Scrambled Seas save moves each Fire Fish Lagoon islet with the island it belongs to", () => {
+  // Island N moves N degrees east: the West Islet is part of Sen'na (28), the South Island of Fire Fish Town (26).
+  const chart = importScrambledSeas(parseScrambledSeasXml(scrambleXml(67)));
+  const moved = (id) => chart.scramble.islands.find((island) => island.id === id).lon - islandById(id).sourceCenter.lon;
+  assert.ok(Math.abs(moved("firefish/fire_fish_islands/west_islet") - 28) < 1e-4);
+  assert.ok(Math.abs(moved("firefish/fire_fish_islands/south_island") - 26) < 1e-4);
+});
+
 test("a Scrambled Seas save moves each island by its own offset", () => {
   const chart = importScrambledSeas(parseScrambledSeasXml(scrambleXml(67)));
   assert.equal(chart.seed, "-42");

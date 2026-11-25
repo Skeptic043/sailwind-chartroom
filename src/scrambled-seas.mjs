@@ -1,5 +1,5 @@
 // Reads the world a Scrambled Seas save describes, and places the game's islands where it moved them.
-import { ISLAND_CATALOG, VANILLA_ISLANDS, islandById } from "./islands.mjs";
+import { ISLAND_CATALOG, VANILLA_ISLANDS, islandById, islandShoreDistance } from "./islands.mjs";
 
 // Scrambled Seas stores each island's move in metres from where the game places it, 9000 to a degree:
 // x east and z north. The offsets are listed by the game's island number, starting from island 1.
@@ -26,17 +26,66 @@ export function islandIdForNumber(number) {
   return GAME_ISLANDS[number] ?? "";
 }
 
-// The other Fire Fish Lagoon islets are not islands of their own in the game. Each moves with the
-// nearest lagoon island, which is an assumption until checked against a scrambled game.
-const LAGOON_NUMBERS = [26, 27, 28, 29, 31];
 const ISLAND_NUMBERS = new Map(Object.entries(GAME_ISLANDS).map(([number, id]) => [id, Number(number)]));
-for (const island of ISLAND_CATALOG) {
-  if (island.partOf !== "firefish/fire_fish_islands" || ISLAND_NUMBERS.has(island.id)) continue;
-  const distance = (number) => {
-    const centre = islandById(GAME_ISLANDS[number]).sourceCenter;
-    return Math.hypot(centre.lat - island.sourceCenter.lat, centre.lon - island.sourceCenter.lon);
-  };
-  ISLAND_NUMBERS.set(island.id, LAGOON_NUMBERS.reduce((best, number) => distance(number) < distance(best) ? number : best));
+
+// The other Fire Fish Lagoon islets are parts of the numbered lagoon islands: each "island N" root carries a
+// landmass mesh that includes them, so each islet moves with its island. Matched against the game's colliders.
+const LAGOON_PIECES = Object.freeze({
+  "firefish/fire_fish_islands/west_islet": 28,
+  "firefish/fire_fish_islands/south_spike_east": 27, "firefish/fire_fish_islands/south_spike_west": 27,
+  "firefish/fire_fish_islands/south_island": 26, "firefish/fire_fish_islands/southeast_island": 26,
+  "firefish/fire_fish_islands/central_island": 26, "firefish/fire_fish_islands/east_island": 26,
+  "firefish/fire_fish_islands/east_islet": 26
+});
+for (const [id, number] of Object.entries(LAGOON_PIECES)) ISLAND_NUMBERS.set(id, number);
+// Shallow sandbars belong to a root the game numbers -1, which Scrambled Seas moves with the whole Lagoon region.
+export const LAGOON_ROOT = "island 26 lagoon parent terrain (-1)";
+// A sandbar landing outside every islet's outline still belongs to an islet within 0.03 degrees of its shore.
+const NEAR_SANDBAR_DEGREES = 0.03;
+
+// Where the game places the roots of the lagoon islands with islets, as world metres, latitude 36 at world zero.
+// Used for a sandbar landfall, which has no island root of its own.
+const LAGOON_ROOTS = Object.freeze({ 26: [28416, -70722], 27: [26044.6015625, -71137.3984375], 28: [24718.6015625, -69919.3984375] });
+
+// The islet whose outline is nearest the player, within near degrees of its shore.
+function pieceAt(pieces, player, near) {
+  let best;
+  let bestDistance = near;
+  for (const piece of pieces) {
+    const distance = islandShoreDistance(piece, piece.sourceCenter, player);
+    if (distance < bestDistance || (!best && distance <= near)) [best, bestDistance] = [piece, distance];
+  }
+  return best;
+}
+
+// Fire Fish Town, Kicia Bay and Sen'na always keep their islets in the same places around them, so reaching any
+// part of one charts all of it: the island at its root, and each islet as a "piece" landfall where the island's
+// offset puts it. Given a native landfall or a port visit's root on one of them, or in the game's own world a
+// sandbar landfall near one of their islets. Null for anything else, and where the offset isn't known: a
+// scrambled world's sandbars stay where the region moved them, away from the islands.
+export function lagoonGroup(record, vanilla) {
+  let number;
+  let root;
+  let offset = { offsetLat: 0, offsetLon: 0 };
+  if (record.source === "native") {
+    number = Number(record.islandId);
+    if (!LAGOON_ROOTS[number] || !Number.isFinite(record.islandLat) || !Number.isFinite(record.islandLon)) return null;
+    if (Number.isFinite(record.offsetLat) && Number.isFinite(record.offsetLon)) offset = { offsetLat: record.offsetLat, offsetLon: record.offsetLon };
+    else if (!vanilla) return null;
+    root = { islandLat: record.islandLat, islandLon: record.islandLon };
+  } else if (record.source === "unnumbered" && record.islandId === LAGOON_ROOT && vanilla && Number.isFinite(record.lat) && Number.isFinite(record.lon)) {
+    const islet = pieceAt(ISLAND_CATALOG.filter((island) => LAGOON_PIECES[island.id]), record, NEAR_SANDBAR_DEGREES);
+    if (!islet) return null;
+    number = LAGOON_PIECES[islet.id];
+    const [x, z] = LAGOON_ROOTS[number];
+    root = { islandLat: 36 + z / METRES_PER_DEGREE, islandLon: x / METRES_PER_DEGREE };
+  } else {
+    return null;
+  }
+  const islets = ISLAND_CATALOG.filter((island) => LAGOON_PIECES[island.id] === number).map((islet) => ({
+    source: "piece", islandId: islet.id, islandLat: islet.sourceCenter.lat + offset.offsetLat, islandLon: islet.sourceCenter.lon + offset.offsetLon, ...offset
+  }));
+  return [{ source: "native", islandId: String(number), ...root, ...offset }, ...islets];
 }
 
 const MAP_ISLANDS = Object.freeze([...VANILLA_ISLANDS, islandById("better-ports/bottleneck")].filter(Boolean));

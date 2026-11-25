@@ -588,3 +588,57 @@ test("legacy exports can carry a declared world and parse Scrambled Seas XML or 
   assert.equal(isWorldGeneratorLink("https://example.com/#v=1&seed=-77"), false);
   assert.equal(isWorldGeneratorLink("https://skeptic043.github.io/scrambled-seas-world-generator/#v=1"), false);
 });
+
+test("reaching any part of Fire Fish Town, Kicia Bay or Sen'na charts the whole island with its islets", () => {
+  const town = islandById("firefish/fire_fish_town");
+  const fireFishTown = ["firefish/fire_fish_town", "firefish/fire_fish_islands/south_island", "firefish/fire_fish_islands/southeast_island",
+    "firefish/fire_fish_islands/central_island", "firefish/fire_fish_islands/east_island", "firefish/fire_fish_islands/east_islet"];
+  const vanilla = { type: "session", game: "g1", world: { kind: "vanilla" } };
+  // Voyage Recorder writes Fire Fish Town's root, where the game places it, for a landfall anywhere on it.
+  const root = { islandLat: 36 - 70722 / 9000, islandLon: 28416 / 9000 };
+  const landing = { type: "landfall", day: 3, hour: 9, source: "native", islandId: "26", lat: 28.2, lon: 3.1, ...root };
+  const ids = (records) => discoveredMarks(createChart(), readVoyageRecorder(log(...records))).features.map((feature) => feature.islandId);
+  assert.deepEqual(ids([vanilla, landing]), fireFishTown);
+
+  const chart = createChart();
+  applyMarks(chart, discoveredMarks(chart, readVoyageRecorder(log(vanilla, landing))));
+  const port = { type: "port", day: 3, hour: 10, island: 26, port: "Fire Fish Town", lat: root.islandLat, lon: root.islandLon };
+  assert.equal(discoveredMarks(chart, readVoyageRecorder(log(vanilla, port))).features.length, 0, "a later port visit adds nothing new");
+  assert.deepEqual(ids([vanilla, port]), fireFishTown, "a port visit charts the islets too");
+  assert.deepEqual(ids([vanilla, { ...port, island: 28, port: "Sen'na" }]), ["firefish/senna", "firefish/fire_fish_islands/west_islet"]);
+
+  // Scrambled Seas moved Fire Fish Town, and its islets with it, one degree north and two east.
+  const scrambled = { type: "session", game: "g2", world: { kind: "scrambled" } };
+  const moved = { ...landing, islandLat: root.islandLat + 1, islandLon: root.islandLon + 2, offsetLat: 1, offsetLon: 2 };
+  const placed = discoveredMarks(createChart(), readVoyageRecorder(log(scrambled, moved))).features;
+  const islet = islandById("firefish/fire_fish_islands/central_island");
+  const central = placed.find((feature) => feature.islandId === islet.id);
+  assert.ok(Math.abs(central.lat - (islet.sourceCenter.lat + 1)) < 1e-9 && Math.abs(central.lon - (islet.sourceCenter.lon + 2)) < 1e-9,
+    "each islet keeps its place beside the moved town");
+  assert.equal(ids([scrambled, { ...landing }]).length, 1, "without its offset, a scrambled town charts only itself");
+
+  // Voyage Recorder's landfalls on the shallow sandbars name the lagoon's own root; near an islet, its island counts.
+  const near = islandById("firefish/fire_fish_islands/south_island");
+  const ring = near.shapes[0].rings[0];
+  const onIslet = { lat: near.sourceCenter.lat + ring[1], lon: near.sourceCenter.lon + ring[0] };
+  const sandbar = { type: "landfall", day: 3, hour: 9, source: "unnumbered", islandId: "island 26 lagoon parent terrain (-1)",
+    ...onIslet, islandLat: 28.098778, islandLon: 2.974111 };
+  assert.deepEqual(ids([vanilla, sandbar]), fireFishTown);
+  assert.deepEqual(ids([scrambled, sandbar]), [], "sandbars Scrambled Seas left behind chart nothing");
+  assert.equal(town.id, fireFishTown[0]);
+});
+
+test("a capital's island hint draws a search area that a landfall there answers", () => {
+  const oracle = islandById("aestrin/oracle");
+  const hint = { type: "mission", day: 3, hour: 10, source: "capital", origin: "Fort Aestrin", originIsland: 15, originLat: 37.5, originLon: 0.5,
+    destination: "Oracle", destinationIsland: 23, heading: 90, points: 32, miles: 60 };
+  // Sixty miles west of Oracle, so the island lies along the hinted heading.
+  Object.assign(hint, { originLat: oracle.sourceCenter.lat, originLon: oracle.sourceCenter.lon - 60 / 140 });
+  const chart = createChart();
+  applyMarks(chart, discoveredMarks(chart, readVoyageRecorder(log(hint))));
+  assert.deepEqual(chart.searches.map(({ label, spreadDeg }) => ({ label, spreadDeg })), [{ label: "Oracle", spreadDeg: 180 / 32 }]);
+  const landing = { type: "landfall", day: 4, hour: 9, source: "native", islandId: "23", lat: oracle.sourceCenter.lat, lon: oracle.sourceCenter.lon,
+    islandLat: oracle.sourceCenter.lat, islandLon: oracle.sourceCenter.lon };
+  const found = discoveredMarks(chart, readVoyageRecorder(log({ type: "session", game: "g1", world: { kind: "vanilla" } }, landing)));
+  assert.deepEqual(found.answered, [chart.searches[0].id], "landing on Oracle clears its search area");
+});

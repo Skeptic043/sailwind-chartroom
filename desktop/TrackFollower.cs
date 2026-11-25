@@ -8,10 +8,16 @@ namespace SailwindChartroom;
 /// </summary>
 internal sealed class TrackFollower : IDisposable
 {
+    // Sync clients such as Google Drive can stop Windows reporting changes to a file they watch too, so the file
+    // is also checked this often: one open and a length check, with nothing read when nothing was added.
+    private static readonly TimeSpan CheckEvery = TimeSpan.FromSeconds(5);
+
     private readonly string path;
     private readonly Action<string> onText;
-    private readonly FileSystemWatcher watcher;
+    private readonly bool watchChanges;
+    private readonly System.Threading.Timer check;
     private readonly object gate = new();
+    private FileSystemWatcher? watcher;
     private TrackTail tail = TrackTail.Start;
     private bool stopped;
 
@@ -19,24 +25,59 @@ internal sealed class TrackFollower : IDisposable
 
     /// <param name="onText">Called on a worker thread with whole lines, each run led by its Day line.
     /// Calls never overlap and come in file order, and none starts after Dispose returns.</param>
-    public TrackFollower(string path, Action<string> onText)
+    public TrackFollower(string path, Action<string> onText) : this(path, onText, CheckEvery, watchChanges: true) { }
+
+    internal TrackFollower(string path, Action<string> onText, TimeSpan checkEvery, bool watchChanges)
     {
         this.path = Path.GetFullPath(path);
         this.onText = onText;
+        this.watchChanges = watchChanges;
+        check = new System.Threading.Timer(_ => ReadNew(), null, checkEvery, checkEvery);
         // Watching starts before the first read, so a position written meanwhile is read by the next change.
-        watcher = new FileSystemWatcher(Path.GetDirectoryName(this.path)!, Path.GetFileName(this.path))
-        {
-            NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size | NotifyFilters.FileName
-        };
-        watcher.Changed += (_, _) => ReadNew();
-        watcher.Created += (_, _) => ReadNew();
-        watcher.EnableRaisingEvents = true;
         // The whole file goes first, so the page can join it to the chart's track and offer what it missed.
         lock (gate)
         {
+            Watch();
             (string text, tail) = Read(TrackTail.Start);
             if (text.Length > 0) onText(text);
         }
+    }
+
+    // Called holding the lock, so an error raised as soon as watching starts waits to replace this watcher.
+    private void Watch()
+    {
+        if (!watchChanges) return;
+        var created = new FileSystemWatcher(Path.GetDirectoryName(path)!, Path.GetFileName(path))
+        {
+            NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size | NotifyFilters.FileName
+        };
+        created.Changed += (_, _) => ReadNew();
+        created.Created += (_, _) => ReadNew();
+        // A sync client may put a new copy of the file in place by renaming it.
+        created.Renamed += (_, _) => ReadNew();
+        // After an error Windows reports nothing more, so watching starts again.
+        created.Error += (_, _) => Rewatch();
+        watcher = created;
+        created.EnableRaisingEvents = true;
+    }
+
+    private void Rewatch()
+    {
+        lock (gate)
+        {
+            if (stopped) return;
+            watcher?.Dispose();
+            try
+            {
+                Watch();
+            }
+            catch (Exception error) when (error is IOException or ArgumentException or UnauthorizedAccessException)
+            {
+                // The folder may be briefly unavailable; the timed check keeps following meanwhile.
+                watcher = null;
+            }
+        }
+        ReadNew();
     }
 
     // Reading and reporting share one lock, so two changes close together report in order.
@@ -66,8 +107,12 @@ internal sealed class TrackFollower : IDisposable
 
     public void Dispose()
     {
-        watcher.Dispose();
-        lock (gate) stopped = true;
+        check.Dispose();
+        lock (gate)
+        {
+            stopped = true;
+            watcher?.Dispose();
+        }
     }
 }
 

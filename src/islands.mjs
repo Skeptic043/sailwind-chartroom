@@ -107,6 +107,24 @@ export function islandContains(island, feature, point) {
   return inside;
 }
 
+// How far a point is from an island's shore, in degrees: 0 inside it.
+export function islandShoreDistance(island, feature, point) {
+  if (islandContains(island, feature, point)) return 0;
+  const x = Number(point.lon) - Number(feature.lon);
+  const y = Number(point.lat) - Number(feature.lat);
+  let nearest = Infinity;
+  for (const shape of island.shapes) {
+    for (const ring of shape.rings) {
+      for (let current = 0, previous = ring.length - 2; current < ring.length; previous = current, current += 2) {
+        const x1 = ring[previous], y1 = ring[previous + 1], dx = ring[current] - x1, dy = ring[current + 1] - y1;
+        const along = dx || dy ? Math.max(0, Math.min(1, ((x - x1) * dx + (y - y1) * dy) / (dx * dx + dy * dy))) : 0;
+        nearest = Math.min(nearest, Math.hypot(x - x1 - along * dx, y - y1 - along * dy));
+      }
+    }
+  }
+  return nearest;
+}
+
 function pointInRing(ring, x, y) {
   let inside = false;
   for (let current = 0, previous = ring.length - 2; current < ring.length; previous = current, current += 2) {

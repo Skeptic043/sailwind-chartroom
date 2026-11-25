@@ -1,5 +1,5 @@
 import { islandById } from "./islands.mjs";
-import { scrambledIslands } from "./scrambled-seas.mjs";
+import { lagoonGroup, scrambledIslands } from "./scrambled-seas.mjs";
 import { clockText, parseDayTime } from "./gametime.mjs";
 import { isLocationIcon } from "./icons.mjs";
 import { defaultEquipment, fullyKnown, sanitizeEquipment } from "./equipment.mjs";
@@ -919,12 +919,14 @@ function discoveryLabel(name, discovery) {
 }
 
 // The recorder's identity and island root stay with the location when the player renames or moves it.
+// A "piece" discovery is a Fire Fish Lagoon islet, part of a numbered island in the game: its id is the chart's
+// island id for it, and its island position is where that islet's outline sits.
 function sanitizeDiscovery(value) {
-  if (value?.source !== "native" && value?.source !== "terra-incognita") return null;
+  if (value?.source !== "native" && value?.source !== "terra-incognita" && value?.source !== "piece") return null;
   const { source, islandLat, islandLon } = value;
   if (!Number.isFinite(islandLat) || !Number.isFinite(islandLon) || !isFiniteCoordinate(islandLat, islandLon)) return null;
   const islandId = typeof value.islandId === "string" ? cleanText(value.islandId, 120) : "";
-  if (!islandId || (source === "native" && !/^[1-9]\d*$/.test(islandId))) return null;
+  if (!islandId || (source === "native" && !/^[1-9]\d*$/.test(islandId)) || (source === "piece" && !islandById(islandId))) return null;
   const { prefab, yaw } = value;
   return { source, islandId, islandLat, islandLon,
     ...(source === "terra-incognita" && typeof prefab === "string" && /^[a-z]+_\d+$/.test(prefab) &&
@@ -1253,6 +1255,12 @@ export function compassPoint(degrees) {
   return COMPASS_POINTS[Math.round(((degrees % 360) + 360) % 360 / COMPASS_STEP_DEG) % COMPASS_POINTS.length];
 }
 
+// A track position's wind named as weather charts name it, by where it comes from. windDeg is where it blows
+// toward, as its arrow points; wind text without a bearing shows as it was written.
+export function trackWindText(point) {
+  return Number.isFinite(point.windDeg) ? compassPoint(point.windDeg + 180) : point.wind;
+}
+
 const WORLD_WIDTH = WORLD_BOUNDS.maxLon - WORLD_BOUNDS.minLon;
 
 // Where a leg from one point heads for the other. Around the world, a leg more than half the chart
@@ -1341,8 +1349,9 @@ export function parseVoyageRecorder(text, carry = { newSession: false }) {
 // book (FORMAT.md). A run of lines can hold ports or missions without any position.
 // A save slot's log holds every game played in it. Session lines name their game, and newGames counts the
 // changes from one game to another; with latestGame only what follows the last change is kept. Sessions
-// without a game (Voyage Recorder 0.1.8 and earlier) count as one earlier game of their own.
-export function readVoyageRecorder(text, carry = { newSession: false }, { latestGame = false } = {}) {
+// without a game (Voyage Recorder 0.1.8 and earlier) count as one earlier game of their own. With stopAtNewGame,
+// reading stops where a different game begins, and stoppedAtNewGame says so.
+export function readVoyageRecorder(text, carry = { newSession: false }, { latestGame = false, stopAtNewGame = false } = {}) {
   let points = [];
   let ports = [];
   let landfalls = [];
@@ -1361,6 +1370,7 @@ export function readVoyageRecorder(text, carry = { newSession: false }, { latest
   let newGames = 0;
   // The next position is the first of a different game from the one before it.
   let newGame = false;
+  let stoppedAtNewGame = false;
   // Marks taken back with Voyage Recorder's undo that weren't in this text; the caller removes them from the chart.
   const undone = [];
   for (const rawLine of String(text ?? "").split(/\r?\n/)) {
@@ -1376,6 +1386,10 @@ export function readVoyageRecorder(text, carry = { newSession: false }, { latest
       newSession = true;
       const named = typeof record.game === "string" ? record.game : "";
       if (game !== null && named !== game) {
+        if (stopAtNewGame) {
+          stoppedAtNewGame = true;
+          break;
+        }
         newGames++;
         newGame = true;
         if (latestGame) {
@@ -1404,12 +1418,16 @@ export function readVoyageRecorder(text, carry = { newSession: false }, { latest
     const when = { day, time: t === null ? "" : clockText(hours) };
     const utc = Number.isFinite(record?.utc) && record.utc > 0 ? Number(record.utc) : null;
     if (record?.type === "landfall") {
-      const landfall = sanitizeDiscovery(record);
-      if (landfall && t !== null && Number.isFinite(record.hour) && hours >= 0 && hours < 24 &&
+      if (t !== null && Number.isFinite(record.hour) && hours >= 0 && hours < 24 &&
           Number.isFinite(record.lat) && Number.isFinite(record.lon) && isFiniteCoordinate(record.lat, record.lon)) {
-        const offset = landfall.source === "native" && Number.isFinite(record.offsetLat) && Number.isFinite(record.offsetLon)
-          ? { offsetLat: record.offsetLat, offsetLon: record.offsetLon } : {};
-        landfalls.push({ ...landfall, ...when, ...offset, name: cleanText(record.name, 100), lat: record.lat, lon: record.lon, vanilla });
+        // Reaching any part of a Fire Fish Lagoon island with islets charts the whole island.
+        for (const identity of lagoonGroup(record, vanilla) ?? [record]) {
+          const landfall = sanitizeDiscovery(identity);
+          if (!landfall) continue;
+          const offset = landfall.source !== "terra-incognita" && Number.isFinite(identity.offsetLat) && Number.isFinite(identity.offsetLon)
+            ? { offsetLat: identity.offsetLat, offsetLon: identity.offsetLon } : {};
+          landfalls.push({ ...landfall, ...when, ...offset, name: identity === record ? cleanText(record.name, 100) : "", lat: record.lat, lon: record.lon, vanilla });
+        }
       }
       continue;
     }
@@ -1442,6 +1460,12 @@ export function readVoyageRecorder(text, carry = { newSession: false }, { latest
         vanilla,
         ...(Number.isFinite(record.offsetLat) && Number.isFinite(record.offsetLon) && { offsetLat: record.offsetLat, offsetLon: record.offsetLon })
       });
+      // A port on a Fire Fish Lagoon island with islets charts its islets as well.
+      const group = lagoonGroup({ source: "native", islandId: String(record.island), islandLat: record.lat, islandLon: record.lon,
+        offsetLat: record.offsetLat, offsetLon: record.offsetLon }, vanilla) ?? [];
+      for (const identity of group.slice(1)) {
+        landfalls.push({ ...sanitizeDiscovery(identity), ...when, offsetLat: identity.offsetLat, offsetLon: identity.offsetLon, name: "", lat: record.lat, lon: record.lon, vanilla });
+      }
       continue;
     }
     if (record?.type === "mission" && isFiniteCoordinate(record.originLat, record.originLon) && cleanText(record.destination, 100)) {
@@ -1490,7 +1514,7 @@ export function readVoyageRecorder(text, carry = { newSession: false }, { latest
   carry.newSession = newSession;
   carry.game = game;
   carry.vanilla = vanilla;
-  return { points, ports, landfalls, missions, notes, visits, session, keys, newGames, undone };
+  return { points, ports, landfalls, missions, notes, visits, session, keys, newGames, undone, stoppedAtNewGame };
 }
 
 // What a Voyage Recorder session line says about the game it records: which game, the world (vanilla or a
