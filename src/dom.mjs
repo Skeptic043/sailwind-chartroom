@@ -17,7 +17,7 @@ export const elements = Object.fromEntries([
   "wind-inspector", "wind-form", "wind-label", "wind-lat", "wind-lon", "wind-direction", "wind-day", "wind-time", "delete-wind",
   "feature-count", "feature-search", "feature-list", "item-filter", "track-file", "json-file",
   "chart-dialog", "chart-form", "chart-dialog-title", "dialog-chart-name", "dialog-chart-seed", "dialog-chart-clock", "delete-chart", "help-dialog",
-  "paste-dialog", "paste-form", "paste-text", "missing-dialog", "missing-form", "missing-text", "slot-dialog", "slot-form", "slot-list", "slot-pick-file", "pin-window", "open-folder", "storage-note",
+  "paste-dialog", "paste-form", "paste-text", "missing-dialog", "missing-form", "missing-text", "slot-dialog", "slot-form", "slot-list", "slot-pick-file", "import-dialog", "import-form", "import-list", "import-pick-file", "pin-window", "open-folder", "storage-note",
   "open-devices", "devices-separator", "devices-dialog", "devices-form", "devices-enabled", "devices-error", "devices-pairing", "devices-qr", "devices-url", "devices-code", "devices-address-row", "devices-address", "devices-connect", "devices-list", "conflict-dialog", "conflict-form", "conflict-text", "conflict-actions", "device-settings-dialog", "device-settings-form", "device-theme", "device-appearance", "device-icon-size", "device-share-view", "touch-menu", "touch-chart-select", "touch-undo", "touch-redo", "touch-items", "follow-chip", "tool-done", "sheet-size", "sheet-close",
   "island-dialog", "island-dialog-hint", "island-search", "island-region", "island-secrets", "island-list", "remove-island",
   "boat-dialog", "boat-dialog-hint", "boat-search", "boat-provider", "boat-list", "remove-boat",
@@ -31,7 +31,7 @@ export const elements = Object.fromEntries([
   "compare-section", "compare-count", "compare-list", "compare-align", "compare-scrub-row", "compare-play", "compare-scrub", "compare-speed", "compare-speed-label", "compare-total", "compare-elapsed", "compare-point", "track-compare-start", "track-join",
   "manage-charts", "manage-dialog", "manage-list", "manage-new-folder", "manage-rename", "manage-move", "manage-up", "manage-down", "manage-delete", "manage-path",
   "layer-key-overlay", "key-overlay", "key-overlay-heading", "route-summary-heading", "show-route-panel", "key-overlay-rows",
-  "equipment-panel", "equipment-state", "equipment-enabled", "equipment-items",
+  "equipment-panel", "equipment-state", "equipment-enabled", "equipment-summary", "equipment-hint", "equipment-items", "equipment-mod-groups", "equipment-mods-panel", "equipment-mods", "equipment-history-open", "equipment-history-dialog", "equipment-history", "rs-difficulty-dialog", "rs-difficulty-form", "rs-difficulty-list",
   "note-popout", "note-popout-title", "note-popout-close", "note-popout-type", "note-popout-types", "note-popout-text",
   "note-inspector", "note-kind", "note-form", "note-name", "note-lat", "note-lon", "note-day", "note-time", "note-recorded", "open-note", "delete-note"
 ].map((id) => [id, document.getElementById(id)]));

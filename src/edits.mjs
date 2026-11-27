@@ -101,13 +101,17 @@ export function updateSelectedFromForm(kind) {
     if (kind === "track") {
       const day = elements["track-day"].value.trim();
       const time = elements["track-time"].value.trim();
-      const wind = elements["track-wind"].value.trim();
-      Object.assign(updates, { name: elements["track-name"].value.trim(), day, time, wind });
+      Object.assign(updates, { name: elements["track-name"].value.trim(), day, time });
       // The exact game time and wind bearing follow the text only when it is changed.
       if (day !== item.day || time !== item.time) updates.t = parseDayTime(day, time);
       // The field names where the wind comes from; windDeg is where it blows toward.
-      if (wind !== trackWindText(item)) {
-        try { updates.windDeg = (parseBearing(wind) + 180) % 360; } catch { updates.windDeg = null; }
+      // When hidden by Equipment (Windicators), leave the recorded wind untouched.
+      if (!elements["track-wind"].disabled) {
+        const wind = elements["track-wind"].value.trim();
+        updates.wind = wind;
+        if (wind !== trackWindText(item)) {
+          try { updates.windDeg = (parseBearing(wind) + 180) % 360; } catch { updates.windDeg = null; }
+        }
       }
     }
     if (kind === "note") {

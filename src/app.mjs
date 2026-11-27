@@ -282,11 +282,43 @@ elements["import-json"].addEventListener("click", () => {
   if (host.importFilePicker) host.pickImportFile();
   else elements["json-file"].click();
 });
+host.on("import-choices", ({ files }) => {
+  if (!Array.isArray(files) || !files.length) return host.pickImportFile({ pick: true });
+  elements["import-list"].replaceChildren(...files.map((file, index) => {
+    const name = String(file.name ?? "");
+    const slot = /^scramble_(\d+)\.xml$/i.exec(name);
+    const label = document.createElement("label");
+    const input = Object.assign(document.createElement("input"), { type: "radio", name: "import-choice", value: String(file.id), checked: index === 0 });
+    const title = Object.assign(document.createElement("strong"), { textContent: slot ? `Save slot ${slot[1]} (Scrambled Seas)` : name });
+    const detail = Object.assign(document.createElement("span"), { textContent: [String(file.place ?? ""), formatImportAge(file.modified)].filter(Boolean).join(" · ") });
+    label.append(input, title, detail);
+    return label;
+  }));
+  if (!elements["import-dialog"].open) elements["import-dialog"].showModal();
+});
+elements["import-form"].addEventListener("submit", () => {
+  const chosen = elements["import-list"].querySelector("input:checked");
+  if (chosen) host.pickImportFile({ file: Number(chosen.value) });
+});
+elements["import-pick-file"].addEventListener("click", () => {
+  elements["import-dialog"].close();
+  host.pickImportFile({ pick: true });
+});
 host.on("import-file", ({ name, contents }) => {
   if (typeof contents !== "string") return;
   reportErrors(() => importChartText(contents, name));
 });
 elements["json-file"].addEventListener("change", (event) => reportErrors(() => importChartFile(event.target.files[0]), event.target));
+
+function formatImportAge(modified) {
+  const minutes = Math.round((Date.now() - Date.parse(modified)) / 60000);
+  if (!Number.isFinite(minutes)) return "";
+  if (minutes < 1) return "updated just now";
+  if (minutes < 60) return `updated ${minutes} minute${minutes === 1 ? "" : "s"} ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 48) return `updated ${hours} hour${hours === 1 ? "" : "s"} ago`;
+  return `updated ${Math.round(hours / 24)} days ago`;
+}
 elements["export-json"].addEventListener("click", exportActiveChart);
 elements["export-csv"].addEventListener("click", exportLocationsCsv);
 elements["export-all"].addEventListener("click", exportWorkspace);

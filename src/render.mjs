@@ -249,7 +249,7 @@ const TRACK_WIND_SPACING_PX = 70;
 // Returns the last position and the one before it in its stretch, for drawLastPosition.
 function drawTrack(palette, chart, layers) {
   const gated = chart.equipment?.enabled === true;
-  if (gated) drawLatitudeLines(palette, chart, layers);
+  if (gated) drawPartialLines(palette, chart, layers);
   const track = shownItems(chart, "track", layers);
   if (!track.length) return null;
   const { width, height } = canvas.getBoundingClientRect();
@@ -280,14 +280,18 @@ function drawTrack(palette, chart, layers) {
       }
     }
   }
-  const visible = (screen) => screen.x >= -12 && screen.y >= -12 && screen.x <= width + 12 && screen.y <= height + 12;
+  const visible = (screen, margin = 12) => screen.x >= -margin && screen.y >= -margin && screen.x <= width + margin && screen.y <= height + margin;
+  const roughRadiusPx = Math.max(ROUGH_FIX_MIN_PX, ROUGH_FIX_NM / NM_PER_DEGREE * chart.view.zoom);
+  const roughSpacingPx = Math.max(roughRadiusPx * 1.4, ROUGH_FIX_MIN_SPACING_PX);
   let lastDot = null;
+  let lastRough = null;
   let lastWind = null;
   for (const point of track) {
     const screen = project(point);
     const selected = isSelected("track", point.id);
-    if (!selected && !visible(screen)) continue;
-    if (layers.trackWinds && Number.isFinite(point.windDeg) && (!lastWind || Math.hypot(screen.x - lastWind.x, screen.y - lastWind.y) >= TRACK_WIND_SPACING_PX)) {
+    const knowledge = gated ? readingKnowledge(chart, point) : null;
+    if (!selected && !visible(screen, knowledge?.rough ? roughRadiusPx + 4 : 12)) continue;
+    if (layers.trackWinds && Number.isFinite(point.windDeg) && (!knowledge || knowledge.windDir) && (!lastWind || Math.hypot(screen.x - lastWind.x, screen.y - lastWind.y) >= TRACK_WIND_SPACING_PX)) {
       drawTrackWind(screen, point.windDeg, palette);
       lastWind = screen;
     }
@@ -301,6 +305,24 @@ function drawTrack(palette, chart, layers) {
       context.arc(screen.x, screen.y, 5.5, 0, Math.PI * 2);
       context.stroke();
       context.restore();
+    }
+    if (knowledge?.rough) {
+      if (!selected && lastRough && Math.hypot(screen.x - lastRough.x, screen.y - lastRough.y) < roughSpacingPx) continue;
+      lastRough = screen;
+      context.save();
+      context.beginPath();
+      context.arc(screen.x, screen.y, roughRadiusPx, 0, Math.PI * 2);
+      context.fillStyle = palette.track;
+      context.globalAlpha = 0.06;
+      context.fill();
+      context.globalAlpha = 0.55;
+      context.strokeStyle = palette.track;
+      context.lineWidth = 1.25;
+      context.setLineDash([4, 5]);
+      context.stroke();
+      context.restore();
+      if (selected) selectionHalo(screen, palette);
+      continue;
     }
     if (!selected && lastDot && Math.hypot(screen.x - lastDot.x, screen.y - lastDot.y) < TRACK_DOT_SPACING_PX) continue;
     lastDot = screen;
@@ -326,21 +348,30 @@ function drawTrack(palette, chart, layers) {
   return { last: lastSegment.at(-1), previous: lastSegment.at(-2) };
 }
 
-// Latitude-only readings (a quadrant at night, or a noon sight without a timekeeper) as short lines of
-// latitude. The longitude wasn't known, so each is centred on the last position the player did know in
-// full before it, or the last DR position; with neither, on the reading itself.
-const LATITUDE_LINE_NM = 20;
-const LATITUDE_LINE_MIN_PX = 10;
+// Partial readings: latitude-only (horizontal) or longitude-only (vertical) lines. When no prior full fix
+// or DR anchor exists, the line spans the visible chart so the unknown coordinate is never leaked; with an
+// anchor, it draws a wide band centred on the anchor rather than on the true hidden coordinate.
+const PARTIAL_LINE_NM = 140;
+const PARTIAL_LINE_MIN_PX = 110;
+const PARTIAL_LINE_SPACING_PX = 14;
+const PARTIAL_WIND_STEP_PX = 140;
+const ROUGH_FIX_NM = 25;
+const ROUGH_FIX_MIN_PX = 14;
+const ROUGH_FIX_MIN_SPACING_PX = 55;
 
-function drawLatitudeLines(palette, chart, layers) {
+function drawPartialLines(palette, chart, layers) {
   if (!layers.track) return;
+  const { width, height } = canvas.getBoundingClientRect();
   const zoom = chart.view.zoom;
-  const halfPx = Math.max(LATITUDE_LINE_MIN_PX, LATITUDE_LINE_NM / NM_PER_DEGREE * zoom);
+  const halfPx = Math.max(PARTIAL_LINE_MIN_PX, PARTIAL_LINE_NM / NM_PER_DEGREE * zoom);
   let lastKnown = null;
-  let lastDrawn = null;
+  let lastLat = null;
+  let lastLon = null;
+  let lastLatWind = null;
+  let lastLonWind = null;
   context.save();
   context.strokeStyle = palette.track;
-  context.lineWidth = 1.6;
+  context.lineWidth = 1.4;
   context.lineCap = "round";
   for (const point of chart.track) {
     if (!trackLayerShown(chart, point, layers)) continue;
@@ -349,16 +380,69 @@ function drawLatitudeLines(palette, chart, layers) {
       lastKnown = point;
       continue;
     }
-    if (!knowledge.lat) continue;
+    if (!knowledge.lat && !knowledge.lon) continue;
     const reckoned = chart.drPositions.findLast((position) => Number.isFinite(position.t) && Number.isFinite(point.t) && position.t <= point.t);
-    const centre = [lastKnown, reckoned].filter(Boolean).sort((a, b) => (b.t ?? -1) - (a.t ?? -1))[0] ?? point;
-    const screen = worldToScreen({ lat: point.lat, lon: centre.lon });
-    if (lastDrawn && Math.abs(screen.y - lastDrawn.y) < 3 && Math.abs(screen.x - lastDrawn.x) < 3) continue;
-    lastDrawn = screen;
-    context.beginPath();
-    context.moveTo(screen.x - halfPx, screen.y);
-    context.lineTo(screen.x + halfPx, screen.y);
-    context.stroke();
+    const anchor = [lastKnown, reckoned].filter(Boolean).sort((a, b) => (b.t ?? -1) - (a.t ?? -1))[0] ?? null;
+    if (knowledge.lat) {
+      const y = worldToScreen({ lat: point.lat, lon: anchor?.lon ?? chart.view.lon }).y;
+      if (y < -12 || y > height + 12) continue;
+      const anchorX = anchor ? worldToScreen({ lat: point.lat, lon: anchor.lon }).x : width / 2;
+      const x0 = anchor ? anchorX - halfPx : 0;
+      const x1 = anchor ? anchorX + halfPx : width;
+      if (x1 < -12 || x0 > width + 12) continue;
+      if (lastLat !== null && Math.abs(y - lastLat) < PARTIAL_LINE_SPACING_PX) continue;
+      lastLat = y;
+      context.save();
+      context.globalAlpha = anchor ? 0.72 : 0.45;
+      context.setLineDash(anchor ? [] : [6, 6]);
+      context.beginPath();
+      context.moveTo(x0, y);
+      context.lineTo(x1, y);
+      context.stroke();
+      context.restore();
+      // Dot wind arrows intermittently along the line rather than at a single point so longitude stays hidden.
+      if (layers.trackWinds && Number.isFinite(point.windDeg) && knowledge.windDir && (lastLatWind === null || Math.abs(y - lastLatWind) >= TRACK_WIND_SPACING_PX)) {
+        lastLatWind = y;
+        const startX = Math.max(28, x0 + 28);
+        const endX = Math.min(width - 28, x1 - 28);
+        const firstX = Math.ceil(startX / PARTIAL_WIND_STEP_PX) * PARTIAL_WIND_STEP_PX;
+        context.save();
+        context.globalAlpha = 0.72;
+        for (let x = firstX; x <= endX; x += PARTIAL_WIND_STEP_PX) {
+          drawTrackWind({ x, y }, point.windDeg, palette);
+        }
+        context.restore();
+      }
+    } else if (knowledge.lon) {
+      const x = worldToScreen({ lat: anchor?.lat ?? chart.view.lat, lon: point.lon }).x;
+      if (x < -12 || x > width + 12) continue;
+      const anchorY = anchor ? worldToScreen({ lat: anchor.lat, lon: point.lon }).y : height / 2;
+      const y0 = anchor ? anchorY - halfPx : 0;
+      const y1 = anchor ? anchorY + halfPx : height;
+      if (y1 < -12 || y0 > height + 12) continue;
+      if (lastLon !== null && Math.abs(x - lastLon) < PARTIAL_LINE_SPACING_PX) continue;
+      lastLon = x;
+      context.save();
+      context.globalAlpha = anchor ? 0.72 : 0.45;
+      context.setLineDash(anchor ? [] : [6, 6]);
+      context.beginPath();
+      context.moveTo(x, y0);
+      context.lineTo(x, y1);
+      context.stroke();
+      context.restore();
+      if (layers.trackWinds && Number.isFinite(point.windDeg) && knowledge.windDir && (lastLonWind === null || Math.abs(x - lastLonWind) >= TRACK_WIND_SPACING_PX)) {
+        lastLonWind = x;
+        const startY = Math.max(28, y0 + 28);
+        const endY = Math.min(height - 28, y1 - 28);
+        const firstY = Math.ceil(startY / PARTIAL_WIND_STEP_PX) * PARTIAL_WIND_STEP_PX;
+        context.save();
+        context.globalAlpha = 0.72;
+        for (let y = firstY; y <= endY; y += PARTIAL_WIND_STEP_PX) {
+          drawTrackWind({ x, y }, point.windDeg, palette);
+        }
+        context.restore();
+      }
+    }
   }
   context.restore();
 }

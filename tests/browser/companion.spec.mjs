@@ -249,9 +249,24 @@ test("equipment readings are switched on per chart with the instruments the play
   await expect(page.locator("#equipment-items input").first()).toBeDisabled();
   await page.locator("#equipment-enabled").check();
   await page.locator("#equipment-items label", { hasText: "Quadrant" }).locator("input").check();
+  await expect(page.locator("#equipment-summary")).toContainText("Latitude (noon & night)");
+  await page.locator("#equipment-mods label", { hasText: "Windicators" }).locator("input").check();
+  await page.locator("#equipment-mod-groups label", { hasText: "Anemometer" }).locator("input").check();
+  await page.locator("#equipment-mods label", { hasText: "Realistic Skies" }).locator("input").check();
+  await expect(page.locator("#rs-difficulty-dialog")).toBeVisible();
+  await page.locator("#rs-difficulty-list label", { hasText: "Magellan" }).locator("input").check();
+  await page.locator('#rs-difficulty-form button[type="submit"]').click();
+  await expect(page.locator("#equipment-items label", { hasText: "Chronometer" }).locator("input")).toBeDisabled();
+  await expect(page.locator("#equipment-mod-groups label", { hasText: "Pocket Watch" }).locator("input")).toBeDisabled();
+  await page.locator("#equipment-history-open").click();
+  await expect(page.locator("#equipment-history-dialog")).toBeVisible();
+  await page.locator('#equipment-history-dialog button[type="submit"]').click();
   const { equipment } = await chartroom.chart();
   expect(equipment.enabled).toBe(true);
-  expect(equipment.changes.at(-1).items).toEqual(["quadrant"]);
+  expect(equipment.mods).toEqual(["realistic-skies", "windicators"]);
+  expect(equipment.rsDifficulty).toBe("magellan");
+  expect(equipment.changes.at(-1).items).toEqual(["quadrant", "windicators-anemometer"]);
+  await expect(page.locator("#equipment-summary")).toContainText("Wind speed");
 });
 
 test("Manage charts sorts charts into folders that the Active chart menu shows", async ({ chartroom, page }) => {
@@ -664,4 +679,29 @@ test("Connect track joins two stretches into one, and the track key explains the
   await expect(page.locator("#track-join")).toBeVisible();
   await page.locator("#track-join").click();
   await expect.poll(async () => (await chartroom.chart()).track.find((point) => point.id === "b0").joinPrevious).toBeUndefined();
+});
+
+test("map import shows discovered files without auto-importing and offers Browse fallback", async ({ chartroom, page }) => {
+  await chartroom.open(null, {
+    importChoices: [
+      { id: 0, name: "scramble_2.xml", place: "Mod Sync (default)", modified: new Date().toISOString() },
+      { id: 1, name: "backup.json", place: "exports", modified: new Date(Date.now() - 3600000).toISOString() }
+    ]
+  });
+  await page.locator('.app-menu[data-menu="file"] > summary').click();
+  await page.locator("#import-json").click();
+  await expect(page.locator("#import-dialog")).toBeVisible();
+  await expect(page.locator("#import-list label")).toHaveCount(2);
+  await expect(page.locator("#import-list")).toContainText("Save slot 2 (Scrambled Seas)");
+  await expect(page.locator("#import-list")).toContainText("Mod Sync (default)");
+  // Clicking Browse closes the dialog and asks the host to open the native file dialog.
+  await page.locator("#import-pick-file").click();
+  await expect(page.locator("#import-dialog")).toBeHidden();
+  await expect.poll(() => page.evaluate(() => window.__host.imports.at(-1))).toEqual({ pick: true });
+  // Opening again and choosing the second file sends { file: 1 } to the host.
+  await page.locator('.app-menu[data-menu="file"] > summary').click();
+  await page.locator("#import-json").click();
+  await page.locator("#import-list label", { hasText: "backup.json" }).locator("input").check();
+  await page.locator('#import-form button[type="submit"]').click();
+  await expect.poll(() => page.evaluate(() => window.__host.imports.at(-1))).toEqual({ file: 1 });
 });

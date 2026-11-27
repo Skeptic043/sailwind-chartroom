@@ -14,7 +14,7 @@ const csp = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 's
 // Stands in for the WebView2 host: answers "ready" with the latest saved workspace and records saves.
 // The workspace survives reloads in sessionStorage, as the real host keeps it in memory. Update checks
 // answer with the given releases; an install reports progress and then the given failure.
-function fakeHost({ seed, updates, platform, recording, devices, exportWithLink }) {
+function fakeHost({ seed, updates, platform, recording, devices, exportWithLink, importChoices }) {
   const key = "fake-host-workspace";
   if (sessionStorage.getItem(key) === null) sessionStorage.setItem(key, JSON.stringify(seed ?? null));
   const listeners = new Set();
@@ -30,7 +30,12 @@ function fakeHost({ seed, updates, platform, recording, devices, exportWithLink 
       postMessage(message) {
         const data = JSON.parse(JSON.stringify(message));
         host.messages.push(data.type);
-        if (data.type === "ready") dispatch({ type: "init", workspace: host.workspace, dataFolder: "D:/Charts", version: "9.9.9", platform, liveTrack: true, devices, exportWithLink });
+        if (data.type === "ready") dispatch({ type: "init", workspace: host.workspace, dataFolder: "D:/Charts", version: "9.9.9", platform, liveTrack: true, devices, exportWithLink, importFilePicker: Boolean(importChoices) });
+        host.imports = host.imports ?? [];
+        if (data.type === "pick-import-file") {
+          host.imports.push({ file: data.file, pick: data.pick });
+          if (importChoices && data.file === undefined && !data.pick) dispatch({ type: "import-choices", files: importChoices });
+        }
         if (data.type === "save") {
           sessionStorage.setItem(key, JSON.stringify(data.workspace));
           host.saves += 1;
@@ -144,8 +149,8 @@ export class Chartroom {
 
   // platform "mac" makes the stand-in answer as the macOS host does.
   // devices makes the stand-in a host that phones and tablets can connect to.
-  async open(workspace = null, { updates, platform, recording, devices, exportWithLink } = {}) {
-    await this.page.addInitScript(fakeHost, { seed: workspace, updates, platform, recording, devices, exportWithLink });
+  async open(workspace = null, { updates, platform, recording, devices, exportWithLink, importChoices } = {}) {
+    await this.page.addInitScript(fakeHost, { seed: workspace, updates, platform, recording, devices, exportWithLink, importChoices });
     await this.page.goto("https://chartroom.app/index.html");
     await expect(this.page.locator("#app-version")).toHaveText("9.9.9");
   }

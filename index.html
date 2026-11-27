@@ -215,7 +215,18 @@
       <details id="equipment-panel" class="panel-section equipment-panel">
         <summary><h2>Equipment</h2><span id="equipment-state" class="count">Off</span></summary>
         <label class="switch-row"><span>Require equipment for accurate readings</span><input id="equipment-enabled" type="checkbox"></label>
+        <p id="equipment-summary" class="equipment-summary"></p>
+        <p id="equipment-hint" class="fineprint"></p>
         <div id="equipment-items" class="equipment-items"></div>
+        <div id="equipment-mod-groups" class="equipment-mod-groups" hidden></div>
+        <div id="equipment-mods-panel" class="equipment-subpanel">
+          <div class="equipment-group-title">Navigation mods</div>
+          <p class="fineprint">Enable mods installed in this save to include their navigation instruments.</p>
+          <div id="equipment-mods" class="equipment-mods"></div>
+        </div>
+        <div class="equipment-actions">
+          <button id="equipment-history-open" type="button" hidden>History (0)</button>
+        </div>
       </details>
 
       <div id="inspector-host"></div>
@@ -640,6 +651,45 @@
         <button id="slot-pick-file" class="danger-text link-button" type="button">Choose another file</button>
         <button type="button" data-close>Cancel</button>
         <button class="primary" type="submit">Follow</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="import-dialog">
+    <form id="import-form" method="dialog" class="dialog-card">
+      <div class="eyebrow">Import</div>
+      <h2>Import map or chart</h2>
+      <p>Choose a discovered map or chart file, or browse for another file.</p>
+      <div id="import-list" class="slot-list" role="radiogroup" aria-label="Discovered maps and charts"></div>
+      <div class="dialog-actions">
+        <button id="import-pick-file" class="link-button" type="button">Browse…</button>
+        <button type="button" data-close>Cancel</button>
+        <button class="primary" type="submit">Import</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="rs-difficulty-dialog">
+    <form id="rs-difficulty-form" method="dialog" class="dialog-card">
+      <div class="eyebrow">Realistic Skies</div>
+      <h2>Choose difficulty</h2>
+      <p>Pick the Realistic Skies difficulty for this save so Chartroom matches its solar rules and available instruments.</p>
+      <div id="rs-difficulty-list" class="slot-list" role="radiogroup" aria-label="Realistic Skies difficulty"></div>
+      <div class="dialog-actions">
+        <button type="button" data-close>Cancel</button>
+        <button class="primary" type="submit">Apply</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="equipment-history-dialog">
+    <form method="dialog" class="dialog-card">
+      <div class="eyebrow">Equipment</div>
+      <h2>Equipment history</h2>
+      <p>Each entry applies from that game time onward so adding an instrument later does not reveal earlier positions.</p>
+      <div id="equipment-history" class="equipment-history-scroll"></div>
+      <div class="dialog-actions">
+        <button class="primary" type="submit">Close</button>
       </div>
     </form>
   </dialog>

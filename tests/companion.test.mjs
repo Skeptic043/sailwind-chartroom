@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { COMPARISON_COLOURS, ICON_SIZES, iconScale, createChart, createFeature, createNote, createSearch, createWorkspace, importChartData, itemShown, newRecorderNotes, newVisits, readVoyageRecorder, removeChartItems, sanitizeChart, sanitizeWorkspace, SCHEMA_VERSION } from "../src/model.mjs";
-import { instrumentsAt, localHours, readingKnowledge, sanitizeEquipment, setInstruments } from "../src/equipment.mjs";
+import { instrumentsAt, localHours, readingKnowledge, removeEquipmentChange, sanitizeEquipment, setEquipmentMods, setInstruments, setRealisticSkiesDifficulty, summarizeKnowledge, unavailableInstruments } from "../src/equipment.mjs";
 import { chartGroups, createFolder, deleteFolder, moveChartToFolder, shiftChart, shiftFolder } from "../src/folders.mjs";
 import { buildVoyageFile, defaultShare, exportablePoints, hashGameId, parseVoyageFile, positionAtElapsed, sameWorld } from "../src/voyages.mjs";
 import { applyMarks, discoveredMarks } from "../src/discoveries.mjs";
@@ -326,19 +326,74 @@ test("equipment readings show only what the instruments could find", () => {
     chart.equipment.changes = [{ t: null, items }];
     return readingKnowledge(chart, { t: 24 + hour, lat: 30, lon });
   };
-  assert.deepEqual(at(12.5, ["sun-compass"]), { lat: true, lon: false, course: false, speed: false });
-  assert.deepEqual(at(12.5, ["sun-compass", "clock"]), { lat: true, lon: true, course: false, speed: false });
+  assert.deepEqual(at(12.5, ["sun-compass"]), { lat: true, lon: false, course: false, speed: false, windDir: true, windSpeed: true, rough: false });
+  assert.deepEqual(at(12.5, ["sun-compass", "chronometer"]), { lat: true, lon: true, course: false, speed: false, windDir: true, windSpeed: true, rough: false });
+  assert.deepEqual(sanitizeEquipment({ enabled: true, changes: [{ t: null, items: ["clock"] }] }).changes[0].items, ["chronometer"], "legacy clock migrates to chronometer");
+  assert.deepEqual(at(12.5, ["chrono-compass"]), { lat: true, lon: true, course: true, speed: false, windDir: true, windSpeed: true, rough: false });
   assert.deepEqual(at(14, ["sun-compass", "chronometer"]).lat, false, "more than an hour from noon");
   assert.equal(at(23, ["quadrant"]).lat, true, "a quadrant at night");
   assert.equal(at(12, ["quadrant"]).lat, true, "a quadrant at noon");
   assert.equal(at(12, ["quadrant", "chronometer"]).lon, false, "longitude needs the sun compass");
   assert.equal(at(9, ["quadrant"]).lat, false, "a quadrant in the morning");
-  assert.deepEqual(at(9, ["compass", "chip-log"]), { lat: false, lon: false, course: true, speed: true });
+  assert.deepEqual(at(9, ["compass", "chip-log"]), { lat: false, lon: false, course: true, speed: true, windDir: true, windSpeed: true, rough: false });
   // 30° east is two hours ahead: game time 10:00 is local noon there.
   assert.equal(localHours({ t: 34, lon: 30 }), 12);
   assert.equal(at(10, ["sun-compass"], 30).lat, true);
   chart.equipment.enabled = false;
-  assert.deepEqual(readingKnowledge(chart, { t: 30, lat: 30, lon: 0 }), { lat: true, lon: true, course: true, speed: true });
+  assert.deepEqual(readingKnowledge(chart, { t: 30, lat: 30, lon: 0 }), { lat: true, lon: true, course: true, speed: true, windDir: true, windSpeed: true, rough: false });
+});
+
+test("modded equipment requires per-chart mod opt-in, models Realistic Skies difficulties, and gates wind with Windicators", () => {
+  const chart = createChart();
+  chart.equipment = sanitizeEquipment({ enabled: true, changes: [{ t: null, items: ["kemy-bearing-compass", "rs-quintant", "rs-almanac", "windicators-anemometer", "future-mod-tool"] }] });
+  // Without opting into those mods, their tools stay preserved in saved data but grant no readings.
+  assert.equal(chart.equipment.changes[0].items.includes("future-mod-tool"), true, "unknown IDs are preserved");
+  assert.equal(readingKnowledge(chart, { t: 23 * 24 + 9, lat: 30, lon: 0 }).course, false);
+  assert.equal(readingKnowledge(chart, { t: 23 * 24 + 9, lat: 30, lon: 0 }).lat, false);
+  assert.equal(readingKnowledge(chart, { t: 23 * 24 + 9, lat: 30, lon: 0 }).windDir, true, "wind is ungated without Windicators");
+
+  // Kemy's Navigation Tools: Bearing Compass and Binnacle grant course.
+  setEquipmentMods(chart.equipment, ["kemy-nav-tools"]);
+  assert.equal(readingKnowledge(chart, { t: 23 * 24 + 9, lat: 30, lon: 0 }).course, true);
+
+  // Realistic Skies (Chronometers): Quintant + Almanac unlock day/night lat and lon (rough via lunar distance without a clock).
+  setEquipmentMods(chart.equipment, ["realistic-skies"]);
+  assert.deepEqual(readingKnowledge(chart, { t: 23 * 24 + 9, lat: 30, lon: 0 }), { lat: true, lon: true, course: false, speed: false, windDir: true, windSpeed: true, rough: true });
+  // Adding a Chronometer makes Quintant + Almanac an exact fix.
+  chart.equipment.changes = [{ t: null, items: ["rs-quintant", "rs-almanac", "chronometer"] }];
+  assert.equal(readingKnowledge(chart, { t: 23 * 24 + 9, lat: 30, lon: 0 }).rough, false);
+  // Magellan difficulty disables Chronometer, Pocket Watch, Quintant, Clock, and Chrono-compass.
+  setRealisticSkiesDifficulty(chart.equipment, "magellan");
+  assert.equal(unavailableInstruments(chart.equipment).has("chronometer"), true);
+  assert.equal(unavailableInstruments(chart.equipment).has("rs-quintant"), true);
+  assert.equal(readingKnowledge(chart, { t: 23 * 24 + 9, lat: 30, lon: 0 }).lat, false, "quintant ignored in Magellan");
+  // Magellan rough combo: Cross-staff + Nocturnal + Watch Glass gives a rough fix at night.
+  chart.equipment.changes = [{ t: null, items: ["rs-cross-staff", "rs-nocturnal", "rs-ring-dial", "rs-watch-glass"] }];
+  assert.deepEqual(readingKnowledge(chart, { t: 23 * 24 + 23, lat: 30, lon: 0 }), { lat: true, lon: true, course: false, speed: false, windDir: true, windSpeed: true, rough: true });
+  // Ring dial works mid-season away from noon, not at noon or on the equinox (day 0).
+  assert.equal(readingKnowledge(chart, { t: 23 * 24 + 9.5, lat: 30, lon: 0 }).lon, true, "ring dial mid-season morning");
+  assert.equal(readingKnowledge(chart, { t: 23 * 24 + 12, lat: 30, lon: 0 }).lon, false, "ring dial cannot be read at noon");
+  assert.equal(readingKnowledge(chart, { t: 9.5, lat: 30, lon: 0 }).lon, false, "ring dial cannot be read at autumn equinox");
+  // Vanilla Realistic Skies disables Ring dial.
+  setRealisticSkiesDifficulty(chart.equipment, "vanilla");
+  assert.equal(unavailableInstruments(chart.equipment).has("rs-ring-dial"), true);
+  assert.equal(readingKnowledge(chart, { t: 23 * 24 + 9.5, lat: 30, lon: 0 }).lon, false);
+
+  // Windicators: opting in gates wind direction and speed; telltales alone show wind direction.
+  setEquipmentMods(chart.equipment, ["windicators"]);
+  chart.equipment.changes = [{ t: null, items: ["windicators-anemometer"] }];
+  assert.equal(readingKnowledge(chart, { t: 33, lat: 30, lon: 0 }).windDir, false);
+  assert.equal(readingKnowledge(chart, { t: 33, lat: 30, lon: 0 }).windSpeed, true);
+  chart.equipment.changes = [{ t: null, items: ["windicators-telltales"] }];
+  assert.equal(readingKnowledge(chart, { t: 33, lat: 30, lon: 0 }).windDir, true, "telltales show wind direction directly");
+  assert.match(summarizeKnowledge(chart.equipment), /Wind direction/);
+
+  // Removing a history entry works cleanly, and summarizeKnowledge reflects the latest change even past day 1.
+  setInstruments(chart.equipment, ["compass", "chip-log"], 200);
+  assert.match(summarizeKnowledge(chart.equipment), /Course · Speed/);
+  assert.equal(chart.equipment.changes.length, 2);
+  removeEquipmentChange(chart.equipment, 1);
+  assert.equal(chart.equipment.changes.length, 1);
 });
 
 test("equipment changes apply from the latest position onward and hide earlier fixes", () => {

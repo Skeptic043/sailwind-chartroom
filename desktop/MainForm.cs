@@ -16,6 +16,7 @@ internal sealed partial class MainForm : Form
     private readonly WorkspaceStore store = new(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Sailwind Chartroom"));
     private readonly System.Windows.Forms.Timer saveTimer = new() { Interval = 400 };
     private string WindowPath => Path.Combine(store.Folder, "window.json");
+    private string LastImportFolderPath => Path.Combine(store.Folder, "last-import-folder.txt");
     private string? currentWorkspace;
     private string? pendingWorkspace;
     private IReadOnlyList<GitHubRelease>? newerReleases;
@@ -24,6 +25,8 @@ internal sealed partial class MainForm : Form
     private TrackFollower? follower;
     // The Voyage Recorder logs last offered to the page, which may follow only these.
     private List<string> offeredLogs = [];
+    // The discovered map/chart files last offered to the page, which may import only these without browsing.
+    private List<string> offeredImports = [];
     // The chart the followed positions go to, kept here so a reloaded page sends them to the same one.
     private string followedChartId = "";
 
@@ -210,8 +213,8 @@ internal sealed partial class MainForm : Form
                 // Shown after this handler returns, so the dialog never runs inside a WebView2 event.
                 BeginInvoke(() => SaveExport(export));
                 break;
-            case HostMessage.PickImportFile:
-                BeginInvoke(PickImportFile);
+            case HostMessage.PickImportFile pick:
+                BeginInvoke(() => PickImportFile(pick));
                 break;
             case HostMessage.FollowTrack follow:
                 // Shown after this handler returns, so the dialog never runs inside a WebView2 event.
@@ -386,31 +389,90 @@ internal sealed partial class MainForm : Form
         if (dialog.ShowDialog(this) == DialogResult.OK) StartFollowing(dialog.FileName, follow.ChartId);
     }
 
-    private void PickImportFile()
+    private void PickImportFile(HostMessage.PickImportFile request)
     {
+        if (request.File is int index)
+        {
+            if (index < offeredImports.Count) SendImportFile(offeredImports[index]);
+            return;
+        }
+        var lastFolder = ReadLastImportFolder();
+        if (!request.Pick)
+        {
+            var discovered = ScrambledSeasFolder.DiscoverImportFiles(lastFolder);
+            offeredImports = discovered.Select(item => item.Path).ToList();
+            if (discovered.Count > 0)
+            {
+                var files = discovered.Select((item, id) => new
+                {
+                    id,
+                    name = item.Name,
+                    place = item.Place,
+                    modified = item.ModifiedUtc.ToString("o")
+                });
+                Post(new { type = "import-choices", files });
+                return;
+            }
+        }
         using var dialog = new OpenFileDialog
         {
             Title = "Import chart, map or Scrambled Seas world",
             Filter = "Charts and Scrambled Seas worlds|*.xml;*.json|Scrambled Seas worlds|*.xml|Chartroom files|*.json|All files|*.*"
         };
-        if (ScrambledSeasFolder.Find() is { } folder && Directory.Exists(folder))
+        if (lastFolder is not null && Directory.Exists(lastFolder))
+        {
+            dialog.InitialDirectory = lastFolder;
+        }
+        else if (ScrambledSeasFolder.Find() is { } folder && Directory.Exists(folder))
         {
             dialog.InitialDirectory = folder;
         }
         if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        if (Path.GetDirectoryName(dialog.FileName) is { Length: > 0 } pickedFolder) WriteLastImportFolder(pickedFolder);
+        SendImportFile(dialog.FileName);
+    }
+
+    private void SendImportFile(string path)
+    {
         try
         {
-            var info = new FileInfo(dialog.FileName);
+            var info = new FileInfo(path);
             if (info.Length > 50 * 1024 * 1024)
             {
                 MessageBox.Show(this, "That file is too large to import.", "Sailwind Chartroom", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
-            Post(new { type = "import-file", name = info.Name, contents = File.ReadAllText(dialog.FileName) });
+            Post(new { type = "import-file", name = info.Name, contents = File.ReadAllText(path) });
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException)
         {
             MessageBox.Show(this, $"Chartroom could not read that file:\n{error.Message}", "Sailwind Chartroom", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+    }
+
+    private string? ReadLastImportFolder()
+    {
+        try
+        {
+            if (!File.Exists(LastImportFolderPath)) return null;
+            var text = File.ReadAllText(LastImportFolderPath).Trim();
+            return text.Length > 0 && Directory.Exists(text) ? text : null;
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    private void WriteLastImportFolder(string folder)
+    {
+        try
+        {
+            Directory.CreateDirectory(store.Folder);
+            File.WriteAllText(LastImportFolderPath, folder);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
         }
     }
 

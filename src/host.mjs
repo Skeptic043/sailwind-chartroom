@@ -111,7 +111,7 @@ async function connectDesktop({ post, listen }) {
       ...(options?.openUrl && { openUrl: options.openUrl }),
       ...(options?.reveal && { reveal: true })
     }),
-    pickImportFile: () => post({ type: "pick-import-file" }),
+    pickImportFile: (choice = {}) => post({ type: "pick-import-file", ...choice }),
     // Without a choice the host offers the Voyage Recorder logs it finds with "track-choices", or asks for a
     // file when it finds none. The page answers with { log } for an offered log or { pick: true } for a file.
     // Following then sends "track-following", "track-lines" with each new run of lines, and "track-stopped".

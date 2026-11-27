@@ -23,6 +23,17 @@ public sealed class HostMessageTests
     }
 
     [Fact]
+    public void PickImportFileCarriesChosenFileOrBrowseRequest()
+    {
+        Assert.Equal(new HostMessage.PickImportFile(), HostMessage.Parse("""{"type":"pick-import-file"}"""));
+        Assert.Equal(new HostMessage.PickImportFile(1), HostMessage.Parse("""{"type":"pick-import-file","file":1}"""));
+        Assert.Equal(new HostMessage.PickImportFile(null, true), HostMessage.Parse("""{"type":"pick-import-file","pick":true}"""));
+        Assert.Equal(new HostMessage.PickImportFile(), HostMessage.Parse("""{"type":"pick-import-file","file":-1}"""));
+        Assert.Equal(new HostMessage.PickImportFile(), HostMessage.Parse("""{"type":"pick-import-file","file":null}"""));
+        Assert.Equal(new HostMessage.PickImportFile(), HostMessage.Parse("""{"type":"pick-import-file","file":"0"}"""));
+    }
+
+    [Fact]
     public void SaveCarriesTheWorkspaceJson()
     {
         var save = Assert.IsType<HostMessage.Save>(HostMessage.Parse("""{"type":"save","workspace":{"charts":[]}}"""));

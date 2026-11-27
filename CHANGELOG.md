@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.12.0
+
+#### Added
+- `Import` now shows an in-app `Import map or chart` picker listing discovered Scrambled Seas saves and files from your last-used import folder, with a `Browse…` button for manual selection (Windows and macOS)
+- Per-chart `Navigation mods` opt-in in `Equipment` supporting Kemy's Navigation Tools (`Bearing Compass`, `Binnacle`), Realistic Skies (with a `Choose difficulty` dialog for `Chronometers`, `Magellan`, and `Vanilla`, seasonal solar rules, unavailable-tool graying, and dashed uncertainty circles for rough fixes), and Windicators (`Wind Compass`, `Anemometer`, `Telltales / weathervanes`)
+- Under `Equipment`, click `History` to open a history of the equipment on hand when previous readings were taken
+- With equipment mode on, horizontal and vertical lines will show for readings where you only have the tools for a latitude and longitude reading respectively, with intermittent wind markers showing along the lines
+
+#### Changed
+- Removed duplicate `Clock` from `Equipment` (existing charts using `Clock` migrate automatically to `Chronometer`)
+- `Equipment` checkboxes and mod difficulty buttons now wrap cleanly on narrow sidebars
+
+#### Fixed
+- Scrambled Seas discovery now finds Sailwind Mod Synchronizer packs inside `instance\BepInEx\plugins`
+
 ## 0.11.6
 
 ### Sailwind Chartroom

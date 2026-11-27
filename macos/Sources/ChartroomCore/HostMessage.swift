@@ -14,6 +14,9 @@ public enum HostMessage: Equatable {
     case setZoom(Double)
     case setAppearance(dark: Bool, followsSystem: Bool)
     case exportFile(name: String, contents: String)
+    /// Import a map or chart file. Without a choice the host offers discovered files; file imports one of
+    /// those offered, and pick opens the native file picker instead.
+    case pickImportFile(file: Int? = nil, pick: Bool = false)
     /// Follow a recording into the chart with this id. Without a choice the host offers the recordings it
     /// finds; log follows one of those it offered, and pick asks for a file instead.
     case followTrack(chartId: String, log: Int? = nil, pick: Bool = false)
@@ -47,6 +50,9 @@ public enum HostMessage: Equatable {
         case "pin": return .pin
         case "open-folder": return .openFolder
         case "open-releases": return .openReleases
+        case "pick-import-file":
+            let file = JSONValue.number(root["file"]).flatMap(Int.init(exactly:)).flatMap { $0 >= 0 ? $0 : nil }
+            return .pickImportFile(file: file, pick: JSONValue.bool(root["pick"]) ?? false)
         case "stop-track": return .stopTrack
         case "follow-track":
             guard let chartId = root["chartId"] as? String, !chartId.isEmpty else { return nil }

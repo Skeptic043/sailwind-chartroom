@@ -3,13 +3,22 @@ using System.Text.RegularExpressions;
 
 namespace SailwindChartroom;
 
+/// <summary>One importable map or chart file found on this computer.</summary>
+internal sealed record DiscoveredImportFile(string Path, string Name, string Place, DateTime ModifiedUtc);
+
 /// <summary>
-/// Locates the Scrambled Seas plugin folder (where scramble_&lt;slot&gt;.xml is written) across
-/// Sailwind Mod Synchronizer, Thunderstore Mod Manager, r2modman, and default Steam installs.
+/// Locates the Scrambled Seas plugin folder (where scramble_&lt;slot&gt;.xml is written) and discovers
+/// importable Scrambled Seas worlds and remembered chart files across Sailwind Mod Synchronizer,
+/// Thunderstore Mod Manager, r2modman, and Steam installs.
 /// </summary>
 internal static class ScrambledSeasFolder
 {
+    private const int MaxDiscoveredFiles = 25;
     private static readonly Regex SteamLibraryPath = new(@"""path""\s+""(?<path>[^""]+)""", RegexOptions.Compiled);
+    private static readonly HashSet<string> IgnoredJsonFiles = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "workspace.json", "workspace.previous.json", "devices.json", "window.json", "settings.json", "config.json"
+    };
 
     public static string? Find() => Find(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -24,7 +33,7 @@ internal static class ScrambledSeasFolder
         DateTime bestXmlTime = DateTime.MinValue;
         string? firstPluginFolder = null;
 
-        foreach (var root in pluginRoots)
+        foreach (var (root, _) in pluginRoots)
         {
             if (!Directory.Exists(root)) continue;
             foreach (var dir in CandidateDirs(root))
@@ -55,17 +64,93 @@ internal static class ScrambledSeasFolder
         return bestWithXml ?? firstPluginFolder;
     }
 
-    private static List<string> CollectPluginRoots(string localAppData, string roamingAppData, string programFilesX86, string programFiles)
+    public static IReadOnlyList<DiscoveredImportFile> DiscoverImportFiles(string? lastImportFolder = null) => DiscoverImportFiles(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
+        Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+        lastImportFolder);
+
+    internal static IReadOnlyList<DiscoveredImportFile> DiscoverImportFiles(
+        string localAppData,
+        string roamingAppData,
+        string programFilesX86,
+        string programFiles,
+        string? lastImportFolder = null)
     {
-        var roots = new List<string>();
+        var found = new List<DiscoveredImportFile>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        void Add(string? path)
+
+        void AddFile(string filePath, string place)
+        {
+            try
+            {
+                var full = Path.GetFullPath(filePath);
+                if (!seen.Add(full)) return;
+                var info = new FileInfo(full);
+                if (!info.Exists) return;
+                found.Add(new DiscoveredImportFile(full, info.Name, place, info.LastWriteTimeUtc));
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException or PathTooLongException)
+            {
+            }
+        }
+
+        foreach (var (root, place) in CollectPluginRoots(localAppData, roamingAppData, programFilesX86, programFiles))
+        {
+            if (!Directory.Exists(root)) continue;
+            foreach (var dir in CandidateDirs(root))
+            {
+                try
+                {
+                    foreach (var xml in Directory.GetFiles(dir, "scramble_*.xml", SearchOption.TopDirectoryOnly))
+                    {
+                        AddFile(xml, place);
+                    }
+                }
+                catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+                {
+                }
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(lastImportFolder) && Directory.Exists(lastImportFolder))
+        {
+            var folderName = Path.GetFileName(lastImportFolder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            var place = string.IsNullOrWhiteSpace(folderName) ? "Last folder" : folderName;
+            try
+            {
+                foreach (var xml in Directory.GetFiles(lastImportFolder, "*.xml", SearchOption.TopDirectoryOnly))
+                {
+                    AddFile(xml, place);
+                }
+                foreach (var json in Directory.GetFiles(lastImportFolder, "*.json", SearchOption.TopDirectoryOnly))
+                {
+                    var name = Path.GetFileName(json);
+                    if (IgnoredJsonFiles.Contains(name) || name.EndsWith(".meta.json", StringComparison.OrdinalIgnoreCase)) continue;
+                    AddFile(json, place);
+                }
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+            }
+        }
+
+        found.Sort((a, b) => b.ModifiedUtc.CompareTo(a.ModifiedUtc));
+        return found.Count > MaxDiscoveredFiles ? found.GetRange(0, MaxDiscoveredFiles) : found;
+    }
+
+    private static List<(string Root, string Place)> CollectPluginRoots(string localAppData, string roamingAppData, string programFilesX86, string programFiles)
+    {
+        var roots = new List<(string Root, string Place)>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        void Add(string? path, string place)
         {
             if (string.IsNullOrWhiteSpace(path)) return;
             try
             {
                 var full = Path.GetFullPath(path);
-                if (seen.Add(full)) roots.Add(full);
+                if (seen.Add(full)) roots.Add((full, place));
             }
             catch (Exception error) when (error is ArgumentException or NotSupportedException or PathTooLongException)
             {
@@ -78,15 +163,15 @@ internal static class ScrambledSeasFolder
             var modSync = Path.Combine(localAppData, "SailwindModSynchronizer");
             Add(ReadModSyncGameDir(Path.Combine(modSync, "config.json")) is { } gameDir
                 ? Path.Combine(gameDir, "BepInEx", "plugins")
-                : null);
-            AddProfilePlugins(Path.Combine(modSync, "packs"), Add);
+                : null, "Mod Sync");
+            AddProfilePlugins(Path.Combine(modSync, "packs"), "Mod Sync", includeInstanceSubdir: true, Add);
         }
 
         // 2. Thunderstore Mod Manager and r2modman Sailwind profiles.
         if (!string.IsNullOrWhiteSpace(roamingAppData))
         {
-            AddProfilePlugins(Path.Combine(roamingAppData, "Thunderstore Mod Manager", "DataFolder", "Sailwind", "profiles"), Add);
-            AddProfilePlugins(Path.Combine(roamingAppData, "r2modmanPlus-local", "Sailwind", "profiles"), Add);
+            AddProfilePlugins(Path.Combine(roamingAppData, "Thunderstore Mod Manager", "DataFolder", "Sailwind", "profiles"), "Thunderstore", includeInstanceSubdir: false, Add);
+            AddProfilePlugins(Path.Combine(roamingAppData, "r2modmanPlus-local", "Sailwind", "profiles"), "r2modman", includeInstanceSubdir: false, Add);
         }
 
         // 3. Default Steam installs and any additional libraries listed in libraryfolders.vdf.
@@ -94,24 +179,30 @@ internal static class ScrambledSeasFolder
         {
             if (string.IsNullOrWhiteSpace(programFilesDir)) continue;
             var steam = Path.Combine(programFilesDir, "Steam");
-            Add(Path.Combine(steam, "steamapps", "common", "Sailwind", "BepInEx", "plugins"));
+            Add(Path.Combine(steam, "steamapps", "common", "Sailwind", "BepInEx", "plugins"), "Steam");
             foreach (var library in ReadSteamLibraries(Path.Combine(steam, "steamapps", "libraryfolders.vdf")))
             {
-                Add(Path.Combine(library, "steamapps", "common", "Sailwind", "BepInEx", "plugins"));
+                Add(Path.Combine(library, "steamapps", "common", "Sailwind", "BepInEx", "plugins"), "Steam");
             }
         }
 
         return roots;
     }
 
-    private static void AddProfilePlugins(string profilesRoot, Action<string?> add)
+    private static void AddProfilePlugins(string profilesRoot, string manager, bool includeInstanceSubdir, Action<string?, string> add)
     {
         if (!Directory.Exists(profilesRoot)) return;
         try
         {
             foreach (var profile in Directory.GetDirectories(profilesRoot))
             {
-                add(Path.Combine(profile, "BepInEx", "plugins"));
+                var name = Path.GetFileName(profile);
+                var place = string.IsNullOrWhiteSpace(name) ? manager : $"{manager} ({name})";
+                if (includeInstanceSubdir)
+                {
+                    add(Path.Combine(profile, "instance", "BepInEx", "plugins"), place);
+                }
+                add(Path.Combine(profile, "BepInEx", "plugins"), place);
             }
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)

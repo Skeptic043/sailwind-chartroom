@@ -169,10 +169,13 @@ export function renderInspector() {
   }
   if (isTrack) {
     for (const field of ["name", "day", "time"]) elements[`track-${field}`].value = item[field];
-    elements["track-wind"].value = trackWindText(item);
+    const knowledge = readingKnowledge(activeChart(), item);
+    elements["track-wind"].value = knowledge.windDir ? trackWindText(item) : "";
+    elements["track-wind"].disabled = !knowledge.windDir;
+    elements["track-wind"].placeholder = knowledge.windDir ? "" : "Hidden by equipment";
     elements["track-lat"].value = item.lat.toFixed(4);
     elements["track-lon"].value = item.lon.toFixed(4);
-    const recorded = recordedDetail(item, readingKnowledge(activeChart(), item));
+    const recorded = recordedDetail(item, knowledge);
     elements["track-recorded"].textContent = recorded;
     elements["track-recorded"].hidden = !recorded;
     // With voyages to compare, a recorded position can be where your own voyage's elapsed time starts.
@@ -418,12 +421,13 @@ function firstLine(text) {
 
 const TRACK_EVENT_TEXT = { start: "Recording started", stop: "Recording stopped", sleep: "Fell asleep", wake: "Woke up", mark: "Location recorded", "race-start": "Race start", "race-checkpoint": "Race checkpoint", "race-finish": "Race finish" };
 
-// What Voyage Recorder noted beside the position: the boat, its course and speed, and why it was noted.
-// With equipment readings on, course and speed show only with a compass and a chip log.
-function recordedDetail(item, knowledge = { course: true, speed: true }) {
+// What Voyage Recorder noted beside the position: the boat, its course and speed, wind speed, and why it was noted.
+// With equipment readings on, course, speed, and (with Windicators) wind speed show only with the matching tools.
+function recordedDetail(item, knowledge = { course: true, speed: true, windSpeed: true }) {
   const course = knowledge.course && Number.isFinite(item.course) ? formatBearing(item.course) : "";
   const speed = knowledge.speed && Number.isFinite(item.knots) ? `${item.knots.toFixed(1)} kn` : "";
   const motion = course && speed ? `${course} at ${speed}` : course || speed;
+  const windSpeed = knowledge.windSpeed !== false && Number.isFinite(item.windKnots) ? `wind ${item.windKnots.toFixed(1)} kn` : "";
   const hull = Number.isFinite(item.hull) ? `hull ${item.hull}% damaged` : "";
-  return [item.boat, motion, hull, TRACK_EVENT_TEXT[item.event]].filter(Boolean).join(" · ");
+  return [item.boat, motion, windSpeed, hull, TRACK_EVENT_TEXT[item.event]].filter(Boolean).join(" · ");
 }

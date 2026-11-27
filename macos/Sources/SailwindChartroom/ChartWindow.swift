@@ -29,6 +29,9 @@ final class ChartWindow: NSObject, NSWindowDelegate, WKScriptMessageHandler, WKN
     private var follower: TrackFollower?
     // The Voyage Recorder logs last offered to the page, which may follow only these.
     private var offeredLogs: [URL] = []
+    // The discovered map/chart files last offered to the page, which may import only these without browsing.
+    private var offeredImports: [URL] = []
+    private var lastImportFolderURL: URL { store.folder.appendingPathComponent("last-import-folder.txt") }
     // The chart the followed positions go to, kept here so a reloaded page sends them to the same one.
     private var followedChartId = ""
     // Counts follows, so lines from one that has since been stopped or replaced are dropped.
@@ -124,7 +127,7 @@ final class ChartWindow: NSObject, NSWindowDelegate, WKScriptMessageHandler, WKN
             // The workspace goes in as its own JSON text, exactly as it was saved.
             let workspace = currentWorkspace ?? "null"
             let folder = Self.jsonString(store.folder.path)
-            postJSON(#"{"type":"init","platform":"mac","workspace":\#(workspace),"dataFolder":\#(folder),"version":\#(Self.jsonString(version)),"textScale":100,"liveTrack":true,"devices":\#(options.isSmokeTest ? "false" : "true")}"#)
+            postJSON(#"{"type":"init","platform":"mac","workspace":\#(workspace),"dataFolder":\#(folder),"version":\#(Self.jsonString(version)),"textScale":100,"liveTrack":true,"importFilePicker":true,"devices":\#(options.isSmokeTest ? "false" : "true")}"#)
             // A reloaded page learns that a file is still being followed.
             if let follower { post(["type": "track-following", "name": follower.url.lastPathComponent, "chartId": followedChartId, "resumed": true]) }
             // After a reload the page learns of every connected device again, and so sends each the charts.
@@ -155,6 +158,8 @@ final class ChartWindow: NSObject, NSWindowDelegate, WKScriptMessageHandler, WKN
             settings?.window.appearance = appearance
         case .exportFile(let name, let contents):
             export(name: name, contents: contents)
+        case .pickImportFile(let file, let pick):
+            chooseImportFile(file: file, pick: pick)
         case .followTrack(let chartId, let log, let pick):
             chooseTrack(chartId: chartId, log: log, pick: pick)
         case .stopTrack:
@@ -248,6 +253,67 @@ final class ChartWindow: NSObject, NSWindowDelegate, WKScriptMessageHandler, WKN
             guard response == .OK, let url = panel.url else { return }
             self?.startFollowing(url, chartId: chartId)
         }
+    }
+
+    private func chooseImportFile(file: Int?, pick: Bool) {
+        if let file {
+            if file < offeredImports.count { sendImportFile(offeredImports[file]) }
+            return
+        }
+        let lastFolder = readLastImportFolder()
+        if !pick {
+            let found = ImportFiles.discover(home: FileManager.default.homeDirectoryForCurrentUser, lastImportFolder: lastFolder)
+            offeredImports = found.map(\.url)
+            if !found.isEmpty {
+                let stamp = ISO8601DateFormatter()
+                let files: [[String: Any]] = found.enumerated().map { (id, entry) -> [String: Any] in
+                    ["id": id, "name": entry.name, "place": entry.place, "modified": stamp.string(from: entry.modified)]
+                }
+                post(["type": "import-choices", "files": files])
+                return
+            }
+        }
+        let panel = NSOpenPanel()
+        panel.title = "Import chart, map or Scrambled Seas world"
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowedContentTypes = [UTType.xml, UTType.json]
+        if let lastFolder { panel.directoryURL = lastFolder }
+        panel.beginSheetModal(for: window) { [weak self] response in
+            guard response == .OK, let url = panel.url else { return }
+            self?.writeLastImportFolder(url.deletingLastPathComponent())
+            self?.sendImportFile(url)
+        }
+    }
+
+    private func sendImportFile(_ url: URL) {
+        do {
+            let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
+            if size > 50 * 1024 * 1024 {
+                log.write("Import file too large: \(url.lastPathComponent)")
+                warn("That file is too large to import.")
+                return
+            }
+            let contents = try String(contentsOf: url, encoding: .utf8)
+            post(["type": "import-file", "name": url.lastPathComponent, "contents": contents])
+        } catch {
+            log.write("Could not read import file: \(error.localizedDescription)")
+            warn("Chartroom could not read that file:\n\(error.localizedDescription)")
+        }
+    }
+
+    private func readLastImportFolder() -> URL? {
+        guard let raw = try? String(contentsOf: lastImportFolderURL, encoding: .utf8) else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: trimmed, isDirectory: &isDir), isDir.boolValue else { return nil }
+        return URL(fileURLWithPath: trimmed, isDirectory: true)
+    }
+
+    private func writeLastImportFolder(_ folder: URL) {
+        try? FileManager.default.createDirectory(at: store.folder, withIntermediateDirectories: true)
+        try? folder.path.write(to: lastImportFolderURL, atomically: true, encoding: .utf8)
     }
 
     private func startFollowing(_ url: URL, chartId: String) {
